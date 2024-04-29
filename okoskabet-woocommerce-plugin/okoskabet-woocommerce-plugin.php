@@ -7,7 +7,7 @@
  * @license   GPL 2.0+
  * @link      https://heyrobot.ai
  *
- * Plugin Name:     okoskabet-woocommerce-plugin
+ * Plugin Name:     Økoskabet WooCommerce Plugin
  * Plugin URI:      @TODO
  * Description:     @TODO
  * Version:         1.0.0
@@ -22,40 +22,40 @@
  */
 
 // If this file is called directly, abort.
-if ( !defined( 'ABSPATH' ) ) {
-	die( 'We\'re sorry, but you can not directly access this file.' );
+if (!defined('ABSPATH')) {
+	die('We\'re sorry, but you can not directly access this file.');
 }
 
-define( 'O_VERSION', '1.0.0' );
-define( 'O_TEXTDOMAIN', 'okoskabet-woocommerce-plugin' );
-define( 'O_NAME', 'okoskabet-woocommerce-plugin' );
-define( 'O_PLUGIN_ROOT', plugin_dir_path( __FILE__ ) );
-define( 'O_PLUGIN_ABSOLUTE', __FILE__ );
-define( 'O_MIN_PHP_VERSION', '7.4' );
-define( 'O_WP_VERSION', '5.3' );
+define('O_VERSION', '1.0.0');
+define('O_TEXTDOMAIN', 'okoskabet-woocommerce-plugin');
+define('O_NAME', 'Økoskabet WooCommerce Plugin');
+define('O_PLUGIN_ROOT', plugin_dir_path(__FILE__));
+define('O_PLUGIN_ABSOLUTE', __FILE__);
+define('O_MIN_PHP_VERSION', '7.4');
+define('O_WP_VERSION', '5.3');
 
 add_action(
 	'init',
 	static function () {
-		load_plugin_textdomain( O_TEXTDOMAIN, false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+		load_plugin_textdomain(O_TEXTDOMAIN, false, dirname(plugin_basename(__FILE__)) . '/languages');
 	}
-	);
+);
 
-if ( version_compare( PHP_VERSION, O_MIN_PHP_VERSION, '<=' ) ) {
+if (version_compare(PHP_VERSION, O_MIN_PHP_VERSION, '<=')) {
 	add_action(
 		'admin_init',
-		static function() {
-			deactivate_plugins( plugin_basename( __FILE__ ) );
+		static function () {
+			deactivate_plugins(plugin_basename(__FILE__));
 		}
 	);
 	add_action(
 		'admin_notices',
-		static function() {
+		static function () {
 			echo wp_kses_post(
-			sprintf(
-				'<div class="notice notice-error"><p>%s</p></div>',
-				__( '"okoskabet-woocommerce-plugin" requires PHP 5.6 or newer.', O_TEXTDOMAIN )
-			)
+				sprintf(
+					'<div class="notice notice-error"><p>%s</p></div>',
+					__('"okoskabet-woocommerce-plugin" requires PHP 5.6 or newer.', O_TEXTDOMAIN)
+				)
 			);
 		}
 	);
@@ -73,15 +73,16 @@ require_once O_PLUGIN_ROOT . 'functions/functions.php';
 
 
 // Documentation to integrate GitHub, GitLab or BitBucket https://github.com/YahnisElsts/plugin-update-checker/blob/master/README.md
-Puc_v4_Factory::buildUpdateChecker( 'https://github.com/user-name/repo-name/', __FILE__, 'unique-plugin-or-theme-slug' );
+Puc_v4_Factory::buildUpdateChecker('https://github.com/user-name/repo-name/', __FILE__, 'unique-plugin-or-theme-slug');
 
-if ( ! wp_installing() ) {
-	register_activation_hook( O_TEXTDOMAIN . '/' . O_TEXTDOMAIN . '.php', array( new \okoskabet_woocommerce_plugin\Backend\ActDeact, 'activate' ) );
-	register_deactivation_hook( O_TEXTDOMAIN . '/' . O_TEXTDOMAIN . '.php', array( new \okoskabet_woocommerce_plugin\Backend\ActDeact, 'deactivate' ) );
+if (!wp_installing()) {
+	register_activation_hook(O_TEXTDOMAIN . '/' . O_TEXTDOMAIN . '.php', array(new \okoskabet_woocommerce_plugin\Backend\ActDeact, 'activate'));
+	register_deactivation_hook(O_TEXTDOMAIN . '/' . O_TEXTDOMAIN . '.php', array(new \okoskabet_woocommerce_plugin\Backend\ActDeact, 'deactivate'));
 	add_action(
 		'plugins_loaded',
-		static function () use ( $okoskabet_woocommerce_plugin_libraries ) {
-			new \okoskabet_woocommerce_plugin\Engine\Initialize( $okoskabet_woocommerce_plugin_libraries );
+		static function () use ($okoskabet_woocommerce_plugin_libraries) {
+			new \okoskabet_woocommerce_plugin\Engine\Initialize($okoskabet_woocommerce_plugin_libraries);
+			new \okoskabet_woocommerce_plugin\Rest\Example;
 		}
 	);
 }
