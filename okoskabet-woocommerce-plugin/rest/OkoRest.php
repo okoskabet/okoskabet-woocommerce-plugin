@@ -15,9 +15,9 @@ namespace okoskabet_woocommerce_plugin\Rest;
 use okoskabet_woocommerce_plugin\Engine\Base;
 
 /**
- * Example class for REST
+ * OkoRest class for REST
  */
-class Example extends Base
+class OkoRest extends Base
 {
 
 	/**
@@ -84,27 +84,35 @@ class Example extends Base
 	public function get_sheds(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
+		$params = $request->get_params();
 
-		$curl = curl_init();
+		$settings = get_option(O_TEXTDOMAIN . '-settings');
 
-		curl_setopt_array($curl, array(
-			CURLOPT_URL => 'https://staging.okoskabet.dk/api/v1/sheds/',
-			CURLOPT_RETURNTRANSFER => true,
-			CURLOPT_ENCODING => '',
-			CURLOPT_MAXREDIRS => 10,
-			CURLOPT_TIMEOUT => 0,
-			CURLOPT_FOLLOWLOCATION => true,
-			CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-			CURLOPT_CUSTOMREQUEST => 'GET',
-			CURLOPT_HTTPHEADER => array(
-				'authorization: 317B6B7D2A01C154'
-			),
-		));
+		if (!empty($settings['_api_key'])) {
+			$curl = curl_init();
 
-		$response = curl_exec($curl);
+			curl_setopt_array($curl, array(
+				CURLOPT_URL => 'https://staging.okoskabet.dk/api/v1/sheds/?zipcode=' . $params['zip'],
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_ENCODING => '',
+				CURLOPT_MAXREDIRS => 10,
+				CURLOPT_TIMEOUT => 0,
+				CURLOPT_FOLLOWLOCATION => true,
+				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+				CURLOPT_CUSTOMREQUEST => 'GET',
+				CURLOPT_HTTPHEADER => array(
+					'authorization: ' . $settings['_api_key']
+				),
+			));
 
-		curl_close($curl);
+			$response = curl_exec($curl);
+			$output_content = json_decode($response, true);
 
-		return array('result' => json_decode($response));
+			curl_close($curl);
+
+			return array('settings' => $settings, 'results' => array_values($output_content));
+		} else {
+			return false;
+		}
 	}
 }

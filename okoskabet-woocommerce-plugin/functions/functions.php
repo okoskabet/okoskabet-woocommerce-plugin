@@ -18,22 +18,7 @@
  */
 
 
-add_action('woocommerce_review_order_before_submit', 'hey_after_shipping');
-function hey_after_shipping()
-{
-	echo '<h4>Test</h4>';
-}
-function hey_output_css()
-{
-?>
-	<style>
-		label[for="radio-control-0-hey_okoskabet_shipping"] {
-			background: #f00;
-			padding: 20px;
-		}
-	</style>
-<?
-}
+
 function o_get_settings()
 {
 	return apply_filters('o_get_settings', get_option(O_TEXTDOMAIN . '-settings'));
@@ -41,11 +26,40 @@ function o_get_settings()
 
 add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout');
 
+function enqueue_google_maps_api()
+{
+	if (is_checkout()) {  // Check if it's the WooCommerce checkout page
+		// Replace 'your_api_key_here' with your actual Google Maps API key
+		wp_enqueue_script('google-maps', 'https://maps.googleapis.com/maps/api/js?key=AIzaSyCWrL_MNb7V_GhGOWVfaLhObKk7njUQ8rQ', array(), null, true);
+	}
+}
+
+add_action('wp_enqueue_scripts', 'enqueue_google_maps_api');
+
 function custom_content_for_custom_shipping_checkout()
 {
 ?>
-	<div id="custom_shipping_message"></div> <!-- Placeholder for dynamic content -->
+
+
 	<script type="text/javascript">
+		okoLocations = [{
+				"id": "34d0e004-41db-4340-9fca-3ba7c299373d",
+				"name": "City 2 - Gul indgang",
+				"gps": [55.644087, 12.274293]
+			},
+			{
+				"id": "8c9c4631-4db3-4151-9ee6-f68d6b90c90f",
+				"name": "Frame House Dragør",
+				"gps": [55.603768, 12.661167]
+			},
+			{
+				"id": "a4528106-8388-4273-8031-39c74af975c9",
+				"name": "FRB.C",
+				"gps": [55.682128, 12.53136]
+			},
+		]
+
+
 		jQuery(function($) {
 			$(document).ready(function() {
 				let addressFilled = $('#billing_postcode').val();
@@ -58,27 +72,47 @@ function custom_content_for_custom_shipping_checkout()
 					}
 				});
 
-
 				$(document.body).on('updated_checkout', function() {
+					$('#custom-div').remove();
+
 					if (addressFilled) {
 						if ($('input[name="shipping_method[0]"]:checked').val() === 'hey_okoskabet_shipping_shed') {
 							if ($('#custom-div').length === 0) {
 								async function loadSheds() {
 									const myHeaders = new Headers();
 									myHeaders.append("authorization", "317B6B7D2A01C154");
-
+									myHeaders.append("Accept", "application/json");
+									myHeaders.append("Content-Type", "application/json");
 									const requestOptions = {
 										method: "GET",
 										headers: myHeaders,
 										redirect: "follow"
 									};
 
-									fetch("https://testshop.stage.heyrobot.com/wp-json/wp/v2/okoskabet/sheds", requestOptions)
-										.then((response) => response.text())
-										.then((result) => console.log(result))
+									fetch("https://testshop.stage.heyrobot.com/wp-json/wp/v2/okoskabet/sheds?zip=" + addressFilled, requestOptions)
+										.then((response) => response.json())
+										.then((result) => {
+											console.log(result)
+
+
+											function populateDropdown() {
+												const dropdown = document.getElementById('locationsDropdown');
+												result.results.map(location => {
+													const option = document.createElement('option');
+													option.value = location.id;
+													option.textContent = location.name;
+													dropdown.appendChild(option);
+												});
+											}
+
+											// Call the function to populate the dropdown
+											populateDropdown();
+											initMaps(result.results);
+
+										})
 										.catch((error) => console.error(error));
-									$('input[name="shipping_method[0]"]:checked').parent().append('<div id="custom-div">Special information related to selected shipping method</div>');
 								}
+								$('input[name="shipping_method[0]"]:checked').parent().append('<div id="custom-div"><select id="locationsDropdown" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></select><div id="maps" style="width: 100%; height: 300px; margin-bottom: 20px;"></div></div>');
 								loadSheds();
 
 							}
@@ -91,6 +125,35 @@ function custom_content_for_custom_shipping_checkout()
 
 
 		});
+
+		function initMaps(locations) {
+
+			var mapOptions = {
+				center: new google.maps.LatLng(locations[0].gps[0], locations[0].gps[1]), // Default center
+				zoom: 3
+			};
+			var map = new google.maps.Map(document.getElementById('maps'), mapOptions);
+			// Bounds for centering the map
+			var bounds = new google.maps.LatLngBounds();
+
+			// Place markers on the map
+			locations.forEach(function(location) {
+				var marker = new google.maps.Marker({
+					position: {
+						lat: location.gps[0],
+						lng: location.gps[1]
+					},
+					map: map,
+					title: location.name
+				});
+
+				// Extend the bounds to include each marker's position
+				bounds.extend(marker.position);
+			});
+
+			// Now fit the map to the newly inclusive bounds
+			map.fitBounds(bounds);
+		}
 	</script>
 <?php
 }

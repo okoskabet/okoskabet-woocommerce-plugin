@@ -1,5 +1,8 @@
 import './styles/public.scss';
 
+let okoLocations;
+
+
 /**
  * @function onload The window.onload function is called when the page is loaded
  */

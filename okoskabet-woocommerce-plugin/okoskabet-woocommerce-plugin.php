@@ -82,7 +82,7 @@ if (!wp_installing()) {
 		'plugins_loaded',
 		static function () use ($okoskabet_woocommerce_plugin_libraries) {
 			new \okoskabet_woocommerce_plugin\Engine\Initialize($okoskabet_woocommerce_plugin_libraries);
-			new \okoskabet_woocommerce_plugin\Rest\Example;
+			new \okoskabet_woocommerce_plugin\Rest\OkoRest;
 		}
 	);
 }

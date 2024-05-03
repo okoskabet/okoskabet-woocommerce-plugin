@@ -1,4 +1,5 @@
 <?php
+
 /**
  * okoskabet_woocommerce_plugin
  *
@@ -16,16 +17,17 @@ use okoskabet_woocommerce_plugin\Engine\Base;
 /**
  * Enqueue stuff on the frontend
  */
-class Enqueue extends Base {
+class Enqueue extends Base
+{
 
 	/**
 	 * Initialize the class.
 	 *
 	 * @return void|bool
 	 */
-	public function initialize() {
+	public function initialize()
+	{
 		parent::initialize();
-
 	}
 
 
@@ -35,7 +37,8 @@ class Enqueue extends Base {
 	 * @since 1.0.0
 	 * @return array
 	 */
-	public function enqueue_styles() {
+	public function enqueue_styles()
+	{
 		$styles = array();
 
 		return $styles;
@@ -48,11 +51,10 @@ class Enqueue extends Base {
 	 * @since 1.0.0
 	 * @return array
 	 */
-	public static function enqueue_scripts() {
+	public static function enqueue_scripts()
+	{
 		$scripts = array();
 
 		return $scripts;
 	}
-
-
 }
