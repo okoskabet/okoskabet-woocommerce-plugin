@@ -94,6 +94,8 @@ function custom_content_for_custom_shipping_checkout()
 				border-radius: 3px;
 				transform: translateX(-50%);
 				z-index: 9999;
+				width: 480px;
+				max-width: 94%;
 			}
 
 			<?php
