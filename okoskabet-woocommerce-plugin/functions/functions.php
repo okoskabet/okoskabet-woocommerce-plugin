@@ -90,7 +90,7 @@ function custom_content_for_custom_shipping_checkout()
 		}
 
 		.marker {
-			background-image: url('https://testshop.stage.heyrobot.com/wp-content/uploads/2024/05/map_marker.svg');
+			background-image: url('/wp-content/uploads/2024/05/map_marker.svg');
 			background-size: contain;
 			width: 50px;
 			height: 50px;
@@ -185,7 +185,6 @@ function custom_content_for_custom_shipping_checkout()
 
 				});
 
-
 				$(document).on('updated_checkout', function() {
 					$('#billing_okoskabet_delivery_date').val('');
 					$('#billing_okoskabet_shed_id').val('');
@@ -211,7 +210,7 @@ function custom_content_for_custom_shipping_checkout()
 									redirect: "follow"
 								};
 
-								fetch("https://testshop.stage.heyrobot.com/wp-json/wp/v2/okoskabet/sheds?zip=" + addressFilled, requestOptions)
+								fetch("/wp-json/wp/v2/okoskabet/sheds?zip=" + addressFilled, requestOptions)
 									.then((response) => response.json())
 									.then((result) => {
 										$('#oko-shed-custom-div').html('<select name="okoLocations"  id="locationsDropdown" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></select><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select><div id="map" style="width: 100%; height: 450px; margin-bottom: 20px;"></div>');
@@ -250,7 +249,7 @@ function custom_content_for_custom_shipping_checkout()
 										redirect: "follow"
 									};
 
-									fetch("https://testshop.stage.heyrobot.com/wp-json/wp/v2/okoskabet/home_delivery?zip=" + addressFilled, requestOptions)
+									fetch("/wp-json/wp/v2/okoskabet/home_delivery?zip=" + addressFilled, requestOptions)
 										.then((response) => response.json())
 										.then((result) => {
 											$('#oko-local-custom-div').html('<select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></select>');
