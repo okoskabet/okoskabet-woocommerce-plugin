@@ -7,9 +7,9 @@
  * @license   GPL 2.0+
  * @link      https://heyrobot.ai
  *
- * Plugin Name:     Økoskabet WooCommerce Plugin
- * Plugin URI:      @TODO
- * Description:     @TODO
+ * Plugin Name:		Økoskabet WooCommerce Plugin
+ * Plugin URI:		https://github.com/okoskabet/woocommerce_plugin
+ * Description:		Connect your WooCommerce store to Økoskabet
  * Version:         1.0.0
  * Author:          Kim Frederiksen
  * Author URI:      https://heyrobot.ai
@@ -54,7 +54,7 @@ if (version_compare(PHP_VERSION, O_MIN_PHP_VERSION, '<=')) {
 			echo wp_kses_post(
 				sprintf(
 					'<div class="notice notice-error"><p>%s</p></div>',
-					__('"okoskabet-woocommerce-plugin" requires PHP 5.6 or newer.', O_TEXTDOMAIN)
+					__('"okoskabet-woocommerce-plugin" requires PHP 7.4 or newer.', O_TEXTDOMAIN)
 				)
 			);
 		}
