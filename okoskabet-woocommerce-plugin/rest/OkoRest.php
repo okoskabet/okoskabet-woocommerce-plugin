@@ -67,7 +67,22 @@ class OkoRest extends Base
 						'required' => false,
 					),
 					'zip' => array(
-						'required' => false,
+						'required' => true,
+					),
+				),
+			)
+		);
+
+		\register_rest_route(
+			'wp/v2',
+			'okoskabet/home_delivery',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => '__return_true',
+				'callback'            => array($this, 'get_home_delivery'),
+				'args'                => array(
+					'zip' => array(
+						'required' => true,
 					),
 				),
 			)
@@ -92,7 +107,7 @@ class OkoRest extends Base
 			$curl = curl_init();
 
 			curl_setopt_array($curl, array(
-				CURLOPT_URL => 'https://staging.okoskabet.dk/api/v1/sheds/?zipcode=' . $params['zip'],
+				CURLOPT_URL => 'https://staging.okoskabet.dk/api/v1/sheds/?delivery_dates=true&zipcode=' . $params['zip'],
 				CURLOPT_RETURNTRANSFER => true,
 				CURLOPT_ENCODING => '',
 				CURLOPT_MAXREDIRS => 10,
@@ -110,7 +125,42 @@ class OkoRest extends Base
 
 			curl_close($curl);
 
-			return array('settings' => $settings, 'results' => array_values($output_content));
+			return array('settings' => $settings, 'results' => $output_content);
+		} else {
+			return false;
+		}
+	}
+
+	public function get_home_delivery(\WP_REST_Request $request)
+	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
+
+		$params = $request->get_params();
+
+		$settings = get_option(O_TEXTDOMAIN . '-settings');
+
+		if (!empty($settings['_api_key'])) {
+			$curl = curl_init();
+
+			curl_setopt_array($curl, array(
+				CURLOPT_URL => 'https://staging.okoskabet.dk/api/v1/home_delivery?postal_code=' . $params['zip'],
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_ENCODING => '',
+				CURLOPT_MAXREDIRS => 10,
+				CURLOPT_TIMEOUT => 0,
+				CURLOPT_FOLLOWLOCATION => true,
+				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+				CURLOPT_CUSTOMREQUEST => 'GET',
+				CURLOPT_HTTPHEADER => array(
+					'authorization: ' . $settings['_api_key']
+				),
+			));
+
+			$response = curl_exec($curl);
+			$output_content = json_decode($response, true);
+
+			curl_close($curl);
+
+			return array('settings' => $settings, 'results' => $output_content);
 		} else {
 			return false;
 		}
