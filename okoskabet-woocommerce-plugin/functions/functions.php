@@ -629,26 +629,19 @@ function hey_after_order_placed($order_id)
 				'first_name' => $order->get_billing_first_name(),
 				'last_name' => $order->get_billing_last_name(),
 				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
-				'street_name' => $order->get_shipping_address_1(),
-				'city' => $order->get_shipping_city(),
-				'zip' => $order->get_shipping_postcode(),
 				'phone' => $order->get_billing_phone(),
 				'email' => $order->get_billing_email(),
 			],
 			'home_delivery' => [
 				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
-				'address' => [
-					'street_name' => $order->get_shipping_address_1(),
-					'city' => $order->get_shipping_city(),
-					'zip' => $order->get_shipping_postcode(),
-				],
+				'street_name' => $order->get_shipping_address_1(),
+				'city' => $order->get_shipping_city(),
+				'postal_code' => $order->get_shipping_postcode(),
+				'latitude' => '55.000',
+				'longitude' => '12.000',
 			],
 			'notes' => (string) $order->get_customer_note(),
 			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
-			'reservation' => [
-				'shed_id' => $order->get_meta('_billing_okoskabet_shed_id', true),
-				'max_duration_days' => 1,
-			]
 		];
 
 		$data_json = json_encode($data);
