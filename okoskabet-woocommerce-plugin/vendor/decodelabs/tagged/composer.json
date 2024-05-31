@@ -1,0 +1,70 @@
+{
+    "name": "decodelabs/tagged",
+    "description": "PHP markup generation without the fuss",
+    "type": "library",
+    "keywords": ["markup", "html", "generator"],
+    "license": "MIT",
+    "authors": [{
+        "name": "Tom Wright",
+        "email": "tom@inflatablecookie.com"
+    }],
+    "require": {
+        "php": "^7.2|^8.0",
+        "ext-intl": "*",
+        "symfony/polyfill-mbstring": "^1.7",
+        "symfony/polyfill-php80": "^1.22",
+
+        "decodelabs/collections": "^0.6.1",
+        "decodelabs/dictum": "^0.2.4",
+        "decodelabs/elementary": "^0.1.4",
+        "decodelabs/exceptional": "^0.3",
+        "decodelabs/gadgets": "^0.7",
+        "decodelabs/glitch-support": "^0.3",
+        "decodelabs/veneer": "^0.7|^0.8"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^8",
+        "phpstan/phpstan": "^0.12.45",
+        "phpstan/extension-installer": "^1.0",
+        "decodelabs/phpstan-decodelabs": "^0.5",
+        "symplify/easy-coding-standard": "^8.3",
+
+        "nesbot/carbon": "^2.25",
+        "soundasleep/html2text": "^1.1",
+        "erusev/parsedown": "^1.7",
+        "michelf/php-markdown": "^1.9",
+
+        "decodelabs/systemic": "^0.8",
+        "decodelabs/chirp": "^0.6",
+
+        "decodelabs/atlas": "^0.9",
+        "decodelabs/terminus": "^0.7"
+    },
+    "suggest": {
+        "nesbot/carbon": "Support for time interval formatting",
+        "soundasleep/html2text": "Better HTML to text conversion",
+        "erusev/parsedown": "Add support for Markdown parsing",
+        "michelf/php-markdown": "Alternative Markdown parsing provider",
+
+        "decodelabs/systemic": "Managed locale and timezone info",
+        "decodelabs/chirp": "Enable parsing of Tweets"
+    },
+    "autoload": {
+        "psr-4": {
+            "DecodeLabs\\Tagged\\": "src/Tagged"
+        },
+        "files": [
+            "src/global.php"
+        ]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-develop": "0.11.x-dev"
+        }
+    },
+    "scripts": {
+        "analyze": "phpstan analyze --no-progress",
+        "psr12": "ecs check --no-progress-bar",
+        "psr12-fix": "ecs check --no-progress-bar --fix"
+    }
+}

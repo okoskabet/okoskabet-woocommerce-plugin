@@ -599,11 +599,9 @@ function hey_after_order_placed($order_id)
 	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 	$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 
-	if (empty($order_shed)) {
+	if (empty($order_delivery_date)) {
 		return;
 	}
-
-	$order_total = $order->get_total();
 
 	$settings = get_option(O_TEXTDOMAIN . '-settings');
 
@@ -611,13 +609,39 @@ function hey_after_order_placed($order_id)
 
 		$url = "https://staging.okoskabet.dk/api/v1/shipments/";
 
-		$data = [
+		$data = !empty($order_shed) ? [
 			'shipment_reference' => (string) $order_id,
 			'customer' => [
 				'first_name' => $order->get_billing_first_name(),
 				'last_name' => $order->get_billing_last_name(),
 				'phone' => $order->get_billing_phone(),
 				'email' => $order->get_billing_email(),
+			],
+			'notes' => (string) $order->get_customer_note(),
+			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
+			'reservation' => [
+				'shed_id' => $order->get_meta('_billing_okoskabet_shed_id', true),
+				'max_duration_days' => 1,
+			]
+		] : [
+			'shipment_reference' => (string) $order_id,
+			'customer' => [
+				'first_name' => $order->get_billing_first_name(),
+				'last_name' => $order->get_billing_last_name(),
+				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
+				'street_name' => $order->get_shipping_address_1(),
+				'city' => $order->get_shipping_city(),
+				'zip' => $order->get_shipping_postcode(),
+				'phone' => $order->get_billing_phone(),
+				'email' => $order->get_billing_email(),
+			],
+			'home_delivery' => [
+				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
+				'address' => [
+					'street_name' => $order->get_shipping_address_1(),
+					'city' => $order->get_shipping_city(),
+					'zip' => $order->get_shipping_postcode(),
+				],
 			],
 			'notes' => (string) $order->get_customer_note(),
 			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
