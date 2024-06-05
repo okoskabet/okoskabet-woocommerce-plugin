@@ -239,7 +239,7 @@ function custom_content_for_custom_shipping_checkout()
 									if ($('#oko-shed-custom-div-modal').length === 0) {
 										parrentShipping.append('<div id="oko-shed-custom-div-modal"><a href="#" class="button okoButtonModalOpen">Vælg lokationer</a></div>');
 									}
-								<? } ?>
+								<?php } ?>
 
 								if ($('#oko-shed-custom-div').length === 0) {
 									parrentShipping.append('<div id="oko-shed-custom-div"></div>');
