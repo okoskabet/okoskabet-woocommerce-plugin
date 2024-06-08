@@ -96,6 +96,8 @@ function custom_content_for_custom_shipping_checkout()
 				z-index: 9999;
 				width: 480px;
 				max-width: 94%;
+				max-height: 90%;
+				overflow: scroll;
 			}
 
 			<?php
