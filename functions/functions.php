@@ -63,7 +63,6 @@ function o_check_configuration($value)
 
 
 
-add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout');
 
 function enqueue_google_maps_api()
 {
@@ -73,9 +72,10 @@ function enqueue_google_maps_api()
 		wp_enqueue_style('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
 	}
 }
-
 add_action('wp_enqueue_scripts', 'enqueue_google_maps_api');
 
+
+add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout', 10);
 function custom_content_for_custom_shipping_checkout()
 {
 	$settings = o_get_settings();

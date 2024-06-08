@@ -8,7 +8,7 @@
  * @link      https://heyrobot.ai
  *
  * Plugin Name:		Økoskabet WooCommerce Plugin
- * Plugin URI:		https://github.com/okoskabet/woocommerce_plugin
+ * Plugin URI:		https://github.com/okoskabet/okoskabet-woocommerce-plugin
  * Description:		Connect your WooCommerce store to Økoskabet
  * Version:         1.0.0
  * Author:          Kim Frederiksen
@@ -73,7 +73,7 @@ require_once O_PLUGIN_ROOT . 'functions/functions.php';
 
 
 // Documentation to integrate GitHub, GitLab or BitBucket https://github.com/YahnisElsts/plugin-update-checker/blob/master/README.md
-Puc_v4_Factory::buildUpdateChecker('https://github.com/okoskabet/woocommerce_plugin', __FILE__, 'okoskabet-woocommerce-plugin');
+Puc_v4_Factory::buildUpdateChecker('https://github.com/okoskabet/okoskabet-woocommerce-plugin', __FILE__, 'okoskabet-woocommerce-plugin');
 
 if (!wp_installing()) {
 	register_activation_hook(O_TEXTDOMAIN . '/' . O_TEXTDOMAIN . '.php', array(new \okoskabet_woocommerce_plugin\Backend\ActDeact, 'activate'));
