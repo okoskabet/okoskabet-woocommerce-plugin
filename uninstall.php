@@ -23,7 +23,7 @@
  */
 
 // If uninstall not called from WordPress, then exit.
-if ( !defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+if (!defined('WP_UNINSTALL_PLUGIN')) {
 	exit;
 }
 
@@ -32,14 +32,15 @@ if ( !defined( 'WP_UNINSTALL_PLUGIN' ) ) {
  *
  * @return void
  */
-function o_uninstall_multisite() {
-	if ( is_multisite() ) {
+function o_uninstall_multisite()
+{
+	if (is_multisite()) {
 		/** @var array<\WP_Site> $blogs */
 		$blogs = get_sites();
 
-		if ( !empty( $blogs ) ) {
-			foreach ( $blogs as $blog ) {
-				switch_to_blog( (int) $blog->blog_id );
+		if (!empty($blogs)) {
+			foreach ($blogs as $blog) {
+				switch_to_blog((int) $blog->blog_id);
 				o_uninstall();
 				restore_current_blog();
 			}
@@ -57,7 +58,8 @@ function o_uninstall_multisite() {
  * @global WP_Roles $wp_roles
  * @return void
  */
-function o_uninstall() { // phpcs:ignore
+function o_uninstall()
+{ // phpcs:ignore
 	global $wp_roles;
 	/*
 	@TODO
@@ -88,35 +90,6 @@ function o_uninstall() { // phpcs:ignore
 	$GLOBALS['wpdb']->query("DROP TABLE `".$GLOBALS['wpdb']->prefix."TABLE_NAME`");
 	$GLOBALS['wpdb']->query("OPTIMIZE TABLE `" .$GLOBALS['wpdb']->prefix."options`");
 	 */
-
-	// Remove the capabilities of the plugin
-	if ( !isset( $wp_roles ) ) {
-		$wp_roles = new WP_Roles; // phpcs:ignore
-	}
-
-	$caps = array(
-		'create_plugins',
-		'read_demo',
-		'read_private_demoes',
-		'edit_demo',
-		'edit_demoes',
-		'edit_private_demoes',
-		'edit_published_demoes',
-		'edit_others_demoes',
-		'publish_demoes',
-		'delete_demo',
-		'delete_demoes',
-		'delete_private_demoes',
-		'delete_published_demoes',
-		'delete_others_demoes',
-		'manage_demoes',
-	);
-
-	foreach ( $wp_roles as $role ) {
-		foreach ( $caps as $cap ) {
-			$role->remove_cap( $cap );
-		}
-	}
 }
 
 o_uninstall_multisite();
