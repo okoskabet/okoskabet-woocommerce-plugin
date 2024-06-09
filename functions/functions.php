@@ -102,6 +102,12 @@ function custom_content_for_custom_shipping_checkout()
 		}
 
 		<?php
+		} else {
+		?>.okoButtonModalDone {
+			display: none;
+		}
+
+		<?php
 		}
 
 		?>#billing_okoskabet_shed_id_field {
