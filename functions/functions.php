@@ -66,7 +66,7 @@ function o_check_configuration($value)
 
 
 
-function enqueue_google_maps_api()
+function enqueue_maps_api()
 {
 	if (is_checkout()) {  // Check if it's the WooCommerce checkout page
 		// Replace 'your_api_key_here' with your actual Google Maps API key
@@ -74,7 +74,7 @@ function enqueue_google_maps_api()
 		wp_enqueue_style('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
 	}
 }
-add_action('wp_enqueue_scripts', 'enqueue_google_maps_api');
+add_action('wp_enqueue_scripts', 'enqueue_maps_api');
 
 
 add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout', 10);
@@ -172,8 +172,6 @@ function custom_content_for_custom_shipping_checkout()
 					});
 
 					var bounds = new mapboxgl.LngLatBounds();
-
-
 
 					locations.sheds.forEach(function(location) {
 						var okoIcon = document.createElement('div');
@@ -660,7 +658,8 @@ function hey_after_order_placed($order_id)
 
 	if (!empty($settings['_api_key'])) {
 
-		$url = "https://okoskabet.dk/api/v1/shipments/";
+		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
+		$url = $api_url . '/api/v1/shipments/';
 
 		$data = !empty($order_shed) ? [
 			'shipment_reference' => (string) $order_id,
@@ -720,36 +719,6 @@ function hey_after_order_placed($order_id)
 		curl_close($ch);
 
 		$shipment = json_decode($response, true);
-		// You can also get other order details, for example:
-		/*
-			$order_data = $order->get_data(); // Get the order data in an arr
-
-		foreach ($order->get_items() as $item_id => $item) {
-			// $item is an instance of WC_Order_Item_Product
-			$product_id = $item->get_product_id(); // Get the product ID
-			$product_name = $item->get_name(); // Get the product name
-			$quantity = $item->get_quantity(); // Get the quantity ordered
-			$total = $item->get_total(); // Get the line item total
-
-
-
-
-			// You can now perform your desired actions with the item details
-			// For example, logging item details
-			error_log('Product ID: ' . $product_id);
-			error_log('Product Name: ' . $product_name);
-			error_log('Quantity: ' . $quantity);
-			error_log('Total: ' . $total);
-
-			// If you need to get the product object
-			$product = $item->get_product();
-			if ($product) {
-				// Perform actions with the product object
-				// For example, getting the SKU
-				$product_sku = $product->get_sku();
-				error_log('Product SKU: ' . $product_sku);
-			}
-		}*/
 	}
 
 
