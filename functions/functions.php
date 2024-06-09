@@ -121,7 +121,7 @@ function custom_content_for_custom_shipping_checkout()
 		}
 
 		.marker {
-			background-image: url(<?php O_PLUGIN_ROOT_URL . '/images/map_marker.svg' ?>);
+			background-image: url(<?php echo O_PLUGIN_ROOT_URL . '/images/map_marker.svg' ?>);
 			background-size: contain;
 			width: 50px;
 			height: 50px;
