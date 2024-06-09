@@ -30,11 +30,13 @@ function o_check_configuration($value)
 	if (empty($shipping_methods)) {
 		$settings = o_get_settings();
 
+		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
+
 		if (!empty($settings['_api_key'])) {
 			$curl = curl_init();
 
 			curl_setopt_array($curl, array(
-				CURLOPT_URL => 'https://staging.okoskabet.dk/api/v1/configuration',
+				CURLOPT_URL => $api_url . '/api/v1/configuration',
 				CURLOPT_RETURNTRANSFER => true,
 				CURLOPT_ENCODING => '',
 				CURLOPT_MAXREDIRS => 10,
@@ -658,7 +660,7 @@ function hey_after_order_placed($order_id)
 
 	if (!empty($settings['_api_key'])) {
 
-		$url = "https://staging.okoskabet.dk/api/v1/shipments/";
+		$url = "https://okoskabet.dk/api/v1/shipments/";
 
 		$data = !empty($order_shed) ? [
 			'shipment_reference' => (string) $order_id,

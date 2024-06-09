@@ -42,6 +42,16 @@
 
 	$cmb->add_field(
 		array(
+			'name' => __('Staging API', O_TEXTDOMAIN),
+			'desc' => __('Check this to use staging API', O_TEXTDOMAIN),
+			'id'   => '_staging_api',
+			'type' => 'checkbox',
+		)
+	);
+
+
+	$cmb->add_field(
+		array(
 			'name' => __('Økoskabet Description (Optional)', O_TEXTDOMAIN),
 			'desc' => __('Økoskabet shipping method description, overwrites default description', O_TEXTDOMAIN),
 			'id'   => '_description_shipping_okoskabet',
