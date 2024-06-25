@@ -80,10 +80,11 @@ add_action('wp_enqueue_scripts', 'enqueue_maps_api');
 add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout', 10);
 function custom_content_for_custom_shipping_checkout()
 {
+	$settings = o_get_settings();
+	if (empty($settings['_api_key'])) return;
 ?>
 	<style>
 		<?php
-		$settings = o_get_settings();
 		$shed_description = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : 'Afkølet afhentningssted hvor du kan hente dine varer hele døgnet vha. kode.';
 		$local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
 		if ($settings['_display_option'] == 'modal') {
