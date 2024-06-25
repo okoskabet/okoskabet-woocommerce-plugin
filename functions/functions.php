@@ -202,7 +202,7 @@ function custom_content_for_custom_shipping_checkout()
 					const map = new mapboxgl.Map({
 						container: 'map', // container ID
 						style: 'mapbox://styles/mapbox/streets-v12', // style URL
-						center: [locations.origin.longitude, locations.origin.latitude], // starting position [lng, lat]
+						center: locations.origin ? [locations.origin.longitude, locations.origin.latitude] : [locations.sheds[0].address.longitude, locations.sheds[0].address.latitude], // starting position [lng, lat]
 						zoom: 11, // starting zoom
 					});
 
@@ -241,9 +241,10 @@ function custom_content_for_custom_shipping_checkout()
 						]);
 					});
 
-					const marker1 = new mapboxgl.Marker().setLngLat([locations.origin.longitude, locations.origin.latitude]).addTo(map);
-					bounds.extend([locations.origin.longitude, locations.origin.latitude]);
-
+					if (locations.origin && locations.origin.longitude && locations.origin.latitude) {
+						const marker1 = new mapboxgl.Marker().setLngLat([locations.origin.longitude, locations.origin.latitude]).addTo(map);
+						bounds.extend([locations.origin.longitude, locations.origin.latitude]);
+					}
 
 					map.fitBounds(bounds);
 
