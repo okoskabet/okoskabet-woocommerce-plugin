@@ -40,6 +40,13 @@
 		)
 	);
 
+	?>
+	<style>
+		.cmb2-id--staging-api {
+			display: none;
+		}
+	</style>
+	<?php
 	$cmb->add_field(
 		array(
 			'name' => __('Staging API', O_TEXTDOMAIN),
