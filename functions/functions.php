@@ -277,7 +277,7 @@ function custom_content_for_custom_shipping_checkout()
 							?>
 
 								if ($('#oko-shed-custom-div-modal').length === 0) {
-									parrentShipping.append('<div id="oko-shed-custom-div-modal"><div id="oko-shed-content"><div id="oko-shed-content-location"></div><div id="oko-shed-content-date"></div></div><a href="#" class="button okoButtonModalOpen">Vælg lokationer</a></div>');
+									parrentShipping.append('<div id="oko-shed-custom-div-modal"><div id="oko-shed-content"><div id="oko-shed-content-location"></div><div id="oko-shed-content-date"></div></div><a href="#" class="button okoButtonModalOpen">Vælg Økoskab</a></div>');
 								}
 							<?php } ?>
 
