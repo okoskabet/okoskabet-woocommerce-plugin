@@ -128,6 +128,10 @@ function custom_content_for_custom_shipping_checkout()
 			border-radius: 50%;
 			cursor: pointer;
 		}
+
+		.okoIconSelected {
+			background-image: url(<?php echo O_PLUGIN_ROOT_URL . '/images/map_marker_selected.svg' ?>);
+		}
 	</style>
 	<script type="text/javascript">
 		jQuery(function($) {
@@ -185,7 +189,17 @@ function custom_content_for_custom_shipping_checkout()
 							$('#locationsDropdown').val(currentShed);
 							changeLocation(currentShed);
 						});
-						bounds.extend([location.address.longitude, location.address.latitude]);
+						okoIcon.addEventListener('click', function(e) {
+							$('.okoIconSelected').removeClass('okoIconSelected');
+							$(this).addClass('okoIconSelected');
+							console.log("Event", e);
+							// change the marker color, then change it back again. 
+							// I can set for example el.className = 'marker2'
+							// but how can I change it back to the original
+						});
+						bounds.extend([location.
+							address.longitude, location.address.latitude
+						]);
 					});
 
 					const marker1 = new mapboxgl.Marker().setLngLat([locations.origin.longitude, locations.origin.latitude]).addTo(map);
