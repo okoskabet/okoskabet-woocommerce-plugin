@@ -771,11 +771,9 @@ function hey_after_order_placed($order_id)
 		if ($http_code != 201) {
 			// Set the order status to 'failed'
 			$order->update_status('failed', 'Order failed before processing.');
+			$error_text = __("The order could not be completed", O_TEXTDOMAIN);
 
-			// Redirect back to checkout page with an error message
-			wc_add_notice('Ordren kunne ikke gennemføres. Prøv venligst igen.', 'error');
-			wp_redirect(wc_get_checkout_url());
-			exit;
+			throw new Exception($error_text);
 		}
 
 		$shipment = json_decode($response, true);
