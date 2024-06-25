@@ -205,9 +205,15 @@ function custom_content_for_custom_shipping_checkout()
 
 					var bounds = new mapboxgl.LngLatBounds();
 
+					const selectedOption = $('#locationsDropdown').find('option:selected');
+
 					locations.sheds.forEach(function(location) {
 						var okoIcon = document.createElement('div');
+
 						okoIcon.classList.add("marker");
+						if (location.id === selectedOption.val()) {
+							okoIcon.classList.add("okoIconSelected");
+						}
 						const marker1 = new mapboxgl.Marker(okoIcon).setLngLat([location.address.longitude, location.address.latitude]).setPopup(new mapboxgl.Popup({
 							closeButton: false
 						}).setHTML("<div id='markerPopUp' data-shed=" + location.id + "><h6 style='font-weight: bold; margin-bottom: 0;'>" + location.name + "</h6><div>" + location.address.address + "</div><div>" + location.address.postal_code + " " + location.address.city + "</div></div>")).addTo(map);
@@ -288,7 +294,7 @@ function custom_content_for_custom_shipping_checkout()
 							?>
 
 								if ($('#oko-shed-custom-div-modal').length === 0) {
-									parrentShipping.append('<div id="oko-shed-custom-div-modal"><div id="oko-descrption"><?php echo $shed_description; ?></div><div id="oko-shed-content"><div id="oko-shed-content-location"></div><div id="oko-shed-content-date"></div></div><a href="#" class="button okoButtonModalOpen">Vælg Økoskab</a></div>');
+									parrentShipping.append('<div id="oko-shed-custom-div-modal"><div id="oko-descrption"><?php echo $shed_description; ?></div><div id="oko-shed-content"><div id="oko-shed-content-location"></div><div id="oko-shed-content-date"></div></div><a href="#" class="button okoButtonModalOpen" style="margin-bottom: 20px;">Vælg Økoskab</a></div>');
 								}
 							<?php } ?>
 
