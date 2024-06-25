@@ -84,6 +84,8 @@ function custom_content_for_custom_shipping_checkout()
 	<style>
 		<?php
 		$settings = o_get_settings();
+		$shed_description = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : 'Afkølet afhentningssted hvor du kan hente dine varer hele døgnet vha. kode.';
+		$local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
 		if ($settings['_display_option'] == 'modal') {
 
 		?>#oko-shed-custom-div {
@@ -121,6 +123,9 @@ function custom_content_for_custom_shipping_checkout()
 		}
 
 		#oko-shed-content {
+			line-height: 1.1;
+			margin-top: 10px;
+			margin-bottom: 10px;
 			font-size: 80%;
 		}
 
@@ -130,6 +135,12 @@ function custom_content_for_custom_shipping_checkout()
 
 		.oko-shed-content-value {
 			font-weight: normal;
+		}
+
+		#oko-descrption {
+			font-weight: normal;
+			line-height: 1.1;
+			font-size: 80%;
 		}
 
 		.marker {
@@ -277,12 +288,12 @@ function custom_content_for_custom_shipping_checkout()
 							?>
 
 								if ($('#oko-shed-custom-div-modal').length === 0) {
-									parrentShipping.append('<div id="oko-shed-custom-div-modal"><div id="oko-shed-content"><div id="oko-shed-content-location"></div><div id="oko-shed-content-date"></div></div><a href="#" class="button okoButtonModalOpen">Vælg Økoskab</a></div>');
+									parrentShipping.append('<div id="oko-shed-custom-div-modal"><div id="oko-descrption"><?php echo $shed_description; ?></div><div id="oko-shed-content"><div id="oko-shed-content-location"></div><div id="oko-shed-content-date"></div></div><a href="#" class="button okoButtonModalOpen">Vælg Økoskab</a></div>');
 								}
 							<?php } ?>
 
 							if ($('#oko-shed-custom-div').length === 0) {
-								parrentShipping.append('<div id="oko-shed-custom-div"></div>');
+								parrentShipping.append('<div id="oko-shed-custom-div"><div id="oko-descrption"><?php echo $shed_description; ?></div></div>');
 
 								const myHeaders = new Headers();
 								myHeaders.append("Accept", "application/json");
@@ -296,7 +307,7 @@ function custom_content_for_custom_shipping_checkout()
 								fetch("/wp-json/wp/v2/okoskabet/sheds?zip=" + addressFilled, requestOptions)
 									.then((response) => response.json())
 									.then((result) => {
-										$('#oko-shed-custom-div').html('<select name="okoLocations"  id="locationsDropdown" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></select><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select><div id="map" style="width: 100%; height: 450px; margin-bottom: 20px;"></div><div class="okoButtonModal okoButtonModalDone"><div class="okoButtonModalContent"></div><a href="#" class="button ">Done</a></div>');
+										$('#oko-shed-custom-div').html('<div id="oko-descrption"><?php echo $shed_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Økoskab</div><select name="okoLocations" id="locationsDropdown" style="width: 100%; margin-top: 0; margin-bottom: 20px;"></select><div class="oko-select-headline" style="font-size: 14px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select><div id="map" style="width: 100%; height: 450px; margin-bottom: 20px;"></div><div class="okoButtonModal okoButtonModalDone"><div class="okoButtonModalContent"></div><a href="#" class="button ">Done</a></div>');
 										const dropdown = $('#locationsDropdown');
 										if (dropdown) {
 											result.results.sheds.map(location => {
@@ -304,7 +315,6 @@ function custom_content_for_custom_shipping_checkout()
 												location.delivery_dates.map(delivery_date => {
 													delivery_dates = delivery_dates + delivery_date + ', ';
 												});
-												console.log("Delivery Dates", delivery_dates)
 
 												$(dropdown).append('<option data-dates="' + delivery_dates + '" value="' + location.id + '">' + location.name + '</option>');
 											});
@@ -320,7 +330,7 @@ function custom_content_for_custom_shipping_checkout()
 							if (currentShipping.val() === 'hey_okoskabet_shipping_home') {
 
 								if ($('#oko-local-custom-div').length === 0) {
-									parrentShipping.append('<div id="oko-local-custom-div"></div>');
+									parrentShipping.append('<div id="oko-local-custom-div"><div id="oko-descrption"><?php echo $local_description; ?></div></div>');
 
 									const myHeaders = new Headers();
 									myHeaders.append("Accept", "application/json");
@@ -334,7 +344,7 @@ function custom_content_for_custom_shipping_checkout()
 									fetch("/wp-json/wp/v2/okoskabet/home_delivery?zip=" + addressFilled, requestOptions)
 										.then((response) => response.json())
 										.then((result) => {
-											$('#oko-local-custom-div').html('<select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></select>');
+											$('#oko-local-custom-div').html('<div id="oko-descrption"><?php echo $local_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select>');
 											const dropdown = $('#deliveryDatesDropdown');
 											if (dropdown) {
 												result.results.delivery_dates.map(deliveryDate => {
