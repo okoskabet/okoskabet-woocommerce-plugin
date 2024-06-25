@@ -279,7 +279,7 @@ function custom_content_for_custom_shipping_checkout()
 								fetch("/wp-json/wp/v2/okoskabet/sheds?zip=" + addressFilled, requestOptions)
 									.then((response) => response.json())
 									.then((result) => {
-										$('#oko-shed-custom-div').html('<select name="okoLocations"  id="locationsDropdown" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></select><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select><div id="map" style="width: 100%; height: 450px; margin-bottom: 20px;"></div><div className="okoButtonModal"><a href="#" class="button okoButtonModalDone">Done</a></div>');
+										$('#oko-shed-custom-div').html('<select name="okoLocations"  id="locationsDropdown" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></select><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select><div id="map" style="width: 100%; height: 450px; margin-bottom: 20px;"></div><div class="okoButtonModal okoButtonModalDone"><a href="#" class="button ">Done</a></div>');
 										const dropdown = $('#locationsDropdown');
 										if (dropdown) {
 											result.results.sheds.map(location => {
