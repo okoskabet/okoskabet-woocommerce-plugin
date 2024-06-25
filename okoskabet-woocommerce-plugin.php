@@ -10,7 +10,7 @@
  * Plugin Name:		Økoskabet WooCommerce Plugin
  * Plugin URI:		https://github.com/okoskabet/okoskabet-woocommerce-plugin
  * Description:		Connect your WooCommerce store to Økoskabet
- * Version:         1.1.3
+ * Version:         1.1.4
  * Author:          Kim Frederiksen
  * Author URI:      https://heyrobot.ai
  * Text Domain:     okoskabet-woocommerce-plugin
@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) {
 	die('We\'re sorry, but you can not directly access this file.');
 }
 
-define('O_VERSION', '1.1.3');
+define('O_VERSION', '1.1.4');
 define('O_TEXTDOMAIN', 'okoskabet-woocommerce-plugin');
 define('O_NAME', 'Økoskabet WooCommerce Plugin');
 define('O_PLUGIN_ROOT', plugin_dir_path(__FILE__));

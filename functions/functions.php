@@ -680,7 +680,7 @@ function my_custom_checkout_field_display_admin_order_meta($order)
 	echo '' . esc_html__('Økoskabet Delivery Date') . ': ' . esc_html($order->get_meta('_billing_okoskabet_delivery_date', true)) . '';
 }
 
-add_action('woocommerce_thankyou', 'hey_after_order_placed', 10, 1);
+add_action('woocommerce_checkout_order_processed', 'hey_after_order_placed', 10, 1);
 
 /**
  * Custom function to be called after an order is placed.
@@ -689,7 +689,7 @@ add_action('woocommerce_thankyou', 'hey_after_order_placed', 10, 1);
  */
 function hey_after_order_placed($order_id)
 {
-	if (!$order_id) {
+	if (empty($order_id)) {
 		return;
 	}
 
@@ -759,22 +759,25 @@ function hey_after_order_placed($order_id)
 			'authorization: ' . $settings['_api_key'],
 			'Content-Length: ' . strlen($data_json)
 		]);
+
 		curl_setopt($ch, CURLOPT_POST, true);
 		curl_setopt($ch, CURLOPT_POSTFIELDS, $data_json);
 
 		$response = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-		if ($http_code != 201) {
-			// Handle error response
-			throw new Exception('Error: ' . $response);
-		}
 		curl_close($ch);
+
+		if ($http_code != 201) {
+			// Set the order status to 'failed'
+			$order->update_status('failed', 'Order failed before processing.');
+
+			// Redirect back to checkout page with an error message
+			wc_add_notice('Ordren kunne ikke gennemføres. Prøv venligst igen.', 'error');
+			wp_redirect(wc_get_checkout_url());
+			exit;
+		}
 
 		$shipment = json_decode($response, true);
 	}
-
-
-	// Perform any other actions you need with the order object
-	// ...
 }
