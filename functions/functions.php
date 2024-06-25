@@ -166,11 +166,9 @@ function custom_content_for_custom_shipping_checkout()
 				function changeLocation(location) {
 					$('#billing_okoskabet_shed_id').val(location);
 
-
 					const selectedOption = $('#locationsDropdown').find('option:selected');
 
 					$('#oko-shed-content-location').html('<span class="oko-shed-content-label">Økoskab: </span><span class="oko-shed-content-value">' + selectedOption.text() + "</span>");
-
 
 					const deliveryDates = selectedOption.data('dates').split(",").map(function(item) {
 						return item.trim();
@@ -187,6 +185,10 @@ function custom_content_for_custom_shipping_checkout()
 							}
 						});
 					}
+
+					$('.okoIconSelected').removeClass('okoIconSelected');
+					$('.marker-' + location).addClass('okoIconSelected');
+
 					$('#deliveryDatesDropdown').trigger('change');
 					localStorage.setItem("okoSkabetId", location);
 				}
@@ -211,6 +213,7 @@ function custom_content_for_custom_shipping_checkout()
 						var okoIcon = document.createElement('div');
 
 						okoIcon.classList.add("marker");
+						okoIcon.classList.add("marker-" + location.id);
 						if (location.id === selectedOption.val()) {
 							okoIcon.classList.add("okoIconSelected");
 						}
