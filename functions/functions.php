@@ -715,6 +715,7 @@ function hey_after_order_placed($order_id)
 		$url = $api_url . '/api/v1/shipments/';
 
 		$data = !empty($order_shed) ? [
+			'locale' => get_locale(),
 			'shipment_reference' => (string) $order_id,
 			'customer' => [
 				'first_name' => $order->get_billing_first_name(),
@@ -729,6 +730,7 @@ function hey_after_order_placed($order_id)
 				'max_duration_days' => 1,
 			]
 		] : [
+			'locale' => get_locale(),
 			'shipment_reference' => (string) $order_id,
 			'customer' => [
 				'first_name' => $order->get_billing_first_name(),
@@ -768,14 +770,15 @@ function hey_after_order_placed($order_id)
 
 		curl_close($ch);
 
+		$shipment = json_decode($response, true);
+
 		if ($http_code != 201) {
 			// Set the order status to 'failed'
-			$order->update_status('failed', 'Order failed before processing.');
-			$error_text = __("The order could not be completed", O_TEXTDOMAIN);
+			$order->update_status('failed', !empty($shipment['error_message']) ? $shipment['error_message'] : 'Order failed before processing.');
+
+			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
 
 			throw new Exception($error_text);
 		}
-
-		$shipment = json_decode($response, true);
 	}
 }
