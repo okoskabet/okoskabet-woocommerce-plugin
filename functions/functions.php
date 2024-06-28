@@ -741,11 +741,10 @@ function hey_after_order_placed($order_id)
 			],
 			'home_delivery' => [
 				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
-				'street_name' => $order->get_shipping_address_1(),
+				'address_1' => $order->get_shipping_address_1(),
+				'address_2' => $order->get_shipping_address_2(),
 				'city' => $order->get_shipping_city(),
-				'postal_code' => $order->get_shipping_postcode(),
-				'latitude' => '55.000',
-				'longitude' => '12.000',
+				'postal_code' => $order->get_shipping_postcode()
 			],
 			'notes' => (string) $order->get_customer_note(),
 			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
