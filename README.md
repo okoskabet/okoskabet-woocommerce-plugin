@@ -16,7 +16,10 @@ Please go to [https://okoskabet.dk](https://okoskabet.dk) to read more.
 ## Installation
 We've compiled all you need to know into this Getting Started Guide. Please refer to the guide on how to install the plugin.
 
-The plugin can be downloaded here.
+[Getting starting with Økoskabet - WooCommerce](https://drive.google.com/file/d/1TuparoplZgcnlbZcscEFcOUim3U0R3mg/view?usp=sharing)
+
+
+If you want to go straight to installing the plugin, then you can download it from here.
 
 [![](https://storage.googleapis.com/okoskabet-images/miscellaneous/github/download_plugin_button.png)](https://github.com/okoskabet/okoskabet-woocommerce-plugin/archive/refs/heads/main.zip)
 
