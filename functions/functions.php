@@ -716,6 +716,7 @@ function hey_after_order_placed($order_id)
 
 		$data = !empty($order_shed) ? [
 			'locale' => get_locale(),
+			'allow_invalid' => true,
 			'shipment_reference' => (string) $order_id,
 			'customer' => [
 				'first_name' => $order->get_billing_first_name(),
@@ -731,6 +732,7 @@ function hey_after_order_placed($order_id)
 			]
 		] : [
 			'locale' => get_locale(),
+			'allow_invalid' => true,
 			'shipment_reference' => (string) $order_id,
 			'customer' => [
 				'first_name' => $order->get_billing_first_name(),
