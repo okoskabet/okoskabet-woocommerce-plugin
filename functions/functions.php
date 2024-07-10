@@ -181,7 +181,6 @@ function custom_content_for_custom_shipping_checkout()
 					if (dropdown) {
 						deliveryDates.map(deliveryDate => {
 							const date = new Date();
-							date.toLocaleDateString());
 							if (deliveryDate) {
 								//const formattedDeliveryDate = wp_date( get_option('date_format'), date_timestamp_get(deliveryDate) );
 								$(dropdown).append('<option  value="' + deliveryDate + '">' + date.toLocaleDateString()); + '</option>');
