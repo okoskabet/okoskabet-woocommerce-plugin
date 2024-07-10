@@ -186,11 +186,13 @@ function custom_content_for_custom_shipping_checkout()
 								month: 'long',
 								day: 'numeric',
 								weekday: 'long',
+								timeZone: "UTC"
 							};
 
 							if (deliveryDate) {
-								//const formattedDeliveryDate = wp_date( get_option('date_format'), date_timestamp_get(deliveryDate) );
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + deliveryDateObject.toLocaleDateString(navigator.language, options) + '</option>');
+								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(navigator.language, options)
+								capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1)
+								$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
 							}
 						});
 					}
