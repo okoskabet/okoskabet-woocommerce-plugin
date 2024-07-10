@@ -184,7 +184,7 @@ function custom_content_for_custom_shipping_checkout()
 						deliveryDates.map(deliveryDate => {
 							if (deliveryDate) {
 								$formatter = new IntlDateFormatter(
-									function_exists('get_user_locale') ? get_user_locale() : get_locale(), 
+									(function_exists('get_user_locale') ? get_user_locale() : get_locale()),
 									IntlDateFormatter::MEDIUM,
 									IntlDateFormatter::NONE
 								);
