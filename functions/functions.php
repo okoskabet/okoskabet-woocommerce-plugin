@@ -185,7 +185,7 @@ function custom_content_for_custom_shipping_checkout()
 								year: 'numeric',
 								month: 'long',
 								day: 'numeric',
-								weekday: 'long',
+								weekday: 'short',
 							};
 
 							if (deliveryDate) {
