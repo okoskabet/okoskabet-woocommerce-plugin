@@ -180,6 +180,7 @@ function custom_content_for_custom_shipping_checkout()
 
 					if (dropdown) {
 						deliveryDates.map(deliveryDate => {
+							const locale = <?php get_locale() ?>;
 							const deliveryDateObject = new Date(deliveryDate);
 							const options = {
 								year: 'numeric',
@@ -190,7 +191,7 @@ function custom_content_for_custom_shipping_checkout()
 							};
 
 							if (deliveryDate) {
-								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(navigator.language, options)
+								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale, options)
 								capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1)
 								$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
 							}
