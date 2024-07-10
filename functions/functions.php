@@ -188,8 +188,7 @@ function custom_content_for_custom_shipping_checkout()
 									IntlDateFormatter::MEDIUM,
 									IntlDateFormatter::NONE
 								);
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + deliveryDateFormatted + '</option>');
-
+								$(dropdown).append('<option  value="' + deliveryDate + '">' + $formatter->format(deliveryDate) + '</option>');
 							}
 						});
 					}
