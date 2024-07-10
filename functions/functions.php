@@ -151,7 +151,7 @@ function custom_content_for_custom_shipping_checkout()
 			height: 50px;
 			border-radius: 50%;
 			cursor: pointer;
-			z-index: 1;
+			z-index: -1000;
 		}
 
 		.okoIconSelected {
@@ -222,9 +222,8 @@ function custom_content_for_custom_shipping_checkout()
 						}
 						const marker1 = new mapboxgl.Marker(okoIcon).setLngLat([location.address.longitude, location.address.latitude]).setPopup(new mapboxgl.Popup({
 							offset: 20,
-							closeButton: false,
-							
-						}).setHTML("<div id='markerPopUp' style='z-index:0' data-shed=" + location.id + "><h6 style='font-weight: bold; margin-bottom: 0;'>" + location.name + "</h6><div>" + location.address.address + "</div><div>" + location.address.postal_code + " " + location.address.city + "</div></div>")).addTo(map);
+							closeButton: false
+						}).setHTML("<div id='markerPopUp' data-shed=" + location.id + "><h6 style='font-weight: bold; margin-bottom: 0;'>" + location.name + "</h6><div>" + location.address.address + "</div><div>" + location.address.postal_code + " " + location.address.city + "</div></div>")).addTo(map);
 						marker1.getPopup().on('open', () => {
 							openPopUp = marker1.getPopup();
 							const currentShed = $('#markerPopUp').data('shed');
