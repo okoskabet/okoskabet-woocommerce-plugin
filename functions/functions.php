@@ -156,7 +156,7 @@ function custom_content_for_custom_shipping_checkout()
 
 		.okoIconSelected {
 			background-image: url(<?php echo O_PLUGIN_ROOT_URL . '/images/map_marker_selected.svg' ?>);
-			z-index: 0;
+			z-index: 2;
 		}
 	</style>
 	<script type="text/javascript">
