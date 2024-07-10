@@ -180,7 +180,7 @@ function custom_content_for_custom_shipping_checkout()
 
 					if (dropdown) {
 						deliveryDates.map(deliveryDate => {
-							const locale = <?php echo get_locale() ?>;
+							const locale = <?php echo "'" + get_locale() "'" ?>;
 							const deliveryDateObject = new Date(deliveryDate);
 							const options = {
 								year: 'numeric',
