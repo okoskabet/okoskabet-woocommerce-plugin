@@ -183,7 +183,7 @@ function custom_content_for_custom_shipping_checkout()
 							const date = new Date();
 							if (deliveryDate) {
 								//const formattedDeliveryDate = wp_date( get_option('date_format'), date_timestamp_get(deliveryDate) );
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + date.toLocaleDateString()); + '</option>');
+								$(dropdown).append('<option  value="' + deliveryDate + '">' + date.toLocaleDateString() + '</option>');
 							}
 						});
 					}
