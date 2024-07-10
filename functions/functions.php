@@ -151,10 +151,12 @@ function custom_content_for_custom_shipping_checkout()
 			height: 50px;
 			border-radius: 50%;
 			cursor: pointer;
+			z-index: 1;
 		}
 
 		.okoIconSelected {
 			background-image: url(<?php echo O_PLUGIN_ROOT_URL . '/images/map_marker_selected.svg' ?>);
+			z-index: 0;
 		}
 	</style>
 	<script type="text/javascript">
