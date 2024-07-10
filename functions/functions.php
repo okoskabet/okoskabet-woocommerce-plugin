@@ -181,9 +181,8 @@ function custom_content_for_custom_shipping_checkout()
 					if (dropdown) {
 						deliveryDates.map(deliveryDate => {
 							if (deliveryDate) {
-								locale = (function_exists('get_user_locale')) ? get_user_locale() : get_locale()
 								//const formattedDeliveryDate = wp_date( get_option('date_format'), date_timestamp_get(deliveryDate) );
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + locale + '</option>');
+								$(dropdown).append('<option  value="' + deliveryDate + '">' + get_user_locale() + '</option>');
 							}
 						});
 					}
