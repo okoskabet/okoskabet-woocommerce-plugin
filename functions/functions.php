@@ -180,10 +180,17 @@ function custom_content_for_custom_shipping_checkout()
 
 					if (dropdown) {
 						deliveryDates.map(deliveryDate => {
-							const date = new Date();
+							const deliveryDateObject = new Date(deliveryDate);
+							const options = {
+								year: 'numeric',
+								month: 'long',
+								day: 'numeric',
+								weekday: 'long',
+							};
+
 							if (deliveryDate) {
 								//const formattedDeliveryDate = wp_date( get_option('date_format'), date_timestamp_get(deliveryDate) );
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + date.toLocaleDateString() + '</option>');
+								$(dropdown).append('<option  value="' + deliveryDate + '">' + deliveryDateObject.toLocaleDateString(navigator.language, options) + '</option>');
 							}
 						});
 					}
