@@ -17,7 +17,7 @@
  * @return array
  */
 
-
+ use IntlDateFormatter;
 
 function o_get_settings()
 {
