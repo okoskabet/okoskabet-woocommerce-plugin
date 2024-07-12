@@ -192,7 +192,7 @@ function custom_content_for_custom_shipping_checkout()
 							const deliveryDateObject = new Date(deliveryDate);
 							
 							if (deliveryDate) {
-								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-");, options)
+								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options)
 								capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1)
 								$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
 							}
@@ -372,8 +372,23 @@ function custom_content_for_custom_shipping_checkout()
 											$('#oko-local-custom-div').html('<div id="oko-descrption"><?php echo $local_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select>');
 											const dropdown = $('#deliveryDatesDropdown');
 											if (dropdown) {
+												const locale = <?php echo "'" . get_locale() . "'" ?>;
+												const options = {
+													year: 'numeric',
+													month: 'long',
+													day: 'numeric',
+													weekday: 'long',
+													timeZone: "UTC"
+												};
+
 												result.results.delivery_dates.map(deliveryDate => {
-													$(dropdown).append('<option value="' + deliveryDate + '">' + deliveryDate + '</option>');
+													const deliveryDateObject = new Date(deliveryDate);
+							
+													if (deliveryDate) {
+														const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options);
+														capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1);
+														$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
+													}
 												});
 											}
 											$('#deliveryDatesDropdown').trigger('change');
