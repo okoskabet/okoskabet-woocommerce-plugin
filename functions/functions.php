@@ -161,8 +161,23 @@ function custom_content_for_custom_shipping_checkout()
 		jQuery(function($) {
 			$(document).ready(function() {
 
-
 				let currentMap;
+
+				function formatDateToShopLocale(date) {
+					const locale = <?php echo "'" . get_locale() . "'" ?>;
+					const options = {
+							year: 'numeric',
+							month: 'long',
+							day: 'numeric',
+							weekday: 'long',
+							timeZone: "UTC"
+					};
+
+					const deliveryDateObject = new Date(date);
+					const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options);
+
+					return deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1);
+				}
 
 				function changeLocation(location) {
 					$('#billing_okoskabet_shed_id').val(location);
@@ -179,22 +194,9 @@ function custom_content_for_custom_shipping_checkout()
 					const dropdown = $('#deliveryDatesDropdown');
 
 					if (dropdown) {
-						const locale = <?php echo "'" . get_locale() . "'" ?>;
-						const options = {
-								year: 'numeric',
-								month: 'long',
-								day: 'numeric',
-								weekday: 'long',
-								timeZone: "UTC"
-							};
-
 						deliveryDates.map(deliveryDate => {							
-							const deliveryDateObject = new Date(deliveryDate);
-							
 							if (deliveryDate) {
-								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options)
-								capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1)
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
+								$(dropdown).append('<option  value="' + deliveryDate + '">' + formatDateToShopLocale(deliveryDate) + '</option>');
 							}
 						});
 						
@@ -372,22 +374,9 @@ function custom_content_for_custom_shipping_checkout()
 											$('#oko-local-custom-div').html('<div id="oko-descrption"><?php echo $local_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select>');
 											const dropdown = $('#deliveryDatesDropdown');
 											if (dropdown) {
-												const locale = <?php echo "'" . get_locale() . "'" ?>;
-												const options = {
-													year: 'numeric',
-													month: 'long',
-													day: 'numeric',
-													weekday: 'long',
-													timeZone: "UTC"
-												};
-
 												result.results.delivery_dates.map(deliveryDate => {
-													const deliveryDateObject = new Date(deliveryDate);
-							
 													if (deliveryDate) {
-														const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options);
-														capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1);
-														$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
+														$(dropdown).append('<option  value="' + deliveryDate + '">' + formatDateToShopLocale(deliveryDate) + '</option>');
 													}
 												});
 											}
