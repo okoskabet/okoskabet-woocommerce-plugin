@@ -179,10 +179,8 @@ function custom_content_for_custom_shipping_checkout()
 					const dropdown = $('#deliveryDatesDropdown');
 
 					if (dropdown) {
-						deliveryDates.map(deliveryDate => {
-							const locale = <?php echo "'" + str_replace('_','-',get_locale()) + "'" ?>;
-							const deliveryDateObject = new Date(deliveryDate);
-							const options = {
+						const locale = <?php echo "'" . get_locale() . "'" ?>;
+						const options = {
 								year: 'numeric',
 								month: 'long',
 								day: 'numeric',
@@ -190,12 +188,16 @@ function custom_content_for_custom_shipping_checkout()
 								timeZone: "UTC"
 							};
 
+						deliveryDates.map(deliveryDate => {							
+							const deliveryDateObject = new Date(deliveryDate);
+							
 							if (deliveryDate) {
-								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale, options)
+								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options)
 								capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1)
 								$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
 							}
 						});
+						
 					}
 
 					$('.okoIconSelected').removeClass('okoIconSelected');
