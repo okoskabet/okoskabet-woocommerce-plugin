@@ -192,7 +192,7 @@ function custom_content_for_custom_shipping_checkout()
 							const deliveryDateObject = new Date(deliveryDate);
 							
 							if (deliveryDate) {
-								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options)
+								const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-");, options)
 								capDeliveryDateFormatted = deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1)
 								$(dropdown).append('<option  value="' + deliveryDate + '">' + capDeliveryDateFormatted + '</option>');
 							}
