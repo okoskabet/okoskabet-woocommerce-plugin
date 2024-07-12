@@ -17,8 +17,6 @@
  * @return array
  */
 
-
-
 function o_get_settings()
 {
 	return apply_filters('o_get_settings', get_option(O_TEXTDOMAIN . '-settings'));
@@ -151,18 +149,35 @@ function custom_content_for_custom_shipping_checkout()
 			height: 50px;
 			border-radius: 50%;
 			cursor: pointer;
+			z-index: 0;
 		}
 
 		.okoIconSelected {
 			background-image: url(<?php echo O_PLUGIN_ROOT_URL . '/images/map_marker_selected.svg' ?>);
+			z-index: 2;
 		}
 	</style>
 	<script type="text/javascript">
 		jQuery(function($) {
 			$(document).ready(function() {
 
-
 				let currentMap;
+
+				function formatDateToShopLocale(date) {
+					const locale = <?php echo "'" . get_locale() . "'" ?>;
+					const options = {
+							year: 'numeric',
+							month: 'long',
+							day: 'numeric',
+							weekday: 'long',
+							timeZone: "UTC"
+					};
+
+					const deliveryDateObject = new Date(date);
+					const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options);
+
+					return deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1);
+				}
 
 				function changeLocation(location) {
 					$('#billing_okoskabet_shed_id').val(location);
@@ -179,12 +194,12 @@ function custom_content_for_custom_shipping_checkout()
 					const dropdown = $('#deliveryDatesDropdown');
 
 					if (dropdown) {
-						deliveryDates.map(deliveryDate => {
+						deliveryDates.map(deliveryDate => {							
 							if (deliveryDate) {
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + deliveryDate + '</option>');
-
+								$(dropdown).append('<option  value="' + deliveryDate + '">' + formatDateToShopLocale(deliveryDate) + '</option>');
 							}
 						});
+						
 					}
 
 					$('.okoIconSelected').removeClass('okoIconSelected');
@@ -360,7 +375,9 @@ function custom_content_for_custom_shipping_checkout()
 											const dropdown = $('#deliveryDatesDropdown');
 											if (dropdown) {
 												result.results.delivery_dates.map(deliveryDate => {
-													$(dropdown).append('<option value="' + deliveryDate + '">' + deliveryDate + '</option>');
+													if (deliveryDate) {
+														$(dropdown).append('<option  value="' + deliveryDate + '">' + formatDateToShopLocale(deliveryDate) + '</option>');
+													}
 												});
 											}
 											$('#deliveryDatesDropdown').trigger('change');
