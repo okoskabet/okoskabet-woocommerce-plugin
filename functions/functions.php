@@ -214,7 +214,7 @@ function custom_content_for_custom_shipping_checkout()
 				function initMaps(locations) {
 
 					mapboxgl.accessToken = 'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';
-					const map = new mapboxgl.Map({
+					currentMap = new mapboxgl.Map({
 						container: 'map', // container ID
 						style: 'mapbox://styles/mapbox/streets-v12', // style URL
 						center: locations.origin ? [locations.origin.longitude, locations.origin.latitude] : [locations.sheds[0].address.longitude, locations.sheds[0].address.latitude], // starting position [lng, lat]
@@ -236,7 +236,7 @@ function custom_content_for_custom_shipping_checkout()
 						const marker1 = new mapboxgl.Marker(okoIcon).setLngLat([location.address.longitude, location.address.latitude]).setPopup(new mapboxgl.Popup({
 							offset: 20,
 							closeButton: false
-						}).setHTML("<div id='markerPopUp' data-shed=" + location.id + "><h6 style='font-weight: bold; margin-bottom: 0;'>" + location.name + "</h6><div>" + location.address.address + "</div><div>" + location.address.postal_code + " " + location.address.city + "</div></div>")).addTo(map);
+						}).setHTML("<div id='markerPopUp' data-shed=" + location.id + "><h6 style='font-weight: bold; margin-bottom: 0;'>" + location.name + "</h6><div>" + location.address.address + "</div><div>" + location.address.postal_code + " " + location.address.city + "</div></div>")).addTo(currentMap);
 						marker1.getPopup().on('open', () => {
 							openPopUp = marker1.getPopup();
 							const currentShed = $('#markerPopUp').data('shed');
@@ -257,11 +257,11 @@ function custom_content_for_custom_shipping_checkout()
 					});
 
 					if (locations.origin && locations.origin.longitude && locations.origin.latitude) {
-						const marker1 = new mapboxgl.Marker().setLngLat([locations.origin.longitude, locations.origin.latitude]).addTo(map);
+						const marker1 = new mapboxgl.Marker().setLngLat([locations.origin.longitude, locations.origin.latitude]).addTo(currentMap);
 						bounds.extend([locations.origin.longitude, locations.origin.latitude]);
 					}
 
-					map.fitBounds(bounds);
+					currentMap.fitBounds(bounds);
 
 				}
 
@@ -294,7 +294,7 @@ function custom_content_for_custom_shipping_checkout()
 				$(document).on('click', '.okoButtonModalOpen', function(event) {
 					event.preventDefault();
 					$('#oko-shed-custom-div').show();
-					initMaps(currentMap);
+					currentMap.resize();
 				});
 
 				$(document).on('updated_checkout', function() {
@@ -305,8 +305,23 @@ function custom_content_for_custom_shipping_checkout()
 
 					addressFilled = $('#billing_postcode').val();
 					if (addressFilled) {
+						const addressString = [$('#billing_address_1').val(), $('#billing_address_2').val()].filter(val => val && val !== '').join(', ');
 						const currentShipping = $('input[name="shipping_method[0]"]:checked');
 						const parrentShipping = currentShipping.parent();
+
+						const myHeaders = new Headers();
+						myHeaders.append("Accept", "application/json");
+						myHeaders.append("Content-Type", "application/json");
+						const requestOptions = {
+							method: "GET",
+							headers: myHeaders,
+							redirect: "follow"
+						};
+
+						const queryParams = new URLSearchParams({
+							zip: addressFilled,
+							address: encodeURIComponent(addressString),
+						}).toString()
 
 						if (currentShipping.val() === 'hey_okoskabet_shipping_shed') {
 
@@ -322,16 +337,7 @@ function custom_content_for_custom_shipping_checkout()
 							if ($('#oko-shed-custom-div').length === 0) {
 								parrentShipping.append('<div id="oko-shed-custom-div"><div id="oko-descrption"><?php echo $shed_description; ?></div></div>');
 
-								const myHeaders = new Headers();
-								myHeaders.append("Accept", "application/json");
-								myHeaders.append("Content-Type", "application/json");
-								const requestOptions = {
-									method: "GET",
-									headers: myHeaders,
-									redirect: "follow"
-								};
-
-								fetch("/wp-json/wp/v2/okoskabet/sheds?zip=" + addressFilled, requestOptions)
+								fetch("/wp-json/wp/v2/okoskabet/sheds?" + queryParams, requestOptions)
 									.then((response) => response.json())
 									.then((result) => {
 										$('#oko-shed-custom-div').html('<div id="oko-descrption"><?php echo $shed_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Økoskab</div><select name="okoLocations" id="locationsDropdown" style="width: 100%; margin-top: 0; margin-bottom: 20px;"></select><div class="oko-select-headline" style="font-size: 14px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select><div id="map" style="width: 100%; height: 450px; margin-bottom: 20px;"></div><div class="okoButtonModal okoButtonModalDone"><div class="okoButtonModalContent"></div><a href="#" class="button ">Done</a></div>');
@@ -347,9 +353,7 @@ function custom_content_for_custom_shipping_checkout()
 											});
 										}
 										$('#locationsDropdown').trigger('change');
-										currentMap = result.results;
 										initMaps(result.results);
-
 									})
 									.catch((error) => console.error(error));
 							}
@@ -359,16 +363,7 @@ function custom_content_for_custom_shipping_checkout()
 								if ($('#oko-local-custom-div').length === 0) {
 									parrentShipping.append('<div id="oko-local-custom-div"><div id="oko-descrption"><?php echo $local_description; ?></div></div>');
 
-									const myHeaders = new Headers();
-									myHeaders.append("Accept", "application/json");
-									myHeaders.append("Content-Type", "application/json");
-									const requestOptions = {
-										method: "GET",
-										headers: myHeaders,
-										redirect: "follow"
-									};
-
-									fetch("/wp-json/wp/v2/okoskabet/home_delivery?zip=" + addressFilled, requestOptions)
+									fetch("/wp-json/wp/v2/okoskabet/home_delivery?" + queryParams, requestOptions)
 										.then((response) => response.json())
 										.then((result) => {
 											$('#oko-local-custom-div').html('<div id="oko-descrption"><?php echo $local_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select>');
