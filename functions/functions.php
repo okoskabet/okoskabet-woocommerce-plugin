@@ -320,7 +320,7 @@ function custom_content_for_custom_shipping_checkout()
 
 						const queryParams = new URLSearchParams({
 							zip: addressFilled,
-							address: addressString,
+							address: encodeURIComponent(addressString),
 						}).toString()
 
 						if (currentShipping.val() === 'hey_okoskabet_shipping_shed') {
