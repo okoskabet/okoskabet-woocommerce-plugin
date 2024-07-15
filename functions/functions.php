@@ -261,7 +261,7 @@ function custom_content_for_custom_shipping_checkout()
 						bounds.extend([locations.origin.longitude, locations.origin.latitude]);
 					}
 
-					map.fitBounds(bounds);
+					currentMap.fitBounds(bounds);
 
 				}
 
