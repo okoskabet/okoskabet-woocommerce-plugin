@@ -214,7 +214,7 @@ function custom_content_for_custom_shipping_checkout()
 				function initMaps(locations) {
 
 					mapboxgl.accessToken = 'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';
-					const map = new mapboxgl.Map({
+					currentMap = new mapboxgl.Map({
 						container: 'map', // container ID
 						style: 'mapbox://styles/mapbox/streets-v12', // style URL
 						center: locations.origin ? [locations.origin.longitude, locations.origin.latitude] : [locations.sheds[0].address.longitude, locations.sheds[0].address.latitude], // starting position [lng, lat]
@@ -294,7 +294,7 @@ function custom_content_for_custom_shipping_checkout()
 				$(document).on('click', '.okoButtonModalOpen', function(event) {
 					event.preventDefault();
 					$('#oko-shed-custom-div').show();
-					initMaps(currentMap);
+					currentMap.resize();
 				});
 
 				$(document).on('updated_checkout', function() {
@@ -347,9 +347,7 @@ function custom_content_for_custom_shipping_checkout()
 											});
 										}
 										$('#locationsDropdown').trigger('change');
-										currentMap = result.results;
 										initMaps(result.results);
-
 									})
 									.catch((error) => console.error(error));
 							}
