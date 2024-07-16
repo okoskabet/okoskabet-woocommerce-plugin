@@ -78,5 +78,8 @@
             "@wordpress/stylelint-config/scss"
         ]
     },
-    "prettier": "@wordpress/prettier-config"
+    "prettier": "@wordpress/prettier-config",
+    "dependencies": {
+        "@types/mapbox-gl": "^3.1.0"
+    }
 }

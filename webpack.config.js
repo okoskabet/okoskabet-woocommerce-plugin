@@ -1,23 +1,23 @@
-const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
-const path = require( 'path' );
+const defaultConfig = require('@wordpress/scripts/config/webpack.config');
+const path = require('path');
 
 const entry = {};
-[ 'plugin-admin', 'plugin-public', 'plugin-settings' ].forEach(
-	( script ) =>
-		( entry[ script ] = path.resolve(
-			process.cwd(),
-			`assets/src/${ script }.js`
-		) )
+[{ path: 'plugin-admin' }, { path: 'plugin-public', ext: 'ts' }, { path: 'plugin-settings' }].forEach(
+  (script) =>
+  (entry[script.path] = path.resolve(
+    process.cwd(),
+    `assets/src/${script.path}.${script.ext || 'js'}`
+  ))
 );
 
 module.exports = {
-	...defaultConfig,
-	entry,
-	output: {
-		path: path.join( __dirname, './assets/build' ),
-	},
-	externals: {
-		react: 'React',
-		'react-dom': 'ReactDOM',
-	},
+  ...defaultConfig,
+  entry,
+  output: {
+    path: path.join(__dirname, './assets/build'),
+  },
+  externals: {
+    react: 'React',
+    'react-dom': 'ReactDOM',
+  },
 };

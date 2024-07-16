@@ -64,15 +64,17 @@ function o_check_configuration($value)
 
 
 
-function enqueue_maps_api()
+function enqueue_checkout_scripts()
 {
 	if (is_checkout()) {  // Check if it's the WooCommerce checkout page
 		// Replace 'your_api_key_here' with your actual Google Maps API key
 		wp_enqueue_script('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js', array(), null, true);
 		wp_enqueue_style('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
+
+    wp_enqueue_script('okoskabet-shipping', plugin_dir_url( __DIR__ ) . 'assets/build/plugin-public.js', array(), null, true);
 	}
 }
-add_action('wp_enqueue_scripts', 'enqueue_maps_api');
+add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
 
 
 add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout', 10);
@@ -158,237 +160,14 @@ function custom_content_for_custom_shipping_checkout()
 		}
 	</style>
 	<script type="text/javascript">
-		jQuery(function($) {
-			$(document).ready(function() {
-
-				let currentMap;
-
-				function formatDateToShopLocale(date) {
-					const locale = <?php echo "'" . get_locale() . "'" ?>;
-					const options = {
-							year: 'numeric',
-							month: 'long',
-							day: 'numeric',
-							weekday: 'long',
-							timeZone: "UTC"
-					};
-
-					const deliveryDateObject = new Date(date);
-					const deliveryDateFormatted = deliveryDateObject.toLocaleDateString(locale.replace("_", "-"), options);
-
-					return deliveryDateFormatted.charAt(0).toUpperCase() + deliveryDateFormatted.slice(1);
-				}
-
-				function changeLocation(location) {
-					$('#billing_okoskabet_shed_id').val(location);
-
-					const selectedOption = $('#locationsDropdown').find('option:selected');
-
-					$('#oko-shed-content-location').html('<span class="oko-shed-content-label">Økoskab: </span><span class="oko-shed-content-value">' + selectedOption.text() + "</span>");
-
-					const deliveryDates = selectedOption.data('dates').split(",").map(function(item) {
-						return item.trim();
-					});
-
-					$('#deliveryDatesDropdown').empty();
-					const dropdown = $('#deliveryDatesDropdown');
-
-					if (dropdown) {
-						deliveryDates.map(deliveryDate => {							
-							if (deliveryDate) {
-								$(dropdown).append('<option  value="' + deliveryDate + '">' + formatDateToShopLocale(deliveryDate) + '</option>');
-							}
-						});
-						
-					}
-
-					$('.okoIconSelected').removeClass('okoIconSelected');
-					$('.marker-' + location).addClass('okoIconSelected');
-
-					$('#deliveryDatesDropdown').trigger('change');
-					localStorage.setItem("okoSkabetId", location);
-				}
-
-				let openPopUp;
-
-				function initMaps(locations) {
-
-					mapboxgl.accessToken = 'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';
-					currentMap = new mapboxgl.Map({
-						container: 'map', // container ID
-						style: 'mapbox://styles/mapbox/streets-v12', // style URL
-						center: locations.origin ? [locations.origin.longitude, locations.origin.latitude] : [locations.sheds[0].address.longitude, locations.sheds[0].address.latitude], // starting position [lng, lat]
-						zoom: 11, // starting zoom
-					});
-
-					var bounds = new mapboxgl.LngLatBounds();
-
-					const selectedOption = $('#locationsDropdown').find('option:selected');
-
-					locations.sheds.forEach(function(location) {
-						var okoIcon = document.createElement('div');
-
-						okoIcon.classList.add("marker");
-						okoIcon.classList.add("marker-" + location.id);
-						if (location.id === selectedOption.val()) {
-							okoIcon.classList.add("okoIconSelected");
-						}
-						const marker1 = new mapboxgl.Marker(okoIcon).setLngLat([location.address.longitude, location.address.latitude]).setPopup(new mapboxgl.Popup({
-							offset: 20,
-							closeButton: false
-						}).setHTML("<div id='markerPopUp' data-shed=" + location.id + "><h6 style='font-weight: bold; margin-bottom: 0;'>" + location.name + "</h6><div>" + location.address.address + "</div><div>" + location.address.postal_code + " " + location.address.city + "</div></div>")).addTo(currentMap);
-						marker1.getPopup().on('open', () => {
-							openPopUp = marker1.getPopup();
-							const currentShed = $('#markerPopUp').data('shed');
-							$('#locationsDropdown').val(currentShed);
-							changeLocation(currentShed);
-						});
-						okoIcon.addEventListener('click', function(e) {
-							$('.okoIconSelected').removeClass('okoIconSelected');
-							$(this).addClass('okoIconSelected');
-							console.log("Event", e);
-							// change the marker color, then change it back again. 
-							// I can set for example el.className = 'marker2'
-							// but how can I change it back to the original
-						});
-						bounds.extend([location.
-							address.longitude, location.address.latitude
-						]);
-					});
-
-					if (locations.origin && locations.origin.longitude && locations.origin.latitude) {
-						const marker1 = new mapboxgl.Marker().setLngLat([locations.origin.longitude, locations.origin.latitude]).addTo(currentMap);
-						bounds.extend([locations.origin.longitude, locations.origin.latitude]);
-					}
-
-					currentMap.fitBounds(bounds);
-
-				}
-
-				let addressFilled = $('#billing_postcode').val();
-
-				$(document).on('change', '#billing_postcode', function() {
-					addressFilled = $('#billing_postcode').val();
-					if (addressFilled) {
-						$('body').trigger('update_checkout');
-					}
-				});
-
-				$(document).on('change', '#locationsDropdown', function() {
-					let location = $(this).val();
-					changeLocation(location);
-					if (openPopUp) openPopUp.remove();
-				});
-
-				$(document).on('change', '#deliveryDatesDropdown', function() {
-					let deliveryDate = $(this).val();
-					$('#billing_okoskabet_delivery_date').val(deliveryDate);
-					$('#oko-shed-content-date').html('<span class="oko-shed-content-label">Levering: </span><span class="oko-shed-content-value">' + deliveryDate + '</span>');
-				});
-
-				$(document).on('click', '.okoButtonModalDone', function(event) {
-					event.preventDefault();
-					$('#oko-shed-custom-div').hide();
-
-				});
-				$(document).on('click', '.okoButtonModalOpen', function(event) {
-					event.preventDefault();
-					$('#oko-shed-custom-div').show();
-					currentMap.resize();
-				});
-
-				$(document).on('updated_checkout', function() {
-					$('#billing_okoskabet_delivery_date').val('');
-					$('#billing_okoskabet_shed_id').val('');
-					$('#oko-shed-custom-div').remove();
-					$('#oko-local-custom-div').remove();
-
-					addressFilled = $('#billing_postcode').val();
-					if (addressFilled) {
-						const addressString = [$('#billing_address_1').val(), $('#billing_address_2').val()].filter(val => val && val !== '').join(', ');
-						const currentShipping = $('input[name="shipping_method[0]"]:checked');
-						const parrentShipping = currentShipping.parent();
-
-						const myHeaders = new Headers();
-						myHeaders.append("Accept", "application/json");
-						myHeaders.append("Content-Type", "application/json");
-						const requestOptions = {
-							method: "GET",
-							headers: myHeaders,
-							redirect: "follow"
-						};
-
-						const queryParams = new URLSearchParams({
-							zip: addressFilled,
-							address: encodeURIComponent(addressString),
-						}).toString()
-
-						if (currentShipping.val() === 'hey_okoskabet_shipping_shed') {
-
-							<?php
-							if ($settings['_display_option'] == 'modal') {
-							?>
-
-								if ($('#oko-shed-custom-div-modal').length === 0) {
-									parrentShipping.append('<div id="oko-shed-custom-div-modal"><div id="oko-descrption"><?php echo $shed_description; ?></div><div id="oko-shed-content"><div id="oko-shed-content-location"></div><div id="oko-shed-content-date"></div></div><a href="#" class="button okoButtonModalOpen" style="margin-bottom: 20px;">Vælg Økoskab</a></div>');
-								}
-							<?php } ?>
-
-							if ($('#oko-shed-custom-div').length === 0) {
-								parrentShipping.append('<div id="oko-shed-custom-div"><div id="oko-descrption"><?php echo $shed_description; ?></div></div>');
-
-								fetch("/wp-json/wp/v2/okoskabet/sheds?" + queryParams, requestOptions)
-									.then((response) => response.json())
-									.then((result) => {
-										$('#oko-shed-custom-div').html('<div id="oko-descrption"><?php echo $shed_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Økoskab</div><select name="okoLocations" id="locationsDropdown" style="width: 100%; margin-top: 0; margin-bottom: 20px;"></select><div class="oko-select-headline" style="font-size: 14px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select><div id="map" style="width: 100%; height: 450px; margin-bottom: 20px;"></div><div class="okoButtonModal okoButtonModalDone"><div class="okoButtonModalContent"></div><a href="#" class="button ">Done</a></div>');
-										const dropdown = $('#locationsDropdown');
-										if (dropdown) {
-											result.results.sheds.map(location => {
-												let delivery_dates = '';
-												location.delivery_dates.map(delivery_date => {
-													delivery_dates = delivery_dates + delivery_date + ', ';
-												});
-
-												$(dropdown).append('<option data-dates="' + delivery_dates + '" value="' + location.id + '">' + location.name + '</option>');
-											});
-										}
-										$('#locationsDropdown').trigger('change');
-										initMaps(result.results);
-									})
-									.catch((error) => console.error(error));
-							}
-						} else {
-							if (currentShipping.val() === 'hey_okoskabet_shipping_home') {
-
-								if ($('#oko-local-custom-div').length === 0) {
-									parrentShipping.append('<div id="oko-local-custom-div"><div id="oko-descrption"><?php echo $local_description; ?></div></div>');
-
-									fetch("/wp-json/wp/v2/okoskabet/home_delivery?" + queryParams, requestOptions)
-										.then((response) => response.json())
-										.then((result) => {
-											$('#oko-local-custom-div').html('<div id="oko-descrption"><?php echo $local_description; ?></div><div class="oko-select-headline" style="font-size: 14px; margin-top: 20px;">Leveringsdato</div><select name="okoDeliveryDates"  id="deliveryDatesDropdown" style="width: 100%; margin-bottom: 20px;"></select>');
-											const dropdown = $('#deliveryDatesDropdown');
-											if (dropdown) {
-												result.results.delivery_dates.map(deliveryDate => {
-													if (deliveryDate) {
-														$(dropdown).append('<option  value="' + deliveryDate + '">' + formatDateToShopLocale(deliveryDate) + '</option>');
-													}
-												});
-											}
-											$('#deliveryDatesDropdown').trigger('change');
-
-										})
-										.catch((error) => console.error(error));
-								}
-							} else {}
-
-						}
-					}
-				});
-			});
-
-
-		});
+    window._okoskabet_checkout = {
+      locale: '<?php echo get_locale() ?>',
+      displayOption: '<?php echo $settings['_display_option'] ?>',
+      descriptions: {
+        homeDelivery: '<?php echo $local_description ?>',
+        shedDelivery: '<?php echo $shed_description ?>',
+      },
+    }
 	</script>
 <?php
 }
