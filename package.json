@@ -41,13 +41,21 @@
         "wp-env": "wp-env start"
     },
     "devDependencies": {
+        "@tsconfig/svelte": "^5.0.4",
         "@types/babel__core": "^7.20.0",
         "@types/jquery": "^3.5.16",
         "@types/jqueryui": "^1.12.16",
+        "@types/mapbox-gl": "^3.1.0",
         "@types/wordpress__block-editor": "^11.5.1",
         "@types/wordpress__blocks": "^12.5.0",
         "@wordpress/scripts": "^24.6.0",
-        "typescript": "^5.0.4"
+        "css-loader": "^6.7.1",
+        "mini-css-extract-plugin": "^2.6.0",
+        "svelte": "^4.2.18",
+        "svelte-loader": "^3.2.3",
+        "svelte-preprocess": "^6.0.2",
+        "typescript": "^5.0.4",
+        "typescript-svelte-plugin": "^0.3.39"
     },
     "engines": {
         "node": ">=14.0.0",
@@ -78,8 +86,5 @@
             "@wordpress/stylelint-config/scss"
         ]
     },
-    "prettier": "@wordpress/prettier-config",
-    "dependencies": {
-        "@types/mapbox-gl": "^3.1.0"
-    }
+    "prettier": "@wordpress/prettier-config"
 }

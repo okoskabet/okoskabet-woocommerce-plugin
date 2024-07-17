@@ -72,6 +72,7 @@ function enqueue_checkout_scripts()
 		wp_enqueue_style('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
 
     wp_enqueue_script('okoskabet-shipping', plugin_dir_url( __DIR__ ) . 'assets/build/plugin-public.js', array(), null, true);
+    wp_enqueue_style('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.css', array(), null);
 	}
 }
 add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');

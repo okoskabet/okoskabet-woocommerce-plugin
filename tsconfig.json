@@ -1,4 +1,5 @@
 {
+  "extends": "@tsconfig/svelte/tsconfig.json",
 	"compilerOptions": {
 		"target": "ES6",
 		"module": "es2015",
@@ -17,7 +18,14 @@
 		"removeComments": true,
 		"preserveConstEnums": true,
 		"sourceMap": true,
-		"strict": true
+		"strict": true,
+
+		"plugins": [{
+			"name": "typescript-svelte-plugin",
+			// the following options can be set additionally; they are optional; their default values are listed here
+			"enabled": true, // enables this plugin
+			"assumeIsSvelteProject": false // if true, skip detection and always assume it's a Svelte project
+    }]
 	},
 	"include": [ "assets/src/**/*", "assets/src/block.json" ]
 }
