@@ -83,84 +83,10 @@ function custom_content_for_custom_shipping_checkout()
 {
 	$settings = o_get_settings();
 	if (empty($settings['_api_key'])) return;
+  $shed_description = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : 'Afkølet afhentningssted hvor du kan hente dine varer hele døgnet vha. kode.';
+  $local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
 ?>
-	<style>
-		<?php
-		$shed_description = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : 'Afkølet afhentningssted hvor du kan hente dine varer hele døgnet vha. kode.';
-		$local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
-		if ($settings['_display_option'] == 'modal') {
-
-		?>#oko-shed-custom-div {
-			position: fixed;
-			display: none;
-			top: 5%;
-			left: 50%;
-			background: white;
-			padding: 20px;
-			border: 1px solid rgba(0, 0, 0, 0.5);
-			border-radius: 3px;
-			transform: translateX(-50%);
-			z-index: 9999;
-			width: 480px;
-			max-width: 94%;
-			max-height: 90%;
-			overflow: scroll;
-		}
-
-		<?php
-		} else {
-		?>.okoButtonModalDone {
-			display: none;
-		}
-
-		<?php
-		}
-
-		?>#billing_okoskabet_shed_id_field {
-			display: none;
-		}
-
-		#billing_okoskabet_delivery_date_field {
-			display: none;
-		}
-
-		#oko-shed-content {
-			line-height: 1.1;
-			margin-top: 10px;
-			margin-bottom: 10px;
-			font-size: 80%;
-		}
-
-		.oko-shed-content-label {
-			font-weight: bold;
-		}
-
-		.oko-shed-content-value {
-			font-weight: normal;
-		}
-
-		#oko-descrption {
-			font-weight: normal;
-			line-height: 1.1;
-			font-size: 80%;
-		}
-
-		.marker {
-			background-image: url(<?php echo O_PLUGIN_ROOT_URL . '/images/map_marker.svg' ?>);
-			background-size: contain;
-			width: 50px;
-			height: 50px;
-			border-radius: 50%;
-			cursor: pointer;
-			z-index: 0;
-		}
-
-		.okoIconSelected {
-			background-image: url(<?php echo O_PLUGIN_ROOT_URL . '/images/map_marker_selected.svg' ?>);
-			z-index: 2;
-		}
-	</style>
-	<script type="text/javascript">
+    <script type="text/javascript">
     window._okoskabet_checkout = {
       locale: '<?php echo get_locale() ?>',
       displayOption: '<?php echo $settings['_display_option'] ?>',
