@@ -8,7 +8,7 @@ function getPath(...pathParts) {
 }
 
 const entry = {};
-[{ path: 'plugin-admin' }, { path: 'plugin-public', ext: 'ts' }, { path: 'plugin-settings' }, { path: 'delivery_options', ext: 'svelte' }].forEach(
+[{ path: 'plugin-admin' }, { path: 'plugin-public', ext: 'ts' }, { path: 'plugin-settings' }].forEach(
   (script) =>
   (entry[script.path] = path.resolve(
     process.cwd(),

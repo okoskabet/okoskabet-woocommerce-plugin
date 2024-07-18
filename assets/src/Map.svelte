@@ -2,20 +2,20 @@
 	import type { Map, Popup } from 'mapbox-gl';
 	import { onMount, onDestroy } from 'svelte';
 	import type { Origin, Shed } from './types';
-	import OriginMarker from './origin-marker.svelte';
-	import ShedMarker from './shed-marker.svelte';
+	import OriginMarker from './OriginMarker.svelte';
+	import ShedMarker from './ShedMarker.svelte';
 
 	export let origin: Origin | null;
 	export let sheds: Shed[];
 
-	export let selectedShed: Shed;
+	export let selectedShedId: string | undefined;
 
 	let map: Map | undefined;
 	let mapContainer: any;
 	let popup: { popup: Popup; shed: Shed } | undefined = undefined;
 
 	const onClickMarker = (shed: Shed) => (p: Popup) => {
-		selectedShed = shed;
+		selectedShedId = shed.id;
 		popup = { popup: p, shed: shed };
 	};
 
@@ -24,7 +24,7 @@
 	};
 
 	$: {
-		if (popup && popup.shed.id !== selectedShed.id) {
+		if (popup && popup.shed.id !== selectedShedId) {
 			popup.popup.remove();
 			onClickAway();
 		}
@@ -72,7 +72,7 @@
 		<ShedMarker
 			{map}
 			{shed}
-			{selectedShed}
+			{selectedShedId}
 			{onClickAway}
 			onClick={onClickMarker(shed)}
 		/>

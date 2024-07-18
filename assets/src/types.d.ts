@@ -1,6 +1,10 @@
 /// <reference types="@wordpress/blocks" />
 import { BlockAttributes } from '@wordpress/blocks';
 
+type ShippingMethod = 'shed-delivery' | 'home-delivery';
+
+type DisplayMode = 'inline' | 'modal';
+
 interface Shed {
   id: string;
   name: string;

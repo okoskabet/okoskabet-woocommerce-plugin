@@ -9,8 +9,6 @@
 	let marker: Marker;
 
 	onMount(() => {
-		console.log('MOUNT ORIGIN MARKER', origin);
-
 		const lngLat = {
 			lng: origin.longitude,
 			lat: origin.latitude,
@@ -20,6 +18,8 @@
 	});
 
 	onDestroy(() => {
-		marker.remove();
+		if (marker) {
+			marker.remove();
+		}
 	});
 </script>

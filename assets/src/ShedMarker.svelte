@@ -5,7 +5,7 @@
 
 	export let map: Map;
 	export let shed: Shed;
-	export let selectedShed: Shed;
+	export let selectedShedId: string | undefined;
 
 	export let onClick: (popup: Popup) => void;
 	export let onClickAway: () => void;
@@ -38,14 +38,16 @@
 	});
 
 	onDestroy(() => {
-		marker.remove();
+		if (marker) {
+			marker.remove();
+		}
 	});
 </script>
 
 <div
 	bind:this={markerElement}
 	class="marker"
-	class:selected={selectedShed && shed.id === selectedShed.id}
+	class:selected={shed.id === selectedShedId}
 ></div>
 
 <div bind:this={popupElement} data-shed={shed.id}>
