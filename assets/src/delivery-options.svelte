@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
 	import { formatDate } from './format-date';
+	import Map from './map.svelte';
 	import type { Origin, Shed } from './types';
-	import { deselectMarkers, initMap, selectMarker } from './map';
-	import type { Map, Popup } from 'mapbox-gl';
+	import type { Popup } from 'mapbox-gl';
 
 	export let displayOption: 'inline' | 'modal';
 	export let locale: string;
@@ -19,9 +18,12 @@
 	let selectedDeliveryDate = deliveryDates && deliveryDates[0];
 	let showOptions = displayOption === 'inline';
 
-	let map: Map | undefined;
-	let mapContainer: any;
-	let popup: Popup | undefined = undefined;
+	$: {
+		onSelectShed(selectedShed);
+		selectDeliveryDate();
+	}
+
+	$: onSelectDeliveryDate(selectedDeliveryDate);
 
 	function selectDeliveryDate() {
 		deliveryDates = selectedShed.delivery_dates;
@@ -36,21 +38,6 @@
 		}
 	}
 
-	function handleSelectShed() {
-		onSelectShed(selectedShed);
-		deselectMarkers();
-		selectMarker(selectedShed);
-		selectDeliveryDate();
-
-		if (popup) {
-			popup.remove();
-		}
-	}
-
-	function handleSelectDeliveryDate() {
-		onSelectDeliveryDate(selectedDeliveryDate);
-	}
-
 	function handleOpenModal() {
 		showOptions = true;
 	}
@@ -58,53 +45,6 @@
 	function handleCloseModal() {
 		showOptions = false;
 	}
-
-	onMount(() => {
-		handleSelectDeliveryDate();
-
-		if (sheds.length > 0) {
-			handleSelectShed();
-
-			const onMarkerClick = (event: Event) => {
-				const marker = event.target;
-				if (marker instanceof HTMLElement) {
-					const shed = sheds.find(
-						(shed) => shed.id === marker.dataset.shedId
-					);
-
-					if (shed) {
-						selectedShed = shed;
-						handleSelectShed();
-					}
-				}
-			};
-
-			const onPopupOpen = (e: Event) => {
-				if (e.target) {
-					popup = e.target as unknown as Popup;
-				}
-			};
-
-			const onPopupClose = () => {
-				popup = undefined;
-			};
-
-			map = initMap(
-				mapContainer,
-				sheds,
-				origin,
-				onMarkerClick,
-				onPopupOpen,
-				onPopupClose
-			);
-		}
-	});
-
-	onDestroy(() => {
-		if (map) {
-			map.remove();
-		}
-	});
 </script>
 
 {#if displayOption === 'modal' && sheds.length > 0}
@@ -145,7 +85,6 @@
 		<div class="oko-select-headline" style="font-size: 14px;">Økoskab</div>
 		<select
 			bind:value={selectedShed}
-			on:change={handleSelectShed}
 			name="okoLocations"
 			id="locationsDropdown"
 			style="width: 100%; margin-top: 0; margin-bottom: 20px;"
@@ -163,7 +102,6 @@
 	</div>
 	<select
 		bind:value={selectedDeliveryDate}
-		on:change={handleSelectDeliveryDate}
 		name="okoDeliveryDates"
 		style="width: 100%; margin-bottom: 20px;"
 	>
@@ -175,12 +113,7 @@
 	</select>
 
 	{#if sheds.length > 0}
-		<div
-			class="map-wrap"
-			style="width: 100%; height: 450px; margin-bottom: 20px; position: relative;"
-		>
-			<div class="map" bind:this={mapContainer}></div>
-		</div>
+		<Map {sheds} {origin} bind:selectedShed />
 
 		{#if displayOption === 'modal'}
 			<div class="okoButtonModal okoButtonModalDone">
@@ -232,26 +165,5 @@
 		font-weight: normal;
 		line-height: 1.1;
 		font-size: 80%;
-	}
-
-	.map {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-	}
-
-	:global(.marker) {
-		background-image: url('/images/map_marker.svg');
-		background-size: contain;
-		width: 50px;
-		height: 50px;
-		border-radius: 50%;
-		cursor: pointer;
-		z-index: 0;
-	}
-
-	:global(.okoIconSelected) {
-		background-image: url('/images/map_marker_selected.svg');
-		z-index: 2;
 	}
 </style>

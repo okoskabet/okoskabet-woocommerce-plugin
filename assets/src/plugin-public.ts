@@ -1,6 +1,6 @@
 import './styles/public.scss';
 
-import DeliveryOptions from './delivery_options.svelte';
+import DeliveryOptions from './delivery-options';
 import type { ApiResponse, Shed } from './types';
 
 const SELECTED_SHIPPING_METHOD_SELECTOR = 'input[name="shipping_method[0]"]:checked';
@@ -39,7 +39,7 @@ class OkoskabetCheckout {
       }
     });
 
-    $(document).on('updated_checkout', function () {
+    $(document).on('update_checkout', function () {
       that.setDeliveryDateInput('');
       that.setLocationInput('')
 
