@@ -56,13 +56,20 @@
 		showOptions = true;
 	}
 
-	function handleCloseModal() {
+	function handleCloseModal(e: Event) {
+		e.preventDefault();
 		showOptions = false;
 	}
 </script>
 
 {#await apiResponse}
-	<div>Loading...</div>
+	<div class="description">
+		{description}
+	</div>
+
+	<div class="skeleton-container">
+		<span class="skeleton-loader"></span>
+	</div>
 {:then { origin, sheds }}
 	{@const selectedShed = sheds.find((shed) => shed.id === selectedShedId)}
 	<div class={displayMode} class:hidden={!showOptions}>
@@ -180,5 +187,34 @@
 		line-height: 1.1;
 		font-size: 80%;
 		margin-bottom: 20px;
+	}
+
+	.skeleton-container {
+		margin-bottom: 16px;
+	}
+
+	.skeleton-loader {
+		width: 100%;
+		height: 48px;
+		display: block;
+		background: linear-gradient(
+				to right,
+				rgba(255, 255, 255, 0),
+				rgba(255, 255, 255, 0.5) 50%,
+				rgba(255, 255, 255, 0) 80%
+			),
+			gainsboro;
+		background-repeat: repeat-y;
+		background-size: 50px 500px;
+		background-position: 0 0;
+		animation: shine 1s infinite;
+	}
+
+	@keyframes shine {
+		to {
+			background-position:
+				100% 0,
+				/* move highlight to right */ 0 0;
+		}
 	}
 </style>

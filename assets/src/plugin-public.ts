@@ -33,19 +33,21 @@ class OkoskabetCheckout {
     const $ = jQuery;
     const that = this;
 
-    that.populateShippingOptions();
-
-    $(document).on('change', POSTAL_CODE_SELECTOR, function () {
-      if ($(this).val()) {
-        $('body').trigger('update_checkout');
-      }
-    });
-
     $(document).on('updated_checkout', function () {
-      if ($(POSTAL_CODE_SELECTOR).val()) {
+      that.setLocationInput('');
+      that.setDeliveryDateInput('');
+
+      if (!that.deliveryOptions) {
+        that.populateShippingOptions()
+      } else {
         that.updateShippingOptions()
       }
     })
+
+    $(document).on('change', 'input.shipping_method', function () {
+      that.deliveryOptions?.$destroy()
+      that.deliveryOptions = undefined;
+    });
   }
 
   private populateShippingOptions() {
@@ -81,7 +83,6 @@ class OkoskabetCheckout {
       address,
       postalCode
     })
-    this.moveSvelteTarget()
   }
 
   private createSvelteTarget(): HTMLElement {
@@ -91,17 +92,8 @@ class OkoskabetCheckout {
     const target = document.createElement("div");
     target.id = "okoskabet-shipping";
     parentElement.after(target);
+
     return target;
-  }
-
-  private moveSvelteTarget(): void {
-    const selectedShippingMethodElement = <HTMLElement>document.querySelector(SELECTED_SHIPPING_METHOD_SELECTOR)
-    const parentElement = selectedShippingMethodElement.parentElement!
-
-    const target = document.getElementById("okoskabet-shipping")
-    if (target) {
-      parentElement.after(target);
-    }
   }
 
   private getFormData(): { shippingMethod: ShippingMethod, address: string, postalCode: string } {
