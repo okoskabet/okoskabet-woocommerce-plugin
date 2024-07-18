@@ -34,9 +34,6 @@ class OkoskabetCheckout {
     const that = this;
 
     $(document).on('updated_checkout', function () {
-      that.setLocationInput('');
-      that.setDeliveryDateInput('');
-
       if (!that.deliveryOptions) {
         that.populateShippingOptions()
       } else {
@@ -53,6 +50,10 @@ class OkoskabetCheckout {
   private populateShippingOptions() {
     const { shippingMethod, address, postalCode } = this.getFormData()
     const target = this.createSvelteTarget()
+
+    if (shippingMethod == 'home-delivery') {
+      this.setLocationInput('');
+    }
 
     this.deliveryOptions = new App({
       target,

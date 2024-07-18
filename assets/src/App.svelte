@@ -38,3 +38,13 @@
 		description={strings.homeDeliveryDescription}
 	/>
 {/if}
+
+<style>
+	:global(#billing_okoskabet_shed_id_field) {
+		display: none;
+	}
+
+	:global(#billing_okoskabet_delivery_date_field) {
+		display: none;
+	}
+</style>
