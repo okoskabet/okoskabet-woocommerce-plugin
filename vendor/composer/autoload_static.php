@@ -8,11 +8,8 @@ class ComposerStaticInit8d18d9b01caf28828fc36e7de364d1f3
 {
     public static $files = array(
         '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
-        'd2ca74b533496a85cd90604ad1b4815c' => __DIR__ . '/..' . '/decodelabs/exceptional/src/helpers.php',
         'a4a119a56e50fbb293281d9a48007e0e' => __DIR__ . '/..' . '/symfony/polyfill-php80/bootstrap.php',
         '0d59ee240a4cd96ddbb4ff164fccea4d' => __DIR__ . '/..' . '/symfony/polyfill-php73/bootstrap.php',
-        'f8e4120359b75fe1c1a6cf09d8245e0a' => __DIR__ . '/..' . '/decodelabs/dictum/src/global.php',
-        '5bc00fc5d5101f8fb959408cb2f7ecea' => __DIR__ . '/..' . '/decodelabs/tagged/src/global.php',
         'ab9c306a707f0fda77eaa634dc02fca6' => __DIR__ . '/..' . '/wpbp/cronplus/cronplus.php',
         '7166494aeff09009178f278afd86c83f' => __DIR__ . '/..' . '/yahnis-elsts/plugin-update-checker/load-v4p13.php',
     );
@@ -41,21 +38,6 @@ class ComposerStaticInit8d18d9b01caf28828fc36e7de364d1f3
         'I' =>
         array(
             'Inpsyde\\' => 8,
-        ),
-        'D' =>
-        array(
-            'DecodeLabs\\Tagged\\' => 18,
-            'DecodeLabs\\Glitch\\' => 18,
-            'DecodeLabs\\Gadgets\\' => 19,
-            'DecodeLabs\\Fluidity\\' => 20,
-            'DecodeLabs\\Elementary\\' => 22,
-            'DecodeLabs\\Dictum\\' => 18,
-            'DecodeLabs\\Collections\\' => 23,
-            'DecodeLabs\\' => 11,
-        ),
-        'C' =>
-        array(
-            'Composer\\Installers\\' => 20,
         ),
     );
 
@@ -107,44 +89,6 @@ class ComposerStaticInit8d18d9b01caf28828fc36e7de364d1f3
         'Inpsyde\\' =>
         array(
             0 => __DIR__ . '/..' . '/inpsyde/wp-context/src',
-        ),
-        'DecodeLabs\\Tagged\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/tagged/src/Tagged',
-        ),
-        'DecodeLabs\\Glitch\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/glitch-support/src',
-        ),
-        'DecodeLabs\\Gadgets\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/gadgets/src',
-        ),
-        'DecodeLabs\\Fluidity\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/fluidity/src',
-        ),
-        'DecodeLabs\\Elementary\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/elementary/src',
-        ),
-        'DecodeLabs\\Dictum\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/dictum/src/Dictum',
-        ),
-        'DecodeLabs\\Collections\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/collections/src',
-        ),
-        'DecodeLabs\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/decodelabs/coercion/src',
-            1 => __DIR__ . '/..' . '/decodelabs/exceptional/src',
-            2 => __DIR__ . '/..' . '/decodelabs/veneer/src',
-        ),
-        'Composer\\Installers\\' =>
-        array(
-            0 => __DIR__ . '/..' . '/composer/installers/src/Composer/Installers',
         ),
     );
 
