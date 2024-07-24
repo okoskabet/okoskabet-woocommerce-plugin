@@ -4,6 +4,7 @@ import App from './App.svelte';
 import type { ShippingMethod } from './types';
 
 const SELECTED_SHIPPING_METHOD_SELECTOR = 'input[name="shipping_method[0]"]:checked';
+const SINGLE_SHIPPING_METHOD_SELECTOR = 'input[name="shipping_method[0]"][type="hidden"]'
 
 const POSTAL_CODE_SELECTOR = "#billing_postcode";
 const ADDRESS_1_SELECTOR = "#billing_address_1";
@@ -55,26 +56,30 @@ class OkoskabetCheckout {
       this.setLocationInput('');
     }
 
-    this.deliveryOptions = new App({
-      target,
-      props: {
-        displayMode: this.displayOption,
-        shippingMethod: shippingMethod,
-        address: address,
-        postalCode: postalCode,
-        locale: this.locale,
-        strings: {
-          shedDeliveryDescription: this.shedDeliveryDescription,
-          homeDeliveryDescription: this.homeDeliveryDescription,
-        },
-        onSelectShed: (shedId: string) => {
-          this.setLocationInput(shedId);
-        },
-        onSelectDeliveryDate: (date: string) => {
-          this.setDeliveryDateInput(date);
+    if (target) {
+      this.deliveryOptions = new App({
+        target,
+        props: {
+          displayMode: this.displayOption,
+          shippingMethod: shippingMethod,
+          address: address,
+          postalCode: postalCode,
+          locale: this.locale,
+          strings: {
+            shedDeliveryDescription: this.shedDeliveryDescription,
+            homeDeliveryDescription: this.homeDeliveryDescription,
+          },
+          onSelectShed: (shedId: string) => {
+            this.setLocationInput(shedId);
+          },
+          onSelectDeliveryDate: (date: string) => {
+            this.setDeliveryDateInput(date);
+          }
         }
-      }
-    })
+      })
+    } else {
+      console.error("Failed to populate shipping options - no target element found");
+    }
   }
 
   private async updateShippingOptions() {
@@ -86,19 +91,23 @@ class OkoskabetCheckout {
     })
   }
 
-  private createSvelteTarget(): HTMLElement {
-    const selectedShippingMethodElement = <HTMLElement>document.querySelector(SELECTED_SHIPPING_METHOD_SELECTOR)
-    const parentElement = selectedShippingMethodElement.parentElement!
+  private createSvelteTarget(): HTMLElement | null {
+    const selectedShippingMethodElement = this.getSelectedShippingMethod();
+    const parentElement = selectedShippingMethodElement?.parentElement
 
-    const target = document.createElement("div");
-    target.id = "okoskabet-shipping";
-    parentElement.after(target);
+    if (parentElement) {
+      const target = document.createElement("div");
+      target.id = "okoskabet-shipping";
+      parentElement.after(target);
 
-    return target;
+      return target;
+    } else {
+      return null;
+    }
   }
 
   private getFormData(): { shippingMethod: ShippingMethod, address: string, postalCode: string } {
-    const selectedShippingMethodCheckedValue = (<HTMLInputElement>document.querySelector(SELECTED_SHIPPING_METHOD_SELECTOR)).value
+    const selectedShippingMethodCheckedValue = this.getSelectedShippingMethod()?.value;
 
     let shippingMethod: ShippingMethod;
     switch (selectedShippingMethodCheckedValue) {
@@ -122,6 +131,18 @@ class OkoskabetCheckout {
       shippingMethod,
       address,
       postalCode,
+    }
+  }
+
+  private getSelectedShippingMethod(): HTMLInputElement | null {
+    const selectedElement = document.querySelector(SELECTED_SHIPPING_METHOD_SELECTOR)
+    const soloElement = document.querySelector(SINGLE_SHIPPING_METHOD_SELECTOR)
+    if (selectedElement && selectedElement instanceof HTMLInputElement) {
+      return selectedElement;
+    } else if (soloElement && soloElement instanceof HTMLInputElement) {
+      return soloElement;
+    } else {
+      return null;
     }
   }
 
