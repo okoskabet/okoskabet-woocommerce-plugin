@@ -7,11 +7,8 @@ $baseDir = dirname($vendorDir);
 
 return array(
     '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => $vendorDir . '/symfony/polyfill-mbstring/bootstrap.php',
-    'd2ca74b533496a85cd90604ad1b4815c' => $vendorDir . '/decodelabs/exceptional/src/helpers.php',
     'a4a119a56e50fbb293281d9a48007e0e' => $vendorDir . '/symfony/polyfill-php80/bootstrap.php',
     '0d59ee240a4cd96ddbb4ff164fccea4d' => $vendorDir . '/symfony/polyfill-php73/bootstrap.php',
-    'f8e4120359b75fe1c1a6cf09d8245e0a' => $vendorDir . '/decodelabs/dictum/src/global.php',
-    '5bc00fc5d5101f8fb959408cb2f7ecea' => $vendorDir . '/decodelabs/tagged/src/global.php',
     'ab9c306a707f0fda77eaa634dc02fca6' => $vendorDir . '/wpbp/cronplus/cronplus.php',
     '7166494aeff09009178f278afd86c83f' => $vendorDir . '/yahnis-elsts/plugin-update-checker/load-v4p13.php',
 );

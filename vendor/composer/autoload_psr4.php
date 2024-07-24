@@ -18,13 +18,4 @@ return array(
     'Symfony\\Polyfill\\Mbstring\\' => array($vendorDir . '/symfony/polyfill-mbstring'),
     'Psr\\Container\\' => array($vendorDir . '/psr/container/src'),
     'Inpsyde\\' => array($vendorDir . '/inpsyde/wp-context/src'),
-    'DecodeLabs\\Tagged\\' => array($vendorDir . '/decodelabs/tagged/src/Tagged'),
-    'DecodeLabs\\Glitch\\' => array($vendorDir . '/decodelabs/glitch-support/src'),
-    'DecodeLabs\\Gadgets\\' => array($vendorDir . '/decodelabs/gadgets/src'),
-    'DecodeLabs\\Fluidity\\' => array($vendorDir . '/decodelabs/fluidity/src'),
-    'DecodeLabs\\Elementary\\' => array($vendorDir . '/decodelabs/elementary/src'),
-    'DecodeLabs\\Dictum\\' => array($vendorDir . '/decodelabs/dictum/src/Dictum'),
-    'DecodeLabs\\Collections\\' => array($vendorDir . '/decodelabs/collections/src'),
-    'DecodeLabs\\' => array($vendorDir . '/decodelabs/coercion/src', $vendorDir . '/decodelabs/exceptional/src', $vendorDir . '/decodelabs/veneer/src'),
-    'Composer\\Installers\\' => array($vendorDir . '/composer/installers/src/Composer/Installers'),
 );
