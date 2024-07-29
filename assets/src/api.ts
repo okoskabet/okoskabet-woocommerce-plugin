@@ -1,13 +1,11 @@
 import type { ApiResponse, HomeDeliveryResponse, ShedsResponse, ShippingMethod } from "./types";
 
 function getUrl(shippingMethod: ShippingMethod): string {
-  const prefix = 'https://wc.okoskabet.dk';  // TODO: Remove this after testing
-
   switch (shippingMethod) {
     case 'shed-delivery':
-      return prefix + "/wp-json/wp/v2/okoskabet/sheds?"
+      return "/wp-json/wp/v2/okoskabet/sheds?"
     case 'home-delivery':
-      return prefix + "/wp-json/wp/v2/okoskabet/home_delivery?"
+      return "/wp-json/wp/v2/okoskabet/home_delivery?"
   }
 }
 
