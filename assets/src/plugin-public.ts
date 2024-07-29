@@ -50,14 +50,15 @@ class OkoskabetCheckout {
 
   private populateShippingOptions() {
     const formData = this.getFormData()
-    const target = this.createSvelteTarget()
+    const jQueryTarget = this.createSvelteTarget()
 
-    if (formData && target) {
+    if (formData && jQueryTarget) {
       const { shippingMethod, address, postalCode } = formData;
       if (shippingMethod == 'home-delivery') {
         this.setLocationInput('');
       }
 
+      const target = jQueryTarget.get()[0];
       this.deliveryOptions = new App({
         target,
         props: {
@@ -79,7 +80,7 @@ class OkoskabetCheckout {
         }
       })
     } else {
-      if (!target) {
+      if (!jQueryTarget) {
         console.error("Failed to populate shipping options - no target element found");
       } else {
         console.error("Failed to populate shipping options - no form data available");
@@ -101,17 +102,17 @@ class OkoskabetCheckout {
     }
   }
 
-  private createSvelteTarget(): HTMLElement | null {
-    const parentElement = this.getSelectedShippingMethodElement()?.parentElement;
+  private createSvelteTarget(): JQuery<HTMLElement> | undefined {
+    const $ = jQuery;
 
-    if (parentElement) {
-      const target = document.createElement("div");
-      target.id = "okoskabet-shipping";
-      parentElement.after(target);
+    const parentElement = this.getSelectedShippingMethodElement()?.parent();
 
+    if (parentElement && parentElement.length) {
+      const target = $("<div id='okoskabet-shipping'></div>")
+      parentElement.append(target);
       return target;
     } else {
-      return null;
+      return;
     }
   }
 
@@ -133,13 +134,15 @@ class OkoskabetCheckout {
     }
   }
 
-  private getSelectedShippingMethodElement(): HTMLInputElement | undefined {
-    const selectedElement = document.querySelector(SELECTED_SHIPPING_METHOD_SELECTOR)
-    const soloElement = document.querySelector(SINGLE_SHIPPING_METHOD_SELECTOR)
+  private getSelectedShippingMethodElement(): JQuery<HTMLElement> | undefined {
+    const $ = jQuery;
 
-    if (selectedElement instanceof HTMLInputElement) {
+    const selectedElement = $(SELECTED_SHIPPING_METHOD_SELECTOR);
+    const soloElement = $(SINGLE_SHIPPING_METHOD_SELECTOR);
+
+    if (selectedElement.length) {
       return selectedElement;
-    } else if (soloElement instanceof HTMLInputElement) {
+    } else if (soloElement.length) {
       return soloElement;
     }
   }
@@ -162,18 +165,22 @@ class OkoskabetCheckout {
   }
 
   private getFormFieldValue(selector: string): string | undefined {
-    const element = document.querySelector(selector);
-    if (element instanceof HTMLInputElement) {
-      return element.value;
+    const $ = jQuery;
+
+    const value = $(selector).val();
+    if (typeof value === 'string') {
+      return value;
     }
   }
 
   private setDeliveryDateInput(value: string): void {
-    jQuery(DELIVERY_DATE_INPUT_SELECTOR).val(value);
+    const $ = jQuery;
+    $(DELIVERY_DATE_INPUT_SELECTOR).val(value);
   }
 
   private setLocationInput(value: string): void {
-    jQuery(SHED_ID_INPUT_SELECTOR).val(value);
+    const $ = jQuery;
+    $(SHED_ID_INPUT_SELECTOR).val(value);
   }
 }
 
