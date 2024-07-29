@@ -10,7 +10,7 @@
  * Plugin Name:		Økoskabet WooCommerce Plugin
  * Plugin URI:		https://github.com/okoskabet/okoskabet-woocommerce-plugin
  * Description:		Connect your WooCommerce store to Økoskabet
- * Version:         1.1.10
+ * Version:         1.1.11
  * Author:          Kim Frederiksen
  * Author URI:      https://heyrobot.ai
  * Text Domain:     okoskabet-woocommerce-plugin
