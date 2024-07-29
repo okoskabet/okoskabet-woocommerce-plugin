@@ -52,38 +52,38 @@ class OkoskabetCheckout {
     const formData = this.getFormData()
     const target = this.createSvelteTarget()
 
-    if (formData) {
+    if (formData && target) {
       const { shippingMethod, address, postalCode } = formData;
       if (shippingMethod == 'home-delivery') {
         this.setLocationInput('');
       }
 
-      if (target) {
-        this.deliveryOptions = new App({
-          target,
-          props: {
-            displayMode: this.displayOption,
-            shippingMethod: shippingMethod,
-            address: address,
-            postalCode: postalCode,
-            locale: this.locale,
-            strings: {
-              shedDeliveryDescription: this.shedDeliveryDescription,
-              homeDeliveryDescription: this.homeDeliveryDescription,
-            },
-            onSelectShed: (shedId: string) => {
-              this.setLocationInput(shedId);
-            },
-            onSelectDeliveryDate: (date: string) => {
-              this.setDeliveryDateInput(date);
-            }
+      this.deliveryOptions = new App({
+        target,
+        props: {
+          displayMode: this.displayOption,
+          shippingMethod: shippingMethod,
+          address: address,
+          postalCode: postalCode,
+          locale: this.locale,
+          strings: {
+            shedDeliveryDescription: this.shedDeliveryDescription,
+            homeDeliveryDescription: this.homeDeliveryDescription,
+          },
+          onSelectShed: (shedId: string) => {
+            this.setLocationInput(shedId);
+          },
+          onSelectDeliveryDate: (date: string) => {
+            this.setDeliveryDateInput(date);
           }
-        })
-      } else {
-        console.error("Failed to populate shipping options - no target element found");
-      }
+        }
+      })
     } else {
-      console.error("Failed to populate shipping options - no form data available");
+      if (!target) {
+        console.error("Failed to populate shipping options - no target element found");
+      } else {
+        console.error("Failed to populate shipping options - no form data available");
+      }
     }
   }
 
