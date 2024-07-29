@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) {
 	die('We\'re sorry, but you can not directly access this file.');
 }
 
-define('O_VERSION', '1.1.10');
+define('O_VERSION', '1.1.11');
 define('O_TEXTDOMAIN', 'okoskabet-woocommerce-plugin');
 define('O_NAME', 'Økoskabet WooCommerce Plugin');
 define('O_PLUGIN_ROOT', plugin_dir_path(__FILE__));
