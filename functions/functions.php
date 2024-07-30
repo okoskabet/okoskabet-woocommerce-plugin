@@ -420,6 +420,10 @@ function hey_after_order_placed($order_id)
 		return;
 	}
 
+	if (!$order->is_paid()) {
+		return;
+	}
+
 	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 	$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 
