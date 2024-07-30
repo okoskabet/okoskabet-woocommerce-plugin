@@ -18,7 +18,7 @@
  */
 
 function o_get_settings()
-{	
+{
 	return apply_filters('o_get_settings', get_option(O_TEXTDOMAIN . '-settings'));
 }
 
