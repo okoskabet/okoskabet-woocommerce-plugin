@@ -1,14 +1,11 @@
-# Copyright (C) 2013 TODO
-# This file is distributed under the same license as the TODO package.
-#, fuzzy
-msgid ""
-msgstr ""
-"Project-Id-Version: TODO 1.0.0\n"
+# Copyright (C) 2024
+
+"Project-Id-Version: okoskabet-woocommerce-plugin 1.1.X\n"
 "Report-Msgid-Bugs-To: http://wordpress.org/plugins/okoskabet-woocommerce-plugin\n"
 "POT-Creation-Date: 2020-05-21 19:28+0200\n"
-"PO-Revision-Date: 2014-07-07 18:52+0100\n"
-"Last-Translator: Mte90 <mte90net@gmail.com>\n"
-"Language-Team: LANGUAGE <translations@example.com >\n"
+"PO-Revision-Date: 2014-07-30 11:38+0100\n"
+"Last-Translator: Jens <jens@okoskabet.dk>\n"
+"Language-Team: DANISH <info@okoskabet.dk >\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -22,392 +19,206 @@ msgstr ""
 "X-Poedit-SearchPath-0: .\n"
 "X-Poedit-SearchPathExcluded-0: node_modules\n"
 "X-Poedit-SearchPathExcluded-1: vendor\n"
+#. Description of the plugin
+#: okoskabet-woocommerce-plugin.php
+msgid "Connect your WooCommerce store to Økoskabet"
+msgstr ""
 
-#: admin/class-admin-impexp.php:91
+#: backend/ImpExp.php:102
 msgid "Please upload a valid .json file"
 msgstr ""
 
-#: admin/class-admin-impexp.php:97
+#: backend/ImpExp.php:108
 msgid "Please upload a file to import"
 msgstr ""
 
-#: admin/class-admin-notices.php:33
-msgid "Updated Messages"
+#: backend/ImpExp.php:128
+msgid "Failed to import the settings."
 msgstr ""
 
-#: admin/class-admin-notices.php:34
-msgid "This is my dismissible notice"
-msgstr ""
-
-#: admin/class-admin-notices.php:47
-msgid "Review me!"
-msgstr ""
-
-#: admin/class-admin-notices.php:48
-msgid "Click here to review"
-msgstr ""
-
-#: admin/class-admin-settings-page.php:57
+#: backend/Settings_Page.php:62
 msgid "okoskabet-woocommerce-plugin Settings"
 msgstr ""
 
-#: admin/class-admin-settings-page.php:83 admin/views/admin.php:22
+#: backend/Settings_Page.php:85
 msgid "Settings"
 msgstr ""
 
-#: admin/class-admin-settings-page.php:85
-msgid "Donate"
-msgstr ""
-
-#: admin/views/admin.php:23
-msgid "Settings 2"
-msgstr ""
-
-#: admin/views/admin.php:27
-msgid "Import/Export"
-msgstr ""
-
-#: admin/views/admin.php:41
+#: backend/views/admin.php:29
 msgid "Export Settings"
 msgstr ""
 
-#: admin/views/admin.php:43
-msgid ""
-"Export the plugin's settings for this site as a .json file. This will allows "
-"you to easily import the configuration to another installation."
+#: backend/views/admin.php:31
+msgid "Export the plugin's settings for this site as a .json file. This will allows you to easily import the configuration to another installation."
 msgstr ""
 
-#: admin/views/admin.php:48
+#: backend/views/admin.php:36
 msgid "Export"
 msgstr ""
 
-#: admin/views/admin.php:55
+#: backend/views/admin.php:43
 msgid "Import Settings"
 msgstr ""
 
-#: admin/views/admin.php:57
-msgid ""
-"Import the plugin's settings from a .json file. This file can be retrieved "
-"by exporting the settings from another installation."
+#: backend/views/admin.php:45
+msgid "Import the plugin's settings from a .json file. This file can be retrieved by exporting the settings from another installation."
 msgstr ""
 
-#: admin/views/admin.php:65
+#: backend/views/admin.php:53
 msgid "Import"
 msgstr ""
 
-#: admin/views/admin.php:78
-msgid "okoskabet-woocommerce-plugin."
-msgstr ""
-
-#: admin/views/settings-2.php:15 admin/views/settings.php:14
-#: integrations/class-cmb.php:58
+#: backend/views/settings-2.php:13
 msgid "Text"
 msgstr ""
 
-#: admin/views/settings-2.php:16 admin/views/settings-2.php:25
-#: admin/views/settings.php:15 admin/views/settings.php:24
-#: admin/views/settings.php:33 admin/views/settings.php:42
-#: admin/views/settings.php:50 admin/views/settings.php:58
-#: admin/views/settings.php:66 admin/views/settings.php:74
-#: admin/views/settings.php:82 admin/views/settings.php:90
-#: admin/views/settings.php:99 admin/views/settings.php:107
-#: admin/views/settings.php:123 admin/views/settings.php:137
-#: admin/views/settings.php:151 admin/views/settings.php:164
-#: admin/views/settings.php:174 admin/views/settings.php:183
-#: admin/views/settings.php:192 admin/views/settings.php:200
-#: admin/views/settings.php:213 integrations/class-cmb.php:59
-#: integrations/class-cmb.php:67 integrations/class-cmb.php:76
-#: integrations/class-cmb.php:84
+#: backend/views/settings-2.php:14
+#: backend/views/settings-2.php:23
 msgid "field description (optional)"
 msgstr ""
 
-#: admin/views/settings-2.php:24 admin/views/settings.php:23
+#: backend/views/settings-2.php:22
 msgid "Color Picker"
 msgstr ""
 
-#: admin/views/settings.php:32
-msgid "Test Text Medium"
+#: backend/views/settings.php:22
+msgid "API Key"
 msgstr ""
 
-#: admin/views/settings.php:41
-msgid "Website URL"
+#: backend/views/settings.php:23
+msgid "Økoskabet API Key"
 msgstr ""
 
-#: admin/views/settings.php:49
-msgid "Test Text Email"
+#: backend/views/settings.php:32
+msgid "Display option"
 msgstr ""
 
-#: admin/views/settings.php:57
-msgid "Test Time"
+#: backend/views/settings.php:33
+msgid "Shipping method display option"
 msgstr ""
 
-#: admin/views/settings.php:65
-msgid "Test Date Picker"
+#: backend/views/settings.php:37
+msgid "Inline"
 msgstr ""
 
-#: admin/views/settings.php:73
-msgid "Test Date Picker (UNIX timestamp)"
+#: backend/views/settings.php:38
+msgid "Modal"
 msgstr ""
 
-#: admin/views/settings.php:81
-msgid "Test Date/Time Picker Combo (UNIX timestamp)"
+#: backend/views/settings.php:52
+msgid "Staging API"
 msgstr ""
 
-#: admin/views/settings.php:89
-msgid "Test Money"
+#: backend/views/settings.php:53
+msgid "Check this to use staging API"
 msgstr ""
 
-#: admin/views/settings.php:98
-msgid "Test Text Area"
+#: backend/views/settings.php:62
+msgid "Økoskabet Description (Optional)"
 msgstr ""
 
-#: admin/views/settings.php:106
-msgid "Test Text Area for Code"
+#: backend/views/settings.php:63
+msgid "Økoskabet shipping method description, overwrites default description"
 msgstr ""
 
-#: admin/views/settings.php:114
-msgid "Test Title Weeeee"
+#: backend/views/settings.php:71
+msgid "Økoskabet Home Delivery Description (Optional)"
 msgstr ""
 
-#: admin/views/settings.php:115
-msgid "This is a title description"
+#: backend/views/settings.php:72
+msgid "Økoskabet Home Delivery shipping method description, overwrites default description"
 msgstr ""
 
-#: admin/views/settings.php:122
-msgid "Test Select"
+#: functions/functions.php:126
+msgid "Økoskabet"
 msgstr ""
 
-#: admin/views/settings.php:128 admin/views/settings.php:142
-#: admin/views/settings.php:155
-msgid "Option One"
+#: functions/functions.php:127
+msgid "Delivery to Økoskabet"
 msgstr ""
 
-#: admin/views/settings.php:129 admin/views/settings.php:143
-#: admin/views/settings.php:156
-msgid "Option Two"
+#: functions/functions.php:135
+#: functions/functions.php:267
+msgid "Method Title"
 msgstr ""
 
-#: admin/views/settings.php:130 admin/views/settings.php:144
-#: admin/views/settings.php:157
-msgid "Option Three"
+#: functions/functions.php:137
+#: functions/functions.php:269
+msgid "Enter the method title"
 msgstr ""
 
-#: admin/views/settings.php:136
-msgid "Test Radio inline"
+#: functions/functions.php:142
+#: functions/functions.php:274
+msgid "Description"
 msgstr ""
 
-#: admin/views/settings.php:150
-msgid "Test Radio"
+#: functions/functions.php:144
+#: functions/functions.php:276
+msgid "Enter the Description"
 msgstr ""
 
-#: admin/views/settings.php:163
-msgid "Test Taxonomy Radio"
+#: functions/functions.php:149
+#: functions/functions.php:281
+msgid "Shipping price"
 msgstr ""
 
-#: admin/views/settings.php:173
-msgid "Test Taxonomy Select"
+#: functions/functions.php:151
+#: functions/functions.php:283
+msgid "Add the default shipping price"
 msgstr ""
 
-#: admin/views/settings.php:182
-msgid "Test Taxonomy Multi Checkbox"
+#: functions/functions.php:156
+#: functions/functions.php:288
+msgid "Discounted shipping order minimum"
 msgstr ""
 
-#: admin/views/settings.php:191
-msgid "Test Checkbox"
+#: functions/functions.php:158
+#: functions/functions.php:290
+msgid "Add the discounted shipping total order minimum"
 msgstr ""
 
-#: admin/views/settings.php:199
-msgid "Test Multi Checkbox"
+#: functions/functions.php:163
+#: functions/functions.php:295
+msgid "Discounted shipping price"
 msgstr ""
 
-#: admin/views/settings.php:204
-msgid "Check One"
+#: functions/functions.php:165
+#: functions/functions.php:297
+msgid "Add the discounted price"
 msgstr ""
 
-#: admin/views/settings.php:205
-msgid "Check Two"
+#: functions/functions.php:170
+#: functions/functions.php:302
+msgid "Free shipping order minimum"
 msgstr ""
 
-#: admin/views/settings.php:206
-msgid "Check Three"
+#: functions/functions.php:172
+#: functions/functions.php:304
+msgid "Add the free shipping total order minimum"
 msgstr ""
 
-#: admin/views/settings.php:212
-msgid "Test wysiwyg"
+#: functions/functions.php:205
+#: functions/functions.php:337
+msgid "Free"
 msgstr ""
 
-#: admin/views/settings.php:221
-msgid "Test Image"
+#: functions/functions.php:216
+#: functions/functions.php:348
+msgid "Discounted shipping rate"
 msgstr ""
 
-#: admin/views/settings.php:222
-msgid "Upload an image or enter a URL."
+#: functions/functions.php:258
+msgid "Home delivery"
 msgstr ""
 
-#: admin/views/settings.php:229
-msgid "Multiple Files"
+#: functions/functions.php:259
+msgid "Delivery to your home"
 msgstr ""
 
-#: admin/views/settings.php:230
-msgid "Upload or add multiple images/attachments."
+#: functions/functions.php:498
+msgid "The order could not be completed"
 msgstr ""
 
-#: admin/views/settings.php:238
-msgid "oEmbed"
-msgstr ""
-
-#: admin/views/settings.php:239
-msgid ""
-"Enter a youtube, twitter, or instagram URL. Supports services listed at <a "
-"href=\"http://codex.wordpress.org/Embeds\">http://codex.wordpress.org/"
-"Embeds</a>."
-msgstr ""
-
-#: integrations/class-cmb.php:45
-msgid "Demo Metabox"
-msgstr ""
-
-#: integrations/class-cmb.php:66
-msgid "Text 2"
-msgstr ""
-
-#: integrations/class-cmb.php:75
-msgid "Text Small"
-msgstr ""
-
-#: integrations/class-cmb.php:83
-msgid "Text Small 2"
-msgstr ""
-
-#: integrations/class-pointers.php:45
-msgid "Boilerplate Help"
-msgstr ""
-
-#: integrations/class-pointers.php:46
-msgid ""
-"A pointer for help tab.<br>Go to Posts, Pages or Users for other pointers."
-msgstr ""
-
-#: integrations/widgets/sample.php:14
-msgid "My Recent Posts Example"
-msgstr ""
-
-#: integrations/widgets/sample.php:15
-msgid "My Recent Posts Widget Description"
-msgstr ""
-
-#: integrations/widgets/sample.php:26
-msgid "Title"
-msgstr ""
-
-#: integrations/widgets/sample.php:28
-msgid "Enter the widget title."
-msgstr ""
-
-#: integrations/widgets/sample.php:36
-msgid "Recent Posts"
-msgstr ""
-
-#: integrations/widgets/sample.php:79
-msgid "Taxonomy"
-msgstr ""
-
-#: integrations/widgets/sample.php:81
-msgid "Set the taxonomy."
-msgstr ""
-
-#: integrations/widgets/sample.php:91
-msgid "Taxonomy terms"
-msgstr ""
-
-#: integrations/widgets/sample.php:93
-msgid "Set the taxonomy terms."
-msgstr ""
-
-#: integrations/widgets/sample.php:104
-msgid "Pages"
-msgstr ""
-
-#: integrations/widgets/sample.php:106
-msgid "Set the page."
-msgstr ""
-
-#: integrations/widgets/sample.php:116
-msgid "Post type"
-msgstr ""
-
-#: integrations/widgets/sample.php:118
-msgid "Set the post type."
-msgstr ""
-
-#: integrations/widgets/sample.php:128
-msgid "Amount"
-msgstr ""
-
-#: integrations/widgets/sample.php:129
-msgid "Select how many posts to show."
-msgstr ""
-
-#: integrations/widgets/sample.php:136
-msgid "1 Post"
-msgstr ""
-
-#: integrations/widgets/sample.php:141
-msgid "2 Posts"
-msgstr ""
-
-#: integrations/widgets/sample.php:145
-msgid "3 Posts"
-msgstr ""
-
-#: integrations/widgets/sample.php:156
-msgid "Output as list"
-msgstr ""
-
-#: integrations/widgets/sample.php:157
-msgid "Wraps posts with the <li> tag."
-msgstr ""
-
-#: internals/class-posttypes.php:34
-msgid "CMB2 Field"
-msgstr ""
-
-#: internals/class-posttypes.php:146
-msgid "Demo"
-msgstr ""
-
-#: internals/class-posttypes.php:147
-msgid "Demos"
-msgstr ""
-
-#: internals/class-posttypes.php:187
-msgid "Demo Category"
-msgstr ""
-
-#: internals/class-posttypes.php:188
-msgid "Demo Categories"
-msgstr ""
-
-#: internals/debug.php:12
-msgid "okoskabet-woocommerce-plugin"
-msgstr ""
-
-#: okoskabet-woocommerce-plugin.php:64
-msgid "\"okoskabet-woocommerce-plugin\" requires PHP 5.6 or newer."
-msgstr ""
-
-#: public/class-enqueue.php:77
-msgid "Hey! You have clicked the button!"
-msgstr ""
-
-#: rest/class-rest.php:52
-msgid "Text field demo of Post type"
-msgstr ""
-
-#: rest/class-rest.php:119
-msgid "Failed to update post views."
-msgstr ""
-
-#: templates/content-demo.php:4
-msgid "Insert here your custom HTML"
+#: okoskabet-woocommerce-plugin.php:58
+msgid "\"okoskabet-woocommerce-plugin\" requires PHP 7.4 or newer."
 msgstr ""

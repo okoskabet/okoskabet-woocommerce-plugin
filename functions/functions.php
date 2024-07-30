@@ -18,7 +18,7 @@
  */
 
 function o_get_settings()
-{
+{	
 	return apply_filters('o_get_settings', get_option(O_TEXTDOMAIN . '-settings'));
 }
 
@@ -48,7 +48,9 @@ function o_check_configuration($value)
 			));
 
 			$response = curl_exec($curl);
+
 			$oko_configuration = json_decode($response, true);
+			
 			$shipping_methods = [];
 			foreach ($oko_configuration['shipping_methods'] as $method) {
 				$shipping_methods[$method['method_code']] = $method;
@@ -124,7 +126,7 @@ function hey_okoskabet_shipping_method_shed_init()
 				$this->id                    = 'hey_okoskabet_shipping_shed';
 				$this->instance_id           = absint($instance_id);
 				$this->method_title       = __('Økoskabet', O_TEXTDOMAIN); // Title shown in admin
-				$this->method_description = __('Delivery to økoskabet', O_TEXTDOMAIN); // Description shown in admin
+				$this->method_description = __('Delivery to Økoskabet', O_TEXTDOMAIN); // Description shown in admin
 				$this->supports              = array(
 					'shipping-zones',
 					'instance-settings',
@@ -213,7 +215,7 @@ function hey_okoskabet_shipping_method_shed_init()
 					if ($total >= $this->costDiscountLimit) {
 						$this->add_rate(array(
 							'id'    => $this->id,
-							'label' => $this->title . ' (' . esc_html__('Discount', O_TEXTDOMAIN) . ')',
+							'label' => $this->title . ' (' . esc_html__('Discounted shipping rate', O_TEXTDOMAIN) . ')',
 							'cost'  => $this->costDiscount,
 						));
 						return;
@@ -345,7 +347,7 @@ function hey_okoskabet_shipping_method_home_init()
 					if ($total >= $this->costDiscountLimit) {
 						$this->add_rate(array(
 							'id'    => $this->id,
-							'label' => $this->title . ' (' . esc_html__('Discount', O_TEXTDOMAIN) . ')',
+							'label' => $this->title . ' (' . esc_html__('Discounted shipping rate', O_TEXTDOMAIN) . ')',
 							'cost'  => $this->costDiscount,
 						));
 						return;
