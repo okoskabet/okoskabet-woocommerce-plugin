@@ -421,7 +421,15 @@ function hey_after_order_placed($order_id)
 	}
 
 	if (!$order->is_paid()) {
-		return;
+		if ($order->has_status('on-hold')) {
+			// Payment might be just authorized
+			$transaction_id = $order->get_transaction_id();
+			if (!$transaction_id) {
+				return;
+			}
+		} else {
+			return;
+		}
 	}
 
 	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
