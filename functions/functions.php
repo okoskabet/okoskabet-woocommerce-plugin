@@ -410,10 +410,13 @@ add_action('woocommerce_payment_complete_order_status', 'hey_after_order_placed'
 function hey_after_order_placed($status, $order_id, $order)
 {
 	error_log("HOOK CALLED!!!");
-		
+
 	if (empty($order)) {
 		return;
 	}
+
+	$order_submitted = $order->get_meta('_billing_okoskabet_done', true);
+	if (!empty($order_submitted)) return;
 
 	if (!$order->is_paid()) {
 		if ($order->has_status('on-hold')) {
@@ -507,6 +510,8 @@ function hey_after_order_placed($status, $order_id, $order)
 			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
 
 			throw new Exception($error_text);
+		} else {
+			update_post_meta($order_id, '_billing_okoskabet_done', true);
 		}
 	}
 }
