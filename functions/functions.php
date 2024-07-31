@@ -400,7 +400,7 @@ function my_custom_checkout_field_display_admin_order_meta($order)
 	echo '' . esc_html__('Økoskabet Delivery Date') . ': ' . esc_html($order->get_meta('_billing_okoskabet_delivery_date', true)) . '';
 }
 
-add_action('woocommerce_payment_complete_order_status', 'hey_after_order_placed', 10, 3);
+add_action('woocommerce_payment_complete_order_status', 'hey_after_order_placed', 99, 3);
 
 /**
  * Custom function to be called after an order is placed.
@@ -415,19 +415,18 @@ function hey_after_order_placed($status, $order_id, $order)
 		return;
 	}
 
-	$order_submitted = $order->get_meta('_billing_okoskabet_done', true);
-	if (!empty($order_submitted)) return;
+	$order_submitted = get_post_meta($order_id, 'billing_okoskabet_done', true);
+	error_log($order_submitted);
+	if (!empty($order_submitted)) {
+		error_log("Already submitted!!!  - returning");
+		return;
+	}
 
-	if (!$order->is_paid()) {
-		if ($order->has_status('on-hold')) {
-			// Payment might be just authorized
-			$transaction_id = $order->get_transaction_id();
-			if (!$transaction_id) {
-				return;
-			}
-		} else {
-			return;
-		}
+	error_log("status: " . $order->get_status());
+	error_log("tx id: " . $order->get_transaction_id());
+	error_log("checking order status");
+	if ($order->has_status('failed')) {
+		return;
 	}
 
 	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
@@ -511,7 +510,8 @@ function hey_after_order_placed($status, $order_id, $order)
 
 			throw new Exception($error_text);
 		} else {
-			update_post_meta($order_id, '_billing_okoskabet_done', true);
+			error_log("Setting meta!!!");
+			update_post_meta($order_id, 'billing_okoskabet_done', true);
 		}
 	}
 }
