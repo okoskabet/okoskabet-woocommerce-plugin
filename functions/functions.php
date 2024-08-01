@@ -50,7 +50,7 @@ function o_check_configuration($value)
 			$response = curl_exec($curl);
 
 			$oko_configuration = json_decode($response, true);
-			
+
 			$shipping_methods = [];
 			foreach ($oko_configuration['shipping_methods'] as $method) {
 				$shipping_methods[$method['method_code']] = $method;
@@ -73,8 +73,8 @@ function enqueue_checkout_scripts()
 		wp_enqueue_script('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js', array(), null, true);
 		wp_enqueue_style('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
 
-    wp_enqueue_script('okoskabet-shipping', plugin_dir_url( __DIR__ ) . 'assets/build/plugin-public.js', array(), null, true);
-    wp_enqueue_style('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.css', array(), null);
+		wp_enqueue_script('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.js', array(), null, true);
+		wp_enqueue_style('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.css', array(), null);
 	}
 }
 add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
@@ -85,18 +85,18 @@ function custom_content_for_custom_shipping_checkout()
 {
 	$settings = o_get_settings();
 	if (empty($settings['_api_key'])) return;
-  $shed_description = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : 'Afkølet afhentningssted hvor du kan hente dine varer hele døgnet vha. kode.';
-  $local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
+	$shed_description = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : 'Afkølet afhentningssted hvor du kan hente dine varer hele døgnet vha. kode.';
+	$local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
 ?>
-    <script type="text/javascript">
-    window._okoskabet_checkout = {
-      locale: '<?php echo get_locale() ?>',
-      displayOption: '<?php echo $settings['_display_option'] ?>',
-      descriptions: {
-        homeDelivery: '<?php echo $local_description ?>',
-        shedDelivery: '<?php echo $shed_description ?>',
-      },
-    }
+	<script type="text/javascript">
+		window._okoskabet_checkout = {
+			locale: '<?php echo get_locale() ?>',
+			displayOption: '<?php echo $settings['_display_option'] ?>',
+			descriptions: {
+				homeDelivery: '<?php echo $local_description ?>',
+				shedDelivery: '<?php echo $shed_description ?>',
+			},
+		}
 	</script>
 <?php
 }
@@ -400,23 +400,28 @@ function my_custom_checkout_field_display_admin_order_meta($order)
 	echo '' . esc_html__('Økoskabet Delivery Date') . ': ' . esc_html($order->get_meta('_billing_okoskabet_delivery_date', true)) . '';
 }
 
-add_action('woocommerce_checkout_order_processed', 'hey_after_order_placed', 10, 1);
+add_action('woocommerce_payment_complete_order_status', 'hey_after_order_placed', 99, 3);
 
 /**
  * Custom function to be called after an order is placed.
  *
  * @param int $order_id The order ID.
  */
-function hey_after_order_placed($order_id)
+function hey_after_order_placed($status, $order_id, $order)
 {
-	if (empty($order_id)) {
+	if (empty($order)) {
+		return;
+	}
+	
+	$order_submitted = get_post_meta($order_id, 'billing_okoskabet_done', true);
+	if (!empty($order_submitted)) {
 		return;
 	}
 
-	// Get the order object
-	$order = wc_get_order($order_id);
-
-	if (empty($order)) {
+	// Order status cannot reliably be used to know if the order succeeded. F.x. will a previously failed order
+	// that now has been paid succefully still reflect the failed status here. The transaction id is however only
+	// set after it has been paid (or authorised)
+	if (empty($order->get_transaction_id())) {
 		return;
 	}
 
@@ -500,6 +505,8 @@ function hey_after_order_placed($order_id)
 			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
 
 			throw new Exception($error_text);
+		} else {
+			update_post_meta($order_id, 'billing_okoskabet_done', true);
 		}
 	}
 }
