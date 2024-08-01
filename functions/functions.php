@@ -506,7 +506,9 @@ function hey_after_order_placed($status, $order_id, $order)
 
 			throw new Exception($error_text);
 		} else {
+			$order_note = 'Økoskabet delivery date: ' . $order_delivery_date . ' - Økoskabet shed ' . $order_shed;
 			update_post_meta($order_id, 'billing_okoskabet_done', true);
+			$order->add_order_note( $order_note, 1 );
 		}
 	}
 }
