@@ -400,19 +400,20 @@ function my_custom_checkout_field_display_admin_order_meta($order)
 	echo '' . esc_html__('Økoskabet Delivery Date') . ': ' . esc_html($order->get_meta('_billing_okoskabet_delivery_date', true)) . '';
 }
 
-add_action('woocommerce_payment_complete_order_status', 'hey_after_order_placed', 99, 3);
+add_action('woocommerce_payment_complete', 'hey_after_order_placed');
 
 /**
  * Custom function to be called after an order is placed.
  *
  * @param int $order_id The order ID.
  */
-function hey_after_order_placed($status, $order_id, $order)
+function hey_after_order_placed($order_id)
 {
+	$order = wc_get_order($order_id);
 	if (empty($order)) {
 		return;
 	}
-	
+
 	$order_submitted = get_post_meta($order_id, 'billing_okoskabet_done', true);
 	if (!empty($order_submitted)) {
 		return;
@@ -508,7 +509,7 @@ function hey_after_order_placed($status, $order_id, $order)
 		} else {
 			$order_note = 'Økoskabet delivery date: ' . $order_delivery_date . ' - Økoskabet shed ' . $order_shed;
 			update_post_meta($order_id, 'billing_okoskabet_done', true);
-			$order->add_order_note( $order_note, 1 );
+			$order->add_order_note($order_note, 1);
 		}
 	}
 }
