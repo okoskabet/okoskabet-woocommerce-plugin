@@ -409,23 +409,19 @@ add_action('woocommerce_payment_complete_order_status', 'hey_after_order_placed'
  */
 function hey_after_order_placed($status, $order_id, $order)
 {
-	error_log("HOOK CALLED!!!");
-
 	if (empty($order)) {
 		return;
 	}
-
+	
 	$order_submitted = get_post_meta($order_id, 'billing_okoskabet_done', true);
-	error_log($order_submitted);
 	if (!empty($order_submitted)) {
-		error_log("Already submitted!!!  - returning");
 		return;
 	}
 
-	error_log("status: " . $order->get_status());
-	error_log("tx id: " . $order->get_transaction_id());
-	error_log("checking order status");
-	if ($order->has_status('failed')) {
+	// Order status cannot reliably be used to know if the order succeeded. F.x. will a previously failed order
+	// that now has been paid succefully still reflect the failed status here. The transaction id is however only
+	// set after it has been paid (or authorised)
+	if (empty($order->get_transaction_id())) {
 		return;
 	}
 
@@ -510,7 +506,6 @@ function hey_after_order_placed($status, $order_id, $order)
 
 			throw new Exception($error_text);
 		} else {
-			error_log("Setting meta!!!");
 			update_post_meta($order_id, 'billing_okoskabet_done', true);
 		}
 	}
