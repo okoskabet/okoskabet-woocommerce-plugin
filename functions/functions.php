@@ -400,113 +400,115 @@ function my_custom_checkout_field_display_admin_order_meta($order)
 	echo '' . esc_html__('Økoskabet Delivery Date') . ': ' . esc_html($order->get_meta('_billing_okoskabet_delivery_date', true)) . '';
 }
 
-add_action('woocommerce_payment_complete_order_status', 'hey_after_order_placed', 99, 3);
+
+
+add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
 
 /**
  * Custom function to be called after an order is placed.
  *
  * @param int $order_id The order ID.
  */
-function hey_after_order_placed($status, $order_id, $order)
+function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 {
 	if (empty($order)) {
 		return;
 	}
-	
 	$order_submitted = get_post_meta($order_id, 'billing_okoskabet_done', true);
 	if (!empty($order_submitted)) {
 		return;
 	}
-
-	// Order status cannot reliably be used to know if the order succeeded. F.x. will a previously failed order
-	// that now has been paid succefully still reflect the failed status here. The transaction id is however only
-	// set after it has been paid (or authorised)
 	if (empty($order->get_transaction_id())) {
 		return;
 	}
 
-	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
-	$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
+	if ($new_status == 'on-hold' || $new_status == 'processing') {
 
-	if (empty($order_delivery_date)) {
-		return;
-	}
+		$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
+		$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 
-	$settings = get_option(O_TEXTDOMAIN . '-settings');
+		if (empty($order_delivery_date)) {
+			return;
+		}
 
-	if (!empty($settings['_api_key'])) {
+		$settings = get_option(O_TEXTDOMAIN . '-settings');
 
-		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
-		$url = $api_url . '/api/v1/shipments/';
+		if (!empty($settings['_api_key'])) {
 
-		$data = !empty($order_shed) ? [
-			'locale' => get_locale(),
-			'allow_invalid' => true,
-			'shipment_reference' => (string) $order_id,
-			'customer' => [
-				'first_name' => $order->get_billing_first_name(),
-				'last_name' => $order->get_billing_last_name(),
-				'phone' => $order->get_billing_phone(),
-				'email' => $order->get_billing_email(),
-			],
-			'notes' => (string) $order->get_customer_note(),
-			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
-			'reservation' => [
-				'shed_id' => $order->get_meta('_billing_okoskabet_shed_id', true),
-				'max_duration_days' => 1,
-			]
-		] : [
-			'locale' => get_locale(),
-			'allow_invalid' => true,
-			'shipment_reference' => (string) $order_id,
-			'customer' => [
-				'first_name' => $order->get_billing_first_name(),
-				'last_name' => $order->get_billing_last_name(),
-				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
-				'phone' => $order->get_billing_phone(),
-				'email' => $order->get_billing_email(),
-			],
-			'home_delivery' => [
-				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
-				'address_1' => $order->get_shipping_address_1(),
-				'address_2' => $order->get_shipping_address_2(),
-				'city' => $order->get_shipping_city(),
-				'postal_code' => $order->get_shipping_postcode()
-			],
-			'notes' => (string) $order->get_customer_note(),
-			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
-		];
+			$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
+			$url = $api_url . '/api/v1/shipments/';
 
-		$data_json = json_encode($data);
+			$data = !empty($order_shed) ? [
+				'locale' => get_locale(),
+				'allow_invalid' => true,
+				'shipment_reference' => (string) $order_id,
+				'customer' => [
+					'first_name' => $order->get_billing_first_name(),
+					'last_name' => $order->get_billing_last_name(),
+					'phone' => $order->get_billing_phone(),
+					'email' => $order->get_billing_email(),
+				],
+				'notes' => (string) $order->get_customer_note(),
+				'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
+				'reservation' => [
+					'shed_id' => $order->get_meta('_billing_okoskabet_shed_id', true),
+					'max_duration_days' => 1,
+				]
+			] : [
+				'locale' => get_locale(),
+				'allow_invalid' => true,
+				'shipment_reference' => (string) $order_id,
+				'customer' => [
+					'first_name' => $order->get_billing_first_name(),
+					'last_name' => $order->get_billing_last_name(),
+					'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
+					'phone' => $order->get_billing_phone(),
+					'email' => $order->get_billing_email(),
+				],
+				'home_delivery' => [
+					'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
+					'address_1' => $order->get_shipping_address_1(),
+					'address_2' => $order->get_shipping_address_2(),
+					'city' => $order->get_shipping_city(),
+					'postal_code' => $order->get_shipping_postcode()
+				],
+				'notes' => (string) $order->get_customer_note(),
+				'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
+			];
 
-		$ch = curl_init($url);
+			$data_json = json_encode($data);
 
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_HTTPHEADER, [
-			'Content-Type: application/json',
-			'authorization: ' . $settings['_api_key'],
-			'Content-Length: ' . strlen($data_json)
-		]);
+			$ch = curl_init($url);
 
-		curl_setopt($ch, CURLOPT_POST, true);
-		curl_setopt($ch, CURLOPT_POSTFIELDS, $data_json);
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($ch, CURLOPT_HTTPHEADER, [
+				'Content-Type: application/json',
+				'authorization: ' . $settings['_api_key'],
+				'Content-Length: ' . strlen($data_json)
+			]);
 
-		$response = curl_exec($ch);
-		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+			curl_setopt($ch, CURLOPT_POST, true);
+			curl_setopt($ch, CURLOPT_POSTFIELDS, $data_json);
 
-		curl_close($ch);
+			$response = curl_exec($ch);
+			$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-		$shipment = json_decode($response, true);
+			curl_close($ch);
 
-		if ($http_code != 201) {
-			// Set the order status to 'failed'
-			$order->update_status('failed', !empty($shipment['error_message']) ? $shipment['error_message'] : 'Order failed before processing.');
+			$shipment = json_decode($response, true);
 
-			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
+			if ($http_code != 201) {
+				// Set the order status to 'failed'
+				$order->update_status('failed', !empty($shipment['error_message']) ? $shipment['error_message'] : 'Order failed before processing.');
 
-			throw new Exception($error_text);
-		} else {
-			update_post_meta($order_id, 'billing_okoskabet_done', true);
+				$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
+
+				throw new Exception($error_text);
+			} else {
+				$order_note = 'Økoskabet delivery date: ' . $order_delivery_date . ' - Økoskabet shed ' . $order_shed;
+				update_post_meta($order_id, 'billing_okoskabet_done', true);
+				$order->add_order_note($order_note, 1);
+			}
 		}
 	}
 }
