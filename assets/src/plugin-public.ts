@@ -117,13 +117,13 @@ class OkoskabetCheckout {
   private getShippingData(): { shippingMethod: ShippingMethod, address: string, postalCode: string } | undefined {
     const shippingMethod = this.getSelectedShippingMethod();
 
-    const postalCode = this.getFormFieldValue(POSTAL_CODE_SELECTOR) || "";
+    const postalCode = this.getFormFieldValue(POSTAL_CODE_SELECTOR);
     const address1 = this.getFormFieldValue(ADDRESS_1_SELECTOR);
     const address2 = this.getFormFieldValue(ADDRESS_2_SELECTOR);
 
     const address = [address1, address2].filter(val => val && val !== "").join(", ")
 
-    if (shippingMethod) {
+    if (shippingMethod && postalCode) {
       return {
         shippingMethod,
         address,
