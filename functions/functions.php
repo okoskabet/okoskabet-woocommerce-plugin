@@ -69,7 +69,6 @@ function o_check_configuration($value)
 function enqueue_checkout_scripts()
 {
 	if (is_checkout()) {  // Check if it's the WooCommerce checkout page
-		// Replace 'your_api_key_here' with your actual Google Maps API key
 		wp_enqueue_script('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js', array(), null, true);
 		wp_enqueue_style('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
 
@@ -393,13 +392,21 @@ function custom_override_checkout_fields($fields)
  * Display field value on the order edit page
  */
 add_action('woocommerce_admin_order_data_after_shipping_address', 'my_custom_checkout_field_display_admin_order_meta', 10, 1);
-
 function my_custom_checkout_field_display_admin_order_meta($order)
 {
-	echo '' . esc_html__('Økoskabet SHED ID') . ': ' . esc_html($order->get_meta('_billing_okoskabet_shed_id', true)) . '';
-	echo '' . esc_html__('Økoskabet Delivery Date') . ': ' . esc_html($order->get_meta('_billing_okoskabet_delivery_date', true)) . '';
+	$shed_id=$order->get_meta('_billing_okoskabet_shed_id', true);
+	$delivery_date=$order->get_meta('_billing_okoskabet_delivery_date', true);
+	echo '<pre>';
+	if (!empty($shed_id))
+	{
+		echo 'Økoskabet SHED ID' . ': ' . esc_html($shed_id) . "\n";
+	}
+	if (!empty($delivery_date))
+	{
+		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date) . '';
+	}
+	echo '</pre>';
 }
-
 
 
 add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
@@ -505,7 +512,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 
 				throw new Exception($error_text);
 			} else {
-				$order_note = 'Økoskabet delivery date: ' . $order_delivery_date . ' - Økoskabet shed ' . $order_shed;
+				$order_note = 'ØKOSKABET ' . $order_delivery_date . ' ' . $order_shed;
 				update_post_meta($order_id, 'billing_okoskabet_done', true);
 				$order->add_order_note($order_note, 1);
 			}
