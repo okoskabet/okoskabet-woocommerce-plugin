@@ -512,7 +512,12 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 
 				throw new Exception($error_text);
 			} else {
-				$order_note = 'ØKOSKABET ' . $order_delivery_date . ' ' . $order_shed;
+				$order_note = 'ØKOSKABET ' . $order_delivery_date;
+				if (empty($order_shed)) {
+					$order_note .=  ' Hjemmelevering';
+				} else {
+					$order_note .=  ' ' . $order_shed;
+				}
 				update_post_meta($order_id, 'billing_okoskabet_done', true);
 				$order->add_order_note($order_note, 1);
 			}
