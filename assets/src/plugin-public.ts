@@ -35,6 +35,9 @@ class OkoskabetCheckout {
     const that = this;
 
     $(document).on('updated_checkout', function () {
+      that.setLocationInput('');
+      that.setDeliveryDateInput('');
+
       if (!that.deliveryOptions) {
         that.populateShippingOptions()
       } else {
@@ -49,56 +52,52 @@ class OkoskabetCheckout {
   }
 
   private populateShippingOptions() {
-    const formData = this.getFormData()
-    const target = this.createSvelteTarget()
-
-    if (formData && target) {
-      const { shippingMethod, address, postalCode } = formData;
-      if (shippingMethod == 'home-delivery') {
-        this.setLocationInput('');
-      }
-
-      this.deliveryOptions = new App({
-        target,
-        props: {
-          displayMode: this.displayOption,
-          shippingMethod: shippingMethod,
-          address: address,
-          postalCode: postalCode,
-          locale: this.locale,
-          strings: {
-            shedDeliveryDescription: this.shedDeliveryDescription,
-            homeDeliveryDescription: this.homeDeliveryDescription,
-          },
-          onSelectShed: (shedId: string) => {
-            this.setLocationInput(shedId);
-          },
-          onSelectDeliveryDate: (date: string) => {
-            this.setDeliveryDateInput(date);
-          }
-        }
-      })
-    } else {
-      if (!target) {
-        console.error("Failed to populate shipping options - no target element found");
-      } else {
-        console.error("Failed to populate shipping options - no form data available");
-      }
+    const shippingData = this.getShippingData()
+    if (!shippingData) {
+      return;
     }
+
+    const target = this.createSvelteTarget()
+    if (!target) {
+      console.error("Failed to populate shipping options - no target element found");
+      return;
+    }
+
+    const { shippingMethod, address, postalCode } = shippingData;
+    this.deliveryOptions = new App({
+      target,
+      props: {
+        displayMode: this.displayOption,
+        shippingMethod: shippingMethod,
+        address: address,
+        postalCode: postalCode,
+        locale: this.locale,
+        strings: {
+          shedDeliveryDescription: this.shedDeliveryDescription,
+          homeDeliveryDescription: this.homeDeliveryDescription,
+        },
+        onSelectShed: (shedId: string) => {
+          this.setLocationInput(shedId);
+        },
+        onSelectDeliveryDate: (date: string) => {
+          this.setDeliveryDateInput(date);
+        }
+      }
+    })
   }
 
-  private async updateShippingOptions() {
-    const formData = this.getFormData()
-    if (formData) {
-      const { shippingMethod, address, postalCode } = formData
-      this.deliveryOptions?.$set({
-        shippingMethod,
-        address,
-        postalCode
-      })
-    } else {
-      console.error("Failed to update shipping options - no form data available");
+  private updateShippingOptions() {
+    const shippingData = this.getShippingData()
+    if (!shippingData) {
+      return;
     }
+
+    const { shippingMethod, address, postalCode } = shippingData;
+    this.deliveryOptions?.$set({
+      shippingMethod,
+      address,
+      postalCode
+    });
   }
 
   private createSvelteTarget(): HTMLElement | null {
@@ -115,16 +114,16 @@ class OkoskabetCheckout {
     }
   }
 
-  private getFormData(): { shippingMethod: ShippingMethod, address: string, postalCode: string } | undefined {
+  private getShippingData(): { shippingMethod: ShippingMethod, address: string, postalCode: string } | undefined {
     const shippingMethod = this.getSelectedShippingMethod();
 
-    const postalCode = this.getFormFieldValue(POSTAL_CODE_SELECTOR);
+    const postalCode = this.getFormFieldValue(POSTAL_CODE_SELECTOR) || "";
     const address1 = this.getFormFieldValue(ADDRESS_1_SELECTOR);
     const address2 = this.getFormFieldValue(ADDRESS_2_SELECTOR);
 
     const address = [address1, address2].filter(val => val && val !== "").join(", ")
 
-    if (shippingMethod && postalCode && address !== "") {
+    if (shippingMethod) {
       return {
         shippingMethod,
         address,
