@@ -108,8 +108,10 @@ class OkoRest extends Base
 		if (!empty($settings['_api_key'])) {
 			$curl = curl_init();
 
+      $maximum_days_in_future = $settings['_maximum_days_in_future'];
+
 			curl_setopt_array($curl, array(
-				CURLOPT_URL => $api_url . '/api/v1/sheds/?delivery_dates=true&zipcode=' . $params['zip'] . '&address=' . $params['address'],
+				CURLOPT_URL => $api_url . '/api/v1/sheds/?delivery_dates=true&maximum_days_in_future=' . $maximum_days_in_future . '&zipcode=' . $params['zip'] . '&address=' . $params['address'],
 				CURLOPT_RETURNTRANSFER => true,
 				CURLOPT_ENCODING => '',
 				CURLOPT_MAXREDIRS => 10,
