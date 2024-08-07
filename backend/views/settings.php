@@ -52,7 +52,7 @@
           ),
       'sanitization_cb' => 'absint',
       'escape_cb'       => 'absint',
-      'default'         => 21
+      'default'         => '21'
 		)
 	);
 
