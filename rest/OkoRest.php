@@ -146,7 +146,7 @@ class OkoRest extends Base
 			$curl = curl_init();
 
 			curl_setopt_array($curl, array(
-				CURLOPT_URL => $api_url . '/api/v1/home_delivery?postal_code=' . $params['zip'],
+				CURLOPT_URL => $api_url . '/api/v1/home_delivery?maximum_days_in_future=' . $maximum_days_in_future . '&postal_code=' . $params['zip'],
 				CURLOPT_RETURNTRANSFER => true,
 				CURLOPT_ENCODING => '',
 				CURLOPT_MAXREDIRS => 10,
