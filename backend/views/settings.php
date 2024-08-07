@@ -40,6 +40,22 @@
 		)
 	);
 
+	$cmb->add_field(
+		array(
+			'name'       => __('Maximum days into the future', O_TEXTDOMAIN),
+			'desc'       => __('Delivery options will be visible up to this many days into the future.', O_TEXTDOMAIN),
+			'id'         => '_maximum_days_in_future',
+			'type'       => 'text',
+      'attributes' => array(
+            'type'      => 'number',
+            'pattern'   => '\d*',
+          ),
+      'sanitization_cb' => 'absint',
+      'escape_cb'       => 'absint',
+      'default'         => '21'
+		)
+	);
+
 	?>
 	<style>
 		.cmb2-id--staging-api {
