@@ -71,49 +71,57 @@
 		<span class="skeleton-loader"></span>
 	</div>
 {:then { origin, sheds }}
-	{@const selectedShed = sheds.find((shed) => shed.id === selectedShedId)}
+	{@const selectedShed =
+		sheds.find((shed) => shed.id === selectedShedId) || sheds[0]}
 	<div class={displayMode} class:hidden={!showOptions}>
 		<div class="description">
 			{description}
 		</div>
 
-		<div class="oko-select-headline" style="font-size: 14px;">Økoskab</div>
-		<select
-			bind:value={selectedShedId}
-			name="okoLocations"
-			id="locationsDropdown"
-			style="width: 100%; margin-top: 0; margin-bottom: 20px;"
-		>
-			{#each sheds as shed}
-				<option value={shed.id}>
-					{shed.name}
-				</option>
-			{/each}
-		</select>
-
-		<div class="oko-select-headline" style="font-size: 14px;">
-			Leveringsdato
-		</div>
-		<select
-			bind:value={selectedDeliveryDate}
-			name="okoDeliveryDates"
-			style="width: 100%; margin-bottom: 20px;"
-		>
-			{#each selectedShed ? selectedShed.delivery_dates : sheds[0].delivery_dates as deliveryDate}
-				<option value={deliveryDate}>
-					{formatDate(deliveryDate, locale)}
-				</option>
-			{/each}
-		</select>
-
-		<Map {sheds} {origin} bind:selectedShedId />
-
-		{#if displayMode === 'modal'}
-			<div class="okoButtonModal okoButtonModalDone">
-				<div class="okoButtonModalContent"></div>
-				<a href={'#'} class="button" on:click={handleCloseModal}>Done</a
-				>
+		{#if selectedShed.delivery_dates.length === 0}
+			<span>Ingen tilgængelige datoer.</span>
+		{:else}
+			<div class="oko-select-headline" style="font-size: 14px;">
+				Økoskab
 			</div>
+			<select
+				bind:value={selectedShedId}
+				name="okoLocations"
+				id="locationsDropdown"
+				style="width: 100%; margin-top: 0; margin-bottom: 20px;"
+			>
+				{#each sheds as shed}
+					<option value={shed.id}>
+						{shed.name}
+					</option>
+				{/each}
+			</select>
+
+			<div class="oko-select-headline" style="font-size: 14px;">
+				Leveringsdato
+			</div>
+			<select
+				bind:value={selectedDeliveryDate}
+				name="okoDeliveryDates"
+				style="width: 100%; margin-bottom: 20px;"
+			>
+				{#each selectedShed.delivery_dates as deliveryDate}
+					<option value={deliveryDate}>
+						{formatDate(deliveryDate, locale)}
+					</option>
+				{/each}
+			</select>
+
+			<Map {sheds} {origin} bind:selectedShedId />
+
+			{#if displayMode === 'modal'}
+				<div class="okoButtonModal okoButtonModalDone">
+					<div class="okoButtonModalContent"></div>
+					<a href={'#'} class="button" on:click={handleCloseModal}
+						>Done</a
+					>
+				</div>
+			{/if}
 		{/if}
 	</div>
 

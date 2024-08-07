@@ -24,23 +24,27 @@
 		{description}
 	</div>
 
-	<div class="oko-select-headline" style="font-size: 14px;">
-		Leveringsdato
-	</div>
 	{#await apiResponse}
 		<span class="skeleton-loader"></span>
 	{:then { delivery_dates: deliveryDates }}
-		<select
-			bind:value={selectedDeliveryDate}
-			name="okoDeliveryDates"
-			style="width: 100%; margin-bottom: 20px;"
-		>
-			{#each deliveryDates as deliveryDate}
-				<option value={deliveryDate}>
-					{formatDate(deliveryDate, locale)}
-				</option>
-			{/each}
-		</select>
+		{#if deliveryDates.length === 0}
+			<span>Ingen tilgængelige datoer.</span>
+		{:else}
+			<div class="oko-select-headline" style="font-size: 14px;">
+				Leveringsdato
+			</div>
+			<select
+				bind:value={selectedDeliveryDate}
+				name="okoDeliveryDates"
+				style="width: 100%; margin-bottom: 20px;"
+			>
+				{#each deliveryDates as deliveryDate}
+					<option value={deliveryDate}>
+						{formatDate(deliveryDate, locale)}
+					</option>
+				{/each}
+			</select>
+		{/if}
 	{/await}
 </div>
 
