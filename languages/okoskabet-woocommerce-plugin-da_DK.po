@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
-"POT-Creation-Date: 29-07-2024\n"
-"PO-Revision-Date: 2024-07-30 11:34+0200\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: 2024-08-08 13:55+0200\n"
 "Last-Translator: Jens\n"
 "Language-Team: \n"
 "Language: da\n"
@@ -106,28 +106,36 @@ msgstr "Integreret"
 msgid "Modal"
 msgstr "Modalt"
 
-#: backend/views/settings.php:52
+#: backend/views/settings.php:45
+msgid "Maximum days into the future"
+msgstr "Maximum dage frem"
+
+#: backend/views/settings.php:46
+msgid "Delivery options will be visible up to this many days into the future."
+msgstr "Sætter hvor langt frem i tiden plugin’et skal tilbyde leveringsdage."
+
+#: backend/views/settings.php:68
 msgid "Staging API"
 msgstr "Staging API"
 
-#: backend/views/settings.php:53
+#: backend/views/settings.php:69
 msgid "Check this to use staging API"
 msgstr "Vælg dette for at bruge Staging API"
 
-#: backend/views/settings.php:62
+#: backend/views/settings.php:78
 msgid "Økoskabet Description (Optional)"
 msgstr "Økoskabet Beskrivelse (Ikke påkrævet)"
 
-#: backend/views/settings.php:63
+#: backend/views/settings.php:79
 msgid "Økoskabet shipping method description, overwrites default description"
 msgstr ""
 "Økoskabet shipping metode beskrivelse. Overskriver standard beskrivelsen"
 
-#: backend/views/settings.php:71
+#: backend/views/settings.php:87
 msgid "Økoskabet Home Delivery Description (Optional)"
 msgstr "Økoskabet Hjemmelevering Beskrivelse (Ikke påkrævet)"
 
-#: backend/views/settings.php:72
+#: backend/views/settings.php:88
 msgid ""
 "Økoskabet Home Delivery shipping method description, overwrites default "
 "description"
@@ -135,80 +143,80 @@ msgstr ""
 "Økoskabet hjemmelevering shipping metode beskrivelse. Overskriver standard "
 "beskrivelsen"
 
-#: functions/functions.php:126
+#: functions/functions.php:127
 msgid "Økoskabet"
 msgstr "Økoskabet"
 
-#: functions/functions.php:127
+#: functions/functions.php:128
 msgid "Delivery to Økoskabet"
 msgstr "Levering til Økoskabet"
 
-#: functions/functions.php:135 functions/functions.php:267
+#: functions/functions.php:136 functions/functions.php:268
 msgid "Method Title"
 msgstr "Metode Titel"
 
-#: functions/functions.php:137 functions/functions.php:269
+#: functions/functions.php:138 functions/functions.php:270
 msgid "Enter the method title"
 msgstr "Indtast metode titlen"
 
-#: functions/functions.php:142 functions/functions.php:274
+#: functions/functions.php:143 functions/functions.php:275
 msgid "Description"
 msgstr "Beskrivelse"
 
-#: functions/functions.php:144 functions/functions.php:276
+#: functions/functions.php:145 functions/functions.php:277
 msgid "Enter the Description"
 msgstr "Indtast Beskrivelsen"
 
-#: functions/functions.php:149 functions/functions.php:281
+#: functions/functions.php:150 functions/functions.php:282
 msgid "Shipping price"
 msgstr "Leveringspris"
 
-#: functions/functions.php:151 functions/functions.php:283
+#: functions/functions.php:152 functions/functions.php:284
 msgid "Add the default shipping price"
 msgstr "Indtast standard leveringspris (i DKK. F.eks. 49,50)"
 
-#: functions/functions.php:156 functions/functions.php:288
+#: functions/functions.php:157 functions/functions.php:289
 msgid "Discounted shipping order minimum"
 msgstr "Nedsat levering ordre minimum"
 
-#: functions/functions.php:158 functions/functions.php:290
+#: functions/functions.php:159 functions/functions.php:291
 msgid "Add the discounted shipping total order minimum"
 msgstr ""
 "Indtast minimum kurv størrelse for nedsat leveringspris (i DKK, f.eks. 299)"
 
-#: functions/functions.php:163 functions/functions.php:295
+#: functions/functions.php:164 functions/functions.php:296
 msgid "Discounted shipping price"
 msgstr "Nedsat leveringspris"
 
-#: functions/functions.php:165 functions/functions.php:297
+#: functions/functions.php:166 functions/functions.php:298
 msgid "Add the discounted price"
 msgstr "Indtast den nedsatte leveringspris (i DKK, f.eks. 29,50)"
 
-#: functions/functions.php:170 functions/functions.php:302
+#: functions/functions.php:171 functions/functions.php:303
 msgid "Free shipping order minimum"
 msgstr "Gratis levering ordre minimum"
 
-#: functions/functions.php:172 functions/functions.php:304
+#: functions/functions.php:173 functions/functions.php:305
 msgid "Add the free shipping total order minimum"
 msgstr "Indtast minimum kurv størrelse for gratis levering"
 
-#: functions/functions.php:205 functions/functions.php:337
+#: functions/functions.php:206 functions/functions.php:338
 msgid "Free"
 msgstr "Gratis"
 
-#: functions/functions.php:216 functions/functions.php:348
+#: functions/functions.php:217 functions/functions.php:349
 msgid "Discounted shipping rate"
 msgstr "Nedsat leveringspris"
 
-#: functions/functions.php:258
+#: functions/functions.php:259
 msgid "Home delivery"
 msgstr "Hjemmelevering"
 
-#: functions/functions.php:259
+#: functions/functions.php:260
 msgid "Delivery to your home"
 msgstr "Levering til dit hjem"
 
-#: functions/functions.php:498
+#: functions/functions.php:541
 msgid "The order could not be completed"
 msgstr "Ordren kunne ikke gennemføres"
 
