@@ -543,11 +543,13 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			throw new Exception($error_text);
 		} else {
 			$customer_note = $order->get_customer_note();
+			$customer_note ?: ''; 
+
 			$oko_order_note = 'ØKOSKABET ' . $order_delivery_date;
 			if (empty($order_shed)) {
 				$oko_order_note .=  ' Hjemmelevering';
 			} else {
-				$oko_order_note .=  ' ' . $order_shed;
+				$oko_order_note .=  ' ' . $order_shed;	
 			}
 			update_post_meta($order_id, 'billing_okoskabet_done', true);
 			$order->set_customer_note($oko_order_note . "\n" . $customer_note, 0);
