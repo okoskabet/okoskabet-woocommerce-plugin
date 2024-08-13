@@ -459,7 +459,6 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		// If being created, do some checks and then create
 		$order_submitted = get_post_meta($order_id, 'billing_okoskabet_done', true);
 		if (!empty($order_submitted)) {
-			error_log("okoskabet_woocommerce_plugin: Order already submitted");
 			return;
 		}
 		if (empty($order->get_transaction_id())) {
