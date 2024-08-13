@@ -418,7 +418,6 @@ add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
  */
 function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 {
-	error_log('hey_after_order_placed: order_id=' . $order_id . ', old_status=' . $old_status . ', new_status=' . $new_status);
 	if (empty($order)) {
 		return;
 	}
@@ -531,7 +530,6 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 
 		$response = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		error_log("Created order and got response=" . $response);
 
 		curl_close($ch);
 
