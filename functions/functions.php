@@ -462,6 +462,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			return;
 		}
 		if (empty($order->get_transaction_id())) {
+			error_log("okoskabet_woocommerce_plugin: Missing transaction id. Not submitting order to Økoskabet");
 			return;
 		}
 	
@@ -528,7 +529,6 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 
 		$response = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		error_log("Created order and got response=" . $response);
 
 		curl_close($ch);
 
@@ -553,6 +553,21 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			$order->set_customer_note($oko_order_note . "\n" . $customer_note, 0);
 
 			update_post_meta($order_id, 'billing_okoskabet_done', true);
+		}
+	}
+}
+
+add_action('woocommerce_after_checkout_validation', 'okoskabet_woocommerce_plugin_after_checkout_validation');
+
+function okoskabet_woocommerce_plugin_after_checkout_validation( $fields ) {
+	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_shed') {
+		if (empty($fields['billing_okoskabet_shed_id']) || empty($fields['billing_okoskabet_delivery_date'])) {
+			wc_add_notice( __( "Please select an Økoskab and Delivery date before submitting the order.", 'woocommerce' ), 'error' );
+		}
+	}
+	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_home') {
+		if (empty($fields['billing_okoskabet_delivery_date'])) {
+			wc_add_notice( __( "Please select a Delivery date before submitting the order.", 'woocommerce' ), 'error' );
 		}
 	}
 }
