@@ -35,29 +35,27 @@ class OkoskabetCheckout {
     const that = this;
 
     $(document).on('updated_checkout', function () {
-      that.setLocationInput('');
-      that.setDeliveryDateInput('');
-
       if (!that.deliveryOptions) {
-        that.populateShippingOptions()
+        that.populateShippingOptions();
       } else {
-        that.updateShippingOptions()
+        that.updateShippingOptions();
       }
     })
 
     $(document).on('change', 'input.shipping_method', function () {
-      that.deliveryOptions?.$destroy()
+      that.deliveryOptions?.$destroy();
       that.deliveryOptions = undefined;
+      that.clearInputs();
     });
   }
 
   private populateShippingOptions() {
-    const shippingData = this.getShippingData()
+    const shippingData = this.getShippingData();
     if (!shippingData) {
       return;
     }
 
-    const target = this.createSvelteTarget()
+    const target = this.createSvelteTarget();
     if (!target) {
       console.error("Failed to populate shipping options - no target element found");
       return;
@@ -83,14 +81,17 @@ class OkoskabetCheckout {
           this.setDeliveryDateInput(date);
         }
       }
-    })
+    });
   }
 
   private updateShippingOptions() {
-    const shippingData = this.getShippingData()
+    const shippingData = this.getShippingData();
     if (!shippingData) {
+      this.deliveryOptions?.$destroy();
+      this.clearInputs();
       return;
     }
+
 
     const { shippingMethod, address, postalCode } = shippingData;
     this.deliveryOptions?.$set({
@@ -121,14 +122,14 @@ class OkoskabetCheckout {
     const address1 = this.getFormFieldValue(ADDRESS_1_SELECTOR);
     const address2 = this.getFormFieldValue(ADDRESS_2_SELECTOR);
 
-    const address = [address1, address2].filter(val => val && val !== "").join(", ")
+    const address = [address1, address2].filter(val => val && val !== "").join(", ");
 
     if (shippingMethod && postalCode) {
       return {
         shippingMethod,
         address,
         postalCode,
-      }
+      };
     }
   }
 
@@ -165,6 +166,11 @@ class OkoskabetCheckout {
     if (element instanceof HTMLInputElement) {
       return element.value;
     }
+  }
+
+  private clearInputs() {
+    this.setLocationInput('');
+    this.setDeliveryDateInput('');
   }
 
   private setDeliveryDateInput(value: string): void {
