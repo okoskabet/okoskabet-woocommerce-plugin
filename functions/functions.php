@@ -562,12 +562,12 @@ add_action('woocommerce_after_checkout_validation', 'okoskabet_woocommerce_plugi
 function okoskabet_woocommerce_plugin_after_checkout_validation( $fields ) {
 	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_shed') {
 		if (empty($fields['billing_okoskabet_shed_id']) || empty($fields['billing_okoskabet_delivery_date'])) {
-			wc_add_notice( __( "Please select an Økoskab and Delivery date before submitting the order.", 'woocommerce' ), 'error' );
+			wc_add_notice( __( "Please select an Økoskab and Delivery date before submitting the order.", O_TEXTDOMAIN ), 'error' );
 		}
 	}
 	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_home') {
 		if (empty($fields['billing_okoskabet_delivery_date'])) {
-			wc_add_notice( __( "Please select a Delivery date before submitting the order.", 'woocommerce' ), 'error' );
+			wc_add_notice( __( "Please select a Delivery date before submitting the order.", O_TEXTDOMAIN ), 'error' );
 		}
 	}
 }
