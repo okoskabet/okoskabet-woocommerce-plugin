@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2024-08-08 13:55+0200\n"
+"PO-Revision-Date: 2024-08-13 09:58+0200\n"
 "Last-Translator: Jens\n"
 "Language-Team: \n"
 "Language: da\n"
@@ -216,9 +216,17 @@ msgstr "Hjemmelevering"
 msgid "Delivery to your home"
 msgstr "Levering til dit hjem"
 
-#: functions/functions.php:541
+#: functions/functions.php:544
 msgid "The order could not be completed"
 msgstr "Ordren kunne ikke gennemføres"
+
+#: functions/functions.php:568
+msgid "Please select an Økoskab and Delivery date before submitting the order."
+msgstr "Vælg venligst Økoskab og Leveringsdato før du godkender ordren."
+
+#: functions/functions.php:573
+msgid "Please select a Delivery date before submitting the order."
+msgstr "Vælg venligst hjemmeleveringsdato før du sender ordren."
 
 #: okoskabet-woocommerce-plugin.php:58
 msgid "\"okoskabet-woocommerce-plugin\" requires PHP 7.4 or newer."

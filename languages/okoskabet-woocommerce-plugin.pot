@@ -223,8 +223,16 @@ msgstr ""
 msgid "Delivery to your home"
 msgstr ""
 
-#: functions/functions.php:541
+#: functions/functions.php:544
 msgid "The order could not be completed"
+msgstr ""
+
+#: functions/functions.php:568
+msgid "Please select an Økoskab and Delivery date before submitting the order."
+msgstr ""
+
+#: functions/functions.php:573
+msgid "Please select a Delivery date before submitting the order."
 msgstr ""
 
 #: okoskabet-woocommerce-plugin.php:58
