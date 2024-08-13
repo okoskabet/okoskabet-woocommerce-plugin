@@ -54,7 +54,7 @@
 			const lngLat = { lng: origin.longitude, lat: origin.latitude };
 			bounds.extend(lngLat);
 		}
-		map.fitBounds(bounds);
+		map.fitBounds(bounds, { padding: 5 });
 	});
 
 	onDestroy(() => {
