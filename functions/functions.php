@@ -199,6 +199,20 @@ function hey_okoskabet_shipping_method_shed_init()
 
 				$myCost = $this->cost;
 
+				$applied_coupons = WC()->cart->get_applied_coupons();
+
+				foreach ($applied_coupons as $coupon_code) {
+					$coupon = new WC_Coupon($coupon_code);
+					if ($coupon->get_free_shipping()) {
+						$this->add_rate(array(
+							'id'    => $this->id,
+							'label' => $this->title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')',
+							'cost'  => 0,
+						));
+						return;
+					}
+				}
+
 				if (!empty($this->costFreeLimit)) {
 					if ($total >= $this->costFreeLimit) {
 						$this->add_rate(array(
@@ -331,6 +345,20 @@ function hey_okoskabet_shipping_method_home_init()
 
 				$myCost = $this->cost;
 
+				$applied_coupons = WC()->cart->get_applied_coupons();
+
+				foreach ($applied_coupons as $coupon_code) {
+					$coupon = new WC_Coupon($coupon_code);
+					if ($coupon->get_free_shipping()) {
+						$this->add_rate(array(
+							'id'    => $this->id,
+							'label' => $this->title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')',
+							'cost'  => 0,
+						));
+						return;
+					}
+				}
+
 				if (!empty($this->costFreeLimit)) {
 					if ($total >= $this->costFreeLimit) {
 						$this->add_rate(array(
@@ -394,15 +422,13 @@ function custom_override_checkout_fields($fields)
 add_action('woocommerce_admin_order_data_after_shipping_address', 'my_custom_checkout_field_display_admin_order_meta', 10, 1);
 function my_custom_checkout_field_display_admin_order_meta($order)
 {
-	$shed_id=$order->get_meta('_billing_okoskabet_shed_id', true);
-	$delivery_date=$order->get_meta('_billing_okoskabet_delivery_date', true);
+	$shed_id = $order->get_meta('_billing_okoskabet_shed_id', true);
+	$delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 	echo '<pre>';
-	if (!empty($shed_id))
-	{
+	if (!empty($shed_id)) {
 		echo 'Økoskabet SHED ID' . ': ' . esc_html($shed_id) . "\n";
 	}
-	if (!empty($delivery_date))
-	{
+	if (!empty($delivery_date)) {
 		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date) . '';
 	}
 	echo '</pre>';
@@ -421,10 +447,10 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 	if (empty($order)) {
 		return;
 	}
-	
+
 	$settings = get_option(O_TEXTDOMAIN . '-settings');
 	$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
-	
+
 	if (empty($settings['_api_key'])) {
 		error_log("okoskabet_woocommerce_plugin: API key not set");
 		return;
@@ -432,7 +458,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 
 	// First process if the order is getting cancelled
 	if ($new_status == 'cancelled') {
-		
+
 		$url = $api_url . '/api/v1/shipments/' . $order_id;
 		$ch = curl_init($url);
 
@@ -443,7 +469,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			'Content-Length: 0'
 		]);
 
-		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE"); 
+		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
 
 		$response = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -465,7 +491,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			error_log("okoskabet_woocommerce_plugin: Missing transaction id. Not submitting order to Økoskabet");
 			return;
 		}
-	
+
 		$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 		$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 
@@ -543,12 +569,12 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			throw new Exception($error_text);
 		} else {
 			$customer_note = $order->get_customer_note();
-			$customer_note ?: ''; 
+			$customer_note ?: '';
 			$oko_order_note = 'ØKOSKABET ' . $order_delivery_date;
 			if (empty($order_shed)) {
 				$oko_order_note .=  ' Hjemmelevering';
 			} else {
-				$oko_order_note .=  ' ' . $order_shed;	
+				$oko_order_note .=  ' ' . $order_shed;
 			}
 			$order->set_customer_note($oko_order_note . "\n" . $customer_note, 0);
 
@@ -559,15 +585,16 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 
 add_action('woocommerce_after_checkout_validation', 'okoskabet_woocommerce_plugin_after_checkout_validation');
 
-function okoskabet_woocommerce_plugin_after_checkout_validation( $fields ) {
+function okoskabet_woocommerce_plugin_after_checkout_validation($fields)
+{
 	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_shed') {
 		if (empty($fields['billing_okoskabet_shed_id']) || empty($fields['billing_okoskabet_delivery_date'])) {
-			wc_add_notice( __( "Please select an Økoskab and Delivery date before submitting the order.", O_TEXTDOMAIN ), 'error' );
+			wc_add_notice(__("Please select an Økoskab and Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
 	}
 	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_home') {
 		if (empty($fields['billing_okoskabet_delivery_date'])) {
-			wc_add_notice( __( "Please select a Delivery date before submitting the order.", O_TEXTDOMAIN ), 'error' );
+			wc_add_notice(__("Please select a Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
 	}
 }
