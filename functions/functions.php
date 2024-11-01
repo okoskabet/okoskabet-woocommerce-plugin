@@ -490,7 +490,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			return;
 		}
 
-		if (empty($order->get_transaction_id()) && !empty($order->get_total())) {
+		if (empty($order->get_transaction_id()) && !empty($order->get_total()) && $order->get_total() > 0) {
 			error_log("okoskabet_woocommerce_plugin: Missing transaction id. Not submitting order to Økoskabet");
 			return;
 		}
@@ -505,7 +505,6 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		}
 
 		$url = $api_url . '/api/v1/shipments/';
-
 
 		$data = !empty($order_shed) ? [
 			'locale' => get_locale(),
