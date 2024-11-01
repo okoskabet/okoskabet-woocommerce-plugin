@@ -418,9 +418,13 @@ function custom_override_checkout_fields($fields)
 add_action('woocommerce_admin_order_data_after_shipping_address', 'my_custom_checkout_field_display_admin_order_meta', 10, 1);
 function my_custom_checkout_field_display_admin_order_meta($order)
 {
+	$order_done = $order->get_meta('billing_okoskabet_done', true);
 	$shed_id = $order->get_meta('_billing_okoskabet_shed_id', true);
 	$delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 	echo '<pre>';
+	if (!empty($order_done)) {
+		echo 'Økoskabet Done' . ': ' . esc_html($order_done) . "\n";
+	}
 	if (!empty($shed_id)) {
 		echo 'Økoskabet SHED ID' . ': ' . esc_html($shed_id) . "\n";
 	}
