@@ -197,8 +197,6 @@ function hey_okoskabet_shipping_method_shed_init()
 					$total += $values['line_total'];
 				}
 
-				$myCost = $this->cost;
-
 				$applied_coupons = WC()->cart->get_applied_coupons();
 
 				foreach ($applied_coupons as $coupon_code) {
@@ -343,8 +341,6 @@ function hey_okoskabet_shipping_method_home_init()
 					$total += $values['line_total'];
 				}
 
-				$myCost = $this->cost;
-
 				$applied_coupons = WC()->cart->get_applied_coupons();
 
 				foreach ($applied_coupons as $coupon_code) {
@@ -448,6 +444,8 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		return;
 	}
 
+	$order_number = $order->get_order_number();
+
 	$settings = get_option(O_TEXTDOMAIN . '-settings');
 	$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
 
@@ -459,7 +457,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 	// First process if the order is getting cancelled
 	if ($new_status == 'cancelled') {
 
-		$url = $api_url . '/api/v1/shipments/' . $order_id;
+		$url = $api_url . '/api/v1/shipments/' . $order_number;
 		$ch = curl_init($url);
 
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -477,7 +475,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		curl_close($ch);
 
 		if ($http_code != 204) {
-			error_log('okoskabet_woocommerce_plugin: Error trying to delete order ' . $order_id . ', response(' . $http_code . '): ' . $response);
+			error_log('okoskabet_woocommerce_plugin: Error trying to delete order ' . $order_number . ', response(' . $http_code . '): ' . $response);
 		}
 	}
 
@@ -492,6 +490,8 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			return;
 		}
 
+		$order_number = $order->get_order_number();
+
 		$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 		$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 
@@ -501,10 +501,11 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 
 		$url = $api_url . '/api/v1/shipments/';
 
+
 		$data = !empty($order_shed) ? [
 			'locale' => get_locale(),
 			'allow_invalid' => true,
-			'shipment_reference' => (string) $order_id,
+			'shipment_reference' => (string) $order_number,
 			'customer' => [
 				'first_name' => $order->get_billing_first_name(),
 				'last_name' => $order->get_billing_last_name(),
@@ -520,7 +521,7 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		] : [
 			'locale' => get_locale(),
 			'allow_invalid' => true,
-			'shipment_reference' => (string) $order_id,
+			'shipment_reference' => (string) $order_number,
 			'customer' => [
 				'first_name' => $order->get_billing_first_name(),
 				'last_name' => $order->get_billing_last_name(),
