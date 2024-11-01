@@ -485,7 +485,8 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		if (!empty($order_submitted)) {
 			return;
 		}
-		if (empty($order->get_transaction_id())) {
+
+		if (empty($order->get_transaction_id() && !empty($order->get_total()))) {
 			error_log("okoskabet_woocommerce_plugin: Missing transaction id. Not submitting order to Økoskabet");
 			return;
 		}
