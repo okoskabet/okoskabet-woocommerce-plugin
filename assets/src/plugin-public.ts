@@ -41,11 +41,13 @@ class OkoskabetCheckout {
 		const that = this;
 
 		$( document ).on( 'updated_checkout', function () {
-			if ( ! that.deliveryOptions ) {
-				that.populateShippingOptions();
-			} else {
-				that.updateShippingOptions();
-			}
+			setTimeout( () => {
+				if ( ! that.deliveryOptions ) {
+					that.populateShippingOptions();
+				} else {
+					that.updateShippingOptions();
+				}
+			}, 200 );
 		} );
 
 		$( document ).on( 'change', 'input.shipping_method', function () {
@@ -212,19 +214,18 @@ class OkoskabetCheckout {
 /**
  * @function onload The window.onload function is called when the page is loaded
  */
-window.onload = () => {
+
+window.addEventListener( 'DOMContentLoaded', function () {
 	window.mapboxgl.accessToken =
 		'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';
 
-	jQuery( function ( $ ) {
-		$( document ).ready( function () {
-			const {
-				locale: locale,
-				displayOption: displayOption,
-				descriptions: descriptions,
-			} = ( window as any )._okoskabet_checkout;
+	const {
+		locale: locale,
+		displayOption: displayOption,
+		descriptions: descriptions,
+	} = ( window as any )._okoskabet_checkout;
 
-			new OkoskabetCheckout( locale, displayOption, descriptions );
-		} );
-	} );
-};
+	new OkoskabetCheckout( locale, displayOption, descriptions );
+} );
+
+window.onload = () => {};
