@@ -55,7 +55,8 @@
         "svelte-loader": "^3.2.3",
         "svelte-preprocess": "^6.0.2",
         "typescript": "^5.0.4",
-        "typescript-svelte-plugin": "^0.3.39"
+        "typescript-svelte-plugin": "^0.3.39",
+        "webpack-cli": "^5.1.4"
     },
     "engines": {
         "node": ">=14.0.0",
