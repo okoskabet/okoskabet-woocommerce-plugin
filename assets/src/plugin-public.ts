@@ -40,7 +40,47 @@ class OkoskabetCheckout {
 		const $ = jQuery;
 		const that = this;
 
+		$( document ).on( 'init_checkout', function () {
+			setTimeout( () => {
+				if ( ! that.deliveryOptions ) {
+					that.populateShippingOptions();
+				} else {
+					that.updateShippingOptions();
+				}
+			}, 200 );
+		} );
+
 		$( document ).on( 'updated_checkout', function () {
+			setTimeout( () => {
+				if ( ! that.deliveryOptions ) {
+					that.populateShippingOptions();
+				} else {
+					that.updateShippingOptions();
+				}
+			}, 200 );
+		} );
+
+		$( document ).on( 'update_checkout', function () {
+			setTimeout( () => {
+				if ( ! that.deliveryOptions ) {
+					that.populateShippingOptions();
+				} else {
+					that.updateShippingOptions();
+				}
+			}, 200 );
+		} );
+
+		$( document ).on( 'applied_coupon_in_checkout', function () {
+			setTimeout( () => {
+				if ( ! that.deliveryOptions ) {
+					that.populateShippingOptions();
+				} else {
+					that.updateShippingOptions();
+				}
+			}, 200 );
+		} );
+
+		$( document ).on( 'removed_coupon_in_checkout', function () {
 			setTimeout( () => {
 				if ( ! that.deliveryOptions ) {
 					that.populateShippingOptions();
