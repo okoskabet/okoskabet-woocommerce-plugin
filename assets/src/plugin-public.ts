@@ -91,6 +91,7 @@ class OkoskabetCheckout {
 
 		const target = this.createSvelteTarget();
 		if ( ! target ) {
+			// eslint-disable-next-line no-console
 			console.error(
 				'Failed to populate shipping options - no target element found'
 			);
@@ -102,9 +103,9 @@ class OkoskabetCheckout {
 			target,
 			props: {
 				displayMode: this.displayOption,
-				shippingMethod: shippingMethod,
-				address: address,
-				postalCode: postalCode,
+				shippingMethod,
+				address,
+				postalCode,
 				locale: this.locale,
 				strings: {
 					shedDeliveryDescription: this.shedDeliveryDescription,
@@ -180,13 +181,13 @@ class OkoskabetCheckout {
 		const selectedElement = document.querySelector(
 			SELECTED_SHIPPING_METHOD_SELECTOR
 		);
+		if ( selectedElement instanceof HTMLInputElement ) {
+			return selectedElement;
+		}
 		const soloElement = document.querySelector(
 			SINGLE_SHIPPING_METHOD_SELECTOR
 		);
-
-		if ( selectedElement instanceof HTMLInputElement ) {
-			return selectedElement;
-		} else if ( soloElement instanceof HTMLInputElement ) {
+		if ( soloElement instanceof HTMLInputElement ) {
 			return soloElement;
 		}
 	}
@@ -209,9 +210,6 @@ class OkoskabetCheckout {
 
 			case 'hey_okoskabet_shipping_shed':
 				return 'shed-delivery';
-
-			default:
-				return;
 		}
 	}
 
@@ -241,9 +239,6 @@ class OkoskabetCheckout {
  */
 
 window.addEventListener( 'DOMContentLoaded', function () {
-	window.mapboxgl.accessToken =
-		'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';
-
 	const {
 		locale: locale,
 		displayOption: displayOption,
@@ -251,6 +246,9 @@ window.addEventListener( 'DOMContentLoaded', function () {
 	} = ( window as any )._okoskabet_checkout;
 
 	new OkoskabetCheckout( locale, displayOption, descriptions );
+
+	window.mapboxgl.accessToken =
+		'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';
 } );
 
 window.onload = () => {};
