@@ -1,0 +1,79 @@
+{
+    "name": "wpbp/wordpress-plugin-boilerplate-powered",
+    "description": "Wordpress Plugin Boilerplate with steroids!",
+    "license": "GPL-3.0-or-later",
+    "type": "wordpress-plugin",
+    "authors": [
+        {
+            "name": "Kim Frederiksen",
+            "email": "kim@heyrobot.com",
+            "homepage": "https://author-url.test"
+        }
+    ],
+    "homepage": "https://github.com/WPBP/WordPress-Plugin-Boilerplate-Powered",
+    "require": {
+        "php": ">=7.4",
+        "cmb2/cmb2": "~2.9.0",
+        "inpsyde/wp-context": "~1.3.0",
+        "wpbp/cronplus": "~1.0.0",
+        "yahnis-elsts/plugin-update-checker": "^4.9"
+    },
+    "require-dev": {
+        "codeatcode/codeatcs": "^1.0",
+        "codeception/codeception": "~4.2.0",
+        "codeception/module-asserts": "^1.0",
+        "codeception/module-cli": "^1.0",
+        "codeception/module-db": "^1.0",
+        "codeception/module-filesystem": "^1.0",
+        "codeception/module-phpbrowser": "^1.0",
+        "codeception/module-rest": "^1.2",
+        "codeception/module-webdriver": "^1.0",
+        "codeception/util-universalframework": "^1.0",
+        "dealerdirect/phpcodesniffer-composer-installer": "1.0.0",
+        "ergebnis/composer-normalize": "^2.6",
+        "lucatume/function-mocker": "^1.0",
+        "lucatume/wp-browser": "^3.1",
+        "phpro/grumphp": "^1.13",
+        "phpunit/phpunit": "^9.2",
+        "szepeviktor/phpstan-wordpress": "^1.1.6"
+    },
+    "repositories": [
+        {
+            "type": "git",
+            "url": "https://github.com/ayecode/wp-super-duper"
+        }
+    ],
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "okoskabet_woocommerce_plugin\\Ajax\\": "ajax/",
+            "okoskabet_woocommerce_plugin\\Backend\\": "backend/",
+            "okoskabet_woocommerce_plugin\\Cli\\": "cli/",
+            "okoskabet_woocommerce_plugin\\Engine\\": "engine/",
+            "okoskabet_woocommerce_plugin\\Frontend\\": "frontend/",
+            "okoskabet_woocommerce_plugin\\Integrations\\": "integrations/",
+            "okoskabet_woocommerce_plugin\\Rest\\": "rest/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "cweagans/composer-patches": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "ergebnis/composer-normalize": true,
+            "phpro/grumphp": true
+        }
+    },
+    "extra": {
+        "installer-paths": {
+            "vendor/{$name}/": [
+                "cmb2/cmb2"
+            ]
+        },
+        "patches": {
+            "ayecode/wp-super-duper": {
+                "Fix v2": "https://patch-diff.githubusercontent.com/raw/AyeCode/wp-super-duper/pull/25.patch"
+            }
+        }
+    }
+}
