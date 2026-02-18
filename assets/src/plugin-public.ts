@@ -99,6 +99,11 @@ class OkoskabetCheckout {
 		}
 
 		const { shippingMethod, address, postalCode } = shippingData;
+
+		if ( shippingMethod === 'home-delivery' ) {
+			this.setLocationInput( '' );
+		}
+
 		this.deliveryOptions = new App( {
 			target,
 			props: {

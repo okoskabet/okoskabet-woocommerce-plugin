@@ -504,6 +504,18 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 			return;
 		}
 
+		$is_shed_delivery = false;
+		foreach ($order->get_shipping_methods() as $shipping_method) {
+			if ($shipping_method->get_method_id() === 'hey_okoskabet_shipping_shed') {
+				$is_shed_delivery = true;
+				break;
+			}
+		}
+
+		if (!$is_shed_delivery) {
+			$order_shed = '';
+		}
+
 		$url = $api_url . '/api/v1/shipments/';
 
 		$data = !empty($order_shed) ? [
@@ -601,5 +613,6 @@ function okoskabet_woocommerce_plugin_after_checkout_validation($fields)
 		if (empty($fields['billing_okoskabet_delivery_date'])) {
 			wc_add_notice(__("Please select a Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
+		$_POST['billing_okoskabet_shed_id'] = '';
 	}
 }
