@@ -24,8 +24,10 @@ function o_get_settings()
 
 function o_check_configuration($value)
 {
-	$shipping_methods = !empty($shipping_methods) ? $shipping_methods : false;
-	if (empty($shipping_methods)) {
+	$transient_key = O_TEXTDOMAIN . '_shipping_methods';
+	$shipping_methods = get_transient($transient_key);
+
+	if ($shipping_methods === false) {
 		$settings = o_get_settings();
 
 		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
@@ -38,7 +40,7 @@ function o_check_configuration($value)
 				CURLOPT_RETURNTRANSFER => true,
 				CURLOPT_ENCODING => '',
 				CURLOPT_MAXREDIRS => 10,
-				CURLOPT_TIMEOUT => 0,
+				CURLOPT_TIMEOUT => 10,
 				CURLOPT_FOLLOWLOCATION => true,
 				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
 				CURLOPT_CUSTOMREQUEST => 'GET',
@@ -48,17 +50,26 @@ function o_check_configuration($value)
 			));
 
 			$response = curl_exec($curl);
-
-			$oko_configuration = json_decode($response, true);
-
-			$shipping_methods = [];
-			foreach ($oko_configuration['shipping_methods'] as $method) {
-				$shipping_methods[$method['method_code']] = $method;
-			}
-
+			$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 			curl_close($curl);
+
+			if ($http_code === 200 && !empty($response)) {
+				$oko_configuration = json_decode($response, true);
+
+				$shipping_methods = [];
+				if (!empty($oko_configuration['shipping_methods'])) {
+					foreach ($oko_configuration['shipping_methods'] as $method) {
+						$shipping_methods[$method['method_code']] = $method;
+					}
+				}
+
+				set_transient($transient_key, $shipping_methods, 5 * MINUTE_IN_SECONDS);
+			} else {
+				return false;
+			}
 		}
 	}
+
 	if (empty($shipping_methods[$value])) return false;
 	return true;
 }
