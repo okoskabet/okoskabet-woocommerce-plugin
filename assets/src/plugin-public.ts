@@ -143,13 +143,18 @@ class OkoskabetCheckout {
 	}
 
 	private createSvelteTarget(): HTMLElement | null {
-		const parentElement =
-			this.getSelectedShippingMethodElement()?.parentElement;
+		const inputElement = this.getSelectedShippingMethodElement();
+		if ( ! inputElement ) {
+			return null;
+		}
 
-		if ( parentElement ) {
+		const shippingMethodsList = inputElement.closest( 'ul' );
+		const insertAfter = shippingMethodsList || inputElement.parentElement;
+
+		if ( insertAfter ) {
 			const target = document.createElement( 'div' );
 			target.id = 'okoskabet-shipping';
-			parentElement.after( target );
+			insertAfter.after( target );
 
 			return target;
 		}
