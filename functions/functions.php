@@ -16,13 +16,12 @@
  * @since 1.0.0
  * @return array
  */
-
-function o_get_settings()
+function o_get_settings(): array
 {
-	return apply_filters('o_get_settings', get_option(O_TEXTDOMAIN . '-settings'));
+	return (array) apply_filters('o_get_settings', get_option(O_TEXTDOMAIN . '-settings', array()));
 }
 
-function o_check_configuration($value)
+function o_check_configuration(string $value): bool
 {
 	$transient_key = O_TEXTDOMAIN . '_shipping_methods';
 	$shipping_methods = get_transient($transient_key);
@@ -33,28 +32,22 @@ function o_check_configuration($value)
 		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
 
 		if (!empty($settings['_api_key'])) {
-			$curl = curl_init();
-
-			curl_setopt_array($curl, array(
-				CURLOPT_URL => $api_url . '/api/v1/configuration',
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_ENCODING => '',
-				CURLOPT_MAXREDIRS => 10,
-				CURLOPT_TIMEOUT => 10,
-				CURLOPT_FOLLOWLOCATION => true,
-				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-				CURLOPT_CUSTOMREQUEST => 'GET',
-				CURLOPT_HTTPHEADER => array(
-					'authorization: ' . $settings['_api_key']
+			$response = wp_remote_get($api_url . '/api/v1/configuration', array(
+				'timeout' => 10,
+				'headers' => array(
+					'Authorization' => $settings['_api_key'],
 				),
 			));
 
-			$response = curl_exec($curl);
-			$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-			curl_close($curl);
+			if (is_wp_error($response)) {
+				return false;
+			}
 
-			if ($http_code === 200 && !empty($response)) {
-				$oko_configuration = json_decode($response, true);
+			$http_code = wp_remote_retrieve_response_code($response);
+			$body = wp_remote_retrieve_body($response);
+
+			if ($http_code === 200 && !empty($body)) {
+				$oko_configuration = json_decode($body, true);
 
 				$shipping_methods = [];
 				if (!empty($oko_configuration['shipping_methods'])) {
@@ -75,23 +68,21 @@ function o_check_configuration($value)
 }
 
 
-
-
-function enqueue_checkout_scripts()
+function enqueue_checkout_scripts(): void
 {
-	if (is_checkout()) {  // Check if it's the WooCommerce checkout page
-		wp_enqueue_script('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js', array(), null, true);
-		wp_enqueue_style('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
+	if (is_checkout()) {
+		wp_enqueue_script('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js', array(), '3.3.0', true);
+		wp_enqueue_style('mapbox-gl-css', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
 
-		wp_enqueue_script('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.js', array(), null, true);
-		wp_enqueue_style('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.css', array(), null);
+		wp_enqueue_script('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.js', array(), O_VERSION, true);
+		wp_enqueue_style('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.css', array(), O_VERSION);
 	}
 }
 add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
 
 
 add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout', 10);
-function custom_content_for_custom_shipping_checkout()
+function custom_content_for_custom_shipping_checkout(): void
 {
 	$settings = o_get_settings();
 	if (empty($settings['_api_key'])) return;
@@ -99,44 +90,45 @@ function custom_content_for_custom_shipping_checkout()
 	$local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
 ?>
 	<script type="text/javascript">
-		window._okoskabet_checkout = {
-			locale: '<?php echo get_locale() ?>',
-			displayOption: '<?php echo $settings['_display_option'] ?>',
-			descriptions: {
-				homeDelivery: '<?php echo $local_description ?>',
-				shedDelivery: '<?php echo $shed_description ?>',
-			},
-		}
+		window._okoskabet_checkout = <?php echo wp_json_encode(array(
+			'locale'        => get_locale(),
+			'displayOption' => $settings['_display_option'] ?? '',
+			'descriptions'  => array(
+				'homeDelivery' => $local_description,
+				'shedDelivery' => $shed_description,
+			),
+		)); ?>;
 	</script>
 <?php
 }
 
 
 add_filter('woocommerce_shipping_methods', 'hey_register_okoskabet_shipping_shed_method');
-function hey_register_okoskabet_shipping_shed_method($methods)
+function hey_register_okoskabet_shipping_shed_method(array $methods): array
 {
 	if (empty(o_check_configuration('shed'))) return $methods;
-	// $method contains available shipping methods
 	$methods['hey_okoskabet_shipping_shed'] = 'WC_Hey_Okoskabet_Shipping_Method_Shed';
 	return $methods;
 }
 
-function hey_okoskabet_shipping_method_shed_init()
+function hey_okoskabet_shipping_method_shed_init(): void
 {
 	if (empty(o_check_configuration('shed'))) return;
 
 	if (!class_exists('WC_Hey_Okoskabet_Shipping_Method_Shed')) {
 		class WC_Hey_Okoskabet_Shipping_Method_Shed extends WC_Shipping_Method
 		{
-			/**
-			 * Constructor. The instance ID is passed to this.
-			 */
+			protected string $cost_value = '0';
+			protected string $cost_discount = '0';
+			protected string $cost_discount_limit = '0';
+			protected string $cost_free_limit = '0';
+
 			public function __construct($instance_id = 0)
 			{
 				$this->id                    = 'hey_okoskabet_shipping_shed';
 				$this->instance_id           = absint($instance_id);
-				$this->method_title       = __('Økoskabet', O_TEXTDOMAIN); // Title shown in admin
-				$this->method_description = __('Delivery to Økoskabet', O_TEXTDOMAIN); // Description shown in admin
+				$this->method_title       = __('Økoskabet', O_TEXTDOMAIN);
+				$this->method_description = __('Delivery to Økoskabet', O_TEXTDOMAIN);
 				$this->supports              = array(
 					'shipping-zones',
 					'instance-settings',
@@ -147,64 +139,61 @@ function hey_okoskabet_shipping_method_shed_init()
 						'title'       => esc_html__('Method Title', O_TEXTDOMAIN),
 						'type'        => 'text',
 						'description' => esc_html__('Enter the method title', O_TEXTDOMAIN),
-						'default'     => esc_html__($this->method_title, O_TEXTDOMAIN),
+						'default'     => $this->method_title,
 						'desc_tip'    => true,
 					),
 					'description' => array(
 						'title'       => esc_html__('Description', O_TEXTDOMAIN),
 						'type'        => 'textarea',
 						'description' => esc_html__('Enter the Description', O_TEXTDOMAIN),
-						'default'     => esc_html__('', O_TEXTDOMAIN),
+						'default'     => '',
 						'desc_tip'    => true
 					),
 					'cost' => array(
 						'title'       => esc_html__('Shipping price', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the default shipping price', O_TEXTDOMAIN),
-						'default'     => esc_html__('49', O_TEXTDOMAIN),
+						'default'     => '49',
 						'desc_tip'    => true
 					),
 					'costDiscountLimit' => array(
 						'title'       => esc_html__('Discounted shipping order minimum', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the discounted shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => esc_html__('0', O_TEXTDOMAIN),
+						'default'     => '0',
 						'desc_tip'    => true
 					),
 					'costDiscount' => array(
 						'title'       => esc_html__('Discounted shipping price', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the discounted price', O_TEXTDOMAIN),
-						'default'     => esc_html__('0', O_TEXTDOMAIN),
+						'default'     => '0',
 						'desc_tip'    => true
 					),
 					'costFreeLimit' => array(
 						'title'       => esc_html__('Free shipping order minimum', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the free shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => esc_html__('0', O_TEXTDOMAIN),
+						'default'     => '0',
 						'desc_tip'    => true
 					),
 				);
 
-				$this->cost              = $this->get_option('cost');
-				$this->costDiscount      = $this->get_option('costDiscount');
-				$this->costDiscountLimit = $this->get_option('costDiscountLimit');
-				$this->costFreeLimit     = $this->get_option('costFreeLimit');
-				$this->title             = rtrim($this->get_option('title'), ': ');
+				$this->cost_value          = $this->get_option('cost');
+				$this->cost_discount       = $this->get_option('costDiscount');
+				$this->cost_discount_limit = $this->get_option('costDiscountLimit');
+				$this->cost_free_limit     = $this->get_option('costFreeLimit');
+				$this->title               = rtrim($this->get_option('title'), ': ');
 				add_action('woocommerce_update_options_shipping_' . $this->id, array($this, 'process_admin_options'));
 			}
 
 			/**
-			 * calculate_shipping function.
 			 * @param array $package (default: array())
 			 */
-			public function calculate_shipping($package = array())
+			public function calculate_shipping($package = array()): void
 			{
 				$total = 0;
-
-				// Calculate the total cost of items in the package
-				foreach ($package['contents'] as $item_id => $values) {
+				foreach ($package['contents'] as $values) {
 					$total += $values['line_total'];
 				}
 
@@ -222,32 +211,28 @@ function hey_okoskabet_shipping_method_shed_init()
 					}
 				}
 
-				if (!empty($this->costFreeLimit)) {
-					if ($total >= $this->costFreeLimit) {
-						$this->add_rate(array(
-							'id'    => $this->id,
-							'label' => $this->title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')',
-							'cost'  => 0,
-						));
-						return;
-					}
+				if (!empty($this->cost_free_limit) && $total >= (float) $this->cost_free_limit) {
+					$this->add_rate(array(
+						'id'    => $this->id,
+						'label' => $this->title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')',
+						'cost'  => 0,
+					));
+					return;
 				}
 
-				if (!empty($this->costDiscountLimit)) {
-					if ($total >= $this->costDiscountLimit) {
-						$this->add_rate(array(
-							'id'    => $this->id,
-							'label' => $this->title . ' (' . esc_html__('Discounted shipping rate', O_TEXTDOMAIN) . ')',
-							'cost'  => $this->costDiscount,
-						));
-						return;
-					}
+				if (!empty($this->cost_discount_limit) && $total >= (float) $this->cost_discount_limit) {
+					$this->add_rate(array(
+						'id'    => $this->id,
+						'label' => $this->title . ' (' . esc_html__('Discounted shipping rate', O_TEXTDOMAIN) . ')',
+						'cost'  => $this->cost_discount,
+					));
+					return;
 				}
 
 				$this->add_rate(array(
 					'id'    => $this->id,
 					'label' => $this->title,
-					'cost'  => $this->cost,
+					'cost'  => $this->cost_value,
 				));
 			}
 		}
@@ -255,32 +240,32 @@ function hey_okoskabet_shipping_method_shed_init()
 }
 add_action('woocommerce_shipping_init', 'hey_okoskabet_shipping_method_shed_init');
 
-// Here comes home delivery classes
 add_filter('woocommerce_shipping_methods', 'hey_register_okoskabet_shipping_home_method');
-function hey_register_okoskabet_shipping_home_method($methods)
+function hey_register_okoskabet_shipping_home_method(array $methods): array
 {
 	if (empty(o_check_configuration('home_delivery'))) return $methods;
-	// $method contains available shipping methods
 	$methods['hey_okoskabet_shipping_home'] = 'WC_Hey_Okoskabet_Shipping_Method_Home';
 	return $methods;
 }
 
-function hey_okoskabet_shipping_method_home_init()
+function hey_okoskabet_shipping_method_home_init(): void
 {
 	if (empty(o_check_configuration('home_delivery'))) return;
 
 	if (!class_exists('WC_Hey_Okoskabet_Shipping_Method_Home')) {
 		class WC_Hey_Okoskabet_Shipping_Method_Home extends WC_Shipping_Method
 		{
-			/**
-			 * Constructor. The instance ID is passed to this.
-			 */
+			protected string $cost_value = '0';
+			protected string $cost_discount = '0';
+			protected string $cost_discount_limit = '0';
+			protected string $cost_free_limit = '0';
+
 			public function __construct($instance_id = 0)
 			{
 				$this->id                    = 'hey_okoskabet_shipping_home';
 				$this->instance_id           = absint($instance_id);
-				$this->method_title       = __('Home delivery', O_TEXTDOMAIN); // Title shown in admin
-				$this->method_description = __('Delivery to your home', O_TEXTDOMAIN); // Description shown in admin
+				$this->method_title       = __('Home delivery', O_TEXTDOMAIN);
+				$this->method_description = __('Delivery to your home', O_TEXTDOMAIN);
 				$this->supports              = array(
 					'shipping-zones',
 					'instance-settings',
@@ -291,64 +276,61 @@ function hey_okoskabet_shipping_method_home_init()
 						'title'       => esc_html__('Method Title', O_TEXTDOMAIN),
 						'type'        => 'text',
 						'description' => esc_html__('Enter the method title', O_TEXTDOMAIN),
-						'default'     => esc_html__($this->method_title, O_TEXTDOMAIN),
+						'default'     => $this->method_title,
 						'desc_tip'    => true,
 					),
 					'description' => array(
 						'title'       => esc_html__('Description', O_TEXTDOMAIN),
 						'type'        => 'textarea',
 						'description' => esc_html__('Enter the Description', O_TEXTDOMAIN),
-						'default'     => esc_html__('', O_TEXTDOMAIN),
+						'default'     => '',
 						'desc_tip'    => true
 					),
 					'cost' => array(
 						'title'       => esc_html__('Shipping price', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the default shipping price', O_TEXTDOMAIN),
-						'default'     => esc_html__('49', O_TEXTDOMAIN),
+						'default'     => '49',
 						'desc_tip'    => true
 					),
 					'costDiscountLimit' => array(
 						'title'       => esc_html__('Discounted shipping order minimum', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the discounted shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => esc_html__('0', O_TEXTDOMAIN),
+						'default'     => '0',
 						'desc_tip'    => true
 					),
 					'costDiscount' => array(
 						'title'       => esc_html__('Discounted shipping price', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the discounted price', O_TEXTDOMAIN),
-						'default'     => esc_html__('0', O_TEXTDOMAIN),
+						'default'     => '0',
 						'desc_tip'    => true
 					),
 					'costFreeLimit' => array(
 						'title'       => esc_html__('Free shipping order minimum', O_TEXTDOMAIN),
 						'type'        => 'number',
 						'description' => esc_html__('Add the free shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => esc_html__('0', O_TEXTDOMAIN),
+						'default'     => '0',
 						'desc_tip'    => true
 					),
 				);
 
-				$this->cost              = $this->get_option('cost');
-				$this->costDiscount      = $this->get_option('costDiscount');
-				$this->costDiscountLimit = $this->get_option('costDiscountLimit');
-				$this->costFreeLimit     = $this->get_option('costFreeLimit');
-				$this->title             = rtrim($this->get_option('title'), ': ');
+				$this->cost_value          = $this->get_option('cost');
+				$this->cost_discount       = $this->get_option('costDiscount');
+				$this->cost_discount_limit = $this->get_option('costDiscountLimit');
+				$this->cost_free_limit     = $this->get_option('costFreeLimit');
+				$this->title               = rtrim($this->get_option('title'), ': ');
 				add_action('woocommerce_update_options_shipping_' . $this->id, array($this, 'process_admin_options'));
 			}
 
 			/**
-			 * calculate_shipping function.
 			 * @param array $package (default: array())
 			 */
-			public function calculate_shipping($package = array())
+			public function calculate_shipping($package = array()): void
 			{
 				$total = 0;
-
-				// Calculate the total cost of items in the package
-				foreach ($package['contents'] as $item_id => $values) {
+				foreach ($package['contents'] as $values) {
 					$total += $values['line_total'];
 				}
 
@@ -366,32 +348,28 @@ function hey_okoskabet_shipping_method_home_init()
 					}
 				}
 
-				if (!empty($this->costFreeLimit)) {
-					if ($total >= $this->costFreeLimit) {
-						$this->add_rate(array(
-							'id'    => $this->id,
-							'label' => $this->title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')',
-							'cost'  => 0,
-						));
-						return;
-					}
+				if (!empty($this->cost_free_limit) && $total >= (float) $this->cost_free_limit) {
+					$this->add_rate(array(
+						'id'    => $this->id,
+						'label' => $this->title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')',
+						'cost'  => 0,
+					));
+					return;
 				}
 
-				if (!empty($this->costDiscountLimit)) {
-					if ($total >= $this->costDiscountLimit) {
-						$this->add_rate(array(
-							'id'    => $this->id,
-							'label' => $this->title . ' (' . esc_html__('Discounted shipping rate', O_TEXTDOMAIN) . ')',
-							'cost'  => $this->costDiscount,
-						));
-						return;
-					}
+				if (!empty($this->cost_discount_limit) && $total >= (float) $this->cost_discount_limit) {
+					$this->add_rate(array(
+						'id'    => $this->id,
+						'label' => $this->title . ' (' . esc_html__('Discounted shipping rate', O_TEXTDOMAIN) . ')',
+						'cost'  => $this->cost_discount,
+					));
+					return;
 				}
 
 				$this->add_rate(array(
 					'id'    => $this->id,
 					'label' => $this->title,
-					'cost'  => $this->cost,
+					'cost'  => $this->cost_value,
 				));
 			}
 		}
@@ -401,12 +379,11 @@ add_action('woocommerce_shipping_init', 'hey_okoskabet_shipping_method_home_init
 
 add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
 
-// Our hooked in function - $fields is passed via the filter!
-function custom_override_checkout_fields($fields)
+function custom_override_checkout_fields(array $fields): array
 {
 	$fields['billing']['billing_okoskabet_shed_id'] = array(
 		'label'       => __('Økoskabet ID', 'woocommerce'),
-		'placeholder' => _x('', 'placeholder', 'woocommerce'),
+		'placeholder' => '',
 		'required'    => false,
 		'class'       => array('okoskabet-shed-id form-row-wide'),
 		'clear'       => true
@@ -414,7 +391,7 @@ function custom_override_checkout_fields($fields)
 
 	$fields['billing']['billing_okoskabet_delivery_date'] = array(
 		'label'       => __('Økoskabet Delivery Date', 'woocommerce'),
-		'placeholder' => _x('', 'placeholder', 'woocommerce'),
+		'placeholder' => '',
 		'required'    => false,
 		'class'       => array('okoskabet-delivery-date form-row-wide'),
 		'clear'       => true
@@ -423,11 +400,8 @@ function custom_override_checkout_fields($fields)
 	return $fields;
 }
 
-/**
- * Display field value on the order edit page
- */
 add_action('woocommerce_admin_order_data_after_shipping_address', 'my_custom_checkout_field_display_admin_order_meta', 10, 1);
-function my_custom_checkout_field_display_admin_order_meta($order)
+function my_custom_checkout_field_display_admin_order_meta($order): void
 {
 	$order_done = $order->get_meta('billing_okoskabet_done', true);
 	$shed_id = $order->get_meta('_billing_okoskabet_shed_id', true);
@@ -440,7 +414,7 @@ function my_custom_checkout_field_display_admin_order_meta($order)
 		echo 'Økoskabet SHED ID' . ': ' . esc_html($shed_id) . "\n";
 	}
 	if (!empty($delivery_date)) {
-		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date) . '';
+		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date);
 	}
 	echo '</pre>';
 }
@@ -449,19 +423,16 @@ function my_custom_checkout_field_display_admin_order_meta($order)
 add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
 
 /**
- * Custom function to be called after an order is placed.
- *
- * @param int $order_id The order ID.
+ * @param int    $order_id   The order ID.
+ * @param string $old_status Previous status.
+ * @param string $new_status New status.
+ * @param \WC_Order $order   The order object.
  */
-function hey_after_order_placed($order_id, $old_status, $new_status, $order)
+function hey_after_order_placed(int $order_id, string $old_status, string $new_status, \WC_Order $order): void
 {
-	if (empty($order)) {
-		return;
-	}
-
 	$order_number = $order->get_order_number();
 
-	$settings = get_option(O_TEXTDOMAIN . '-settings');
+	$settings = o_get_settings();
 	$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
 
 	if (empty($settings['_api_key'])) {
@@ -469,34 +440,31 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		return;
 	}
 
-	// First process if the order is getting cancelled
-	if ($new_status == 'cancelled') {
-
+	if ($new_status === 'cancelled') {
 		$url = $api_url . '/api/v1/shipments/' . $order_number;
-		$ch = curl_init($url);
 
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_HTTPHEADER, [
-			'Content-Type: application/json',
-			'authorization: ' . $settings['_api_key'],
-			'Content-Length: 0'
-		]);
+		$response = wp_remote_request($url, array(
+			'method'  => 'DELETE',
+			'timeout' => 15,
+			'headers' => array(
+				'Content-Type'  => 'application/json',
+				'Authorization' => $settings['_api_key'],
+			),
+		));
 
-		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+		if (is_wp_error($response)) {
+			error_log('okoskabet_woocommerce_plugin: Error deleting order ' . $order_number . ': ' . $response->get_error_message());
+			return;
+		}
 
-		$response = curl_exec($ch);
-		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-		curl_close($ch);
-
-		if ($http_code != 204) {
-			error_log('okoskabet_woocommerce_plugin: Error trying to delete order ' . $order_number . ', response(' . $http_code . '): ' . $response);
+		$http_code = wp_remote_retrieve_response_code($response);
+		if ($http_code !== 204) {
+			error_log('okoskabet_woocommerce_plugin: Error trying to delete order ' . $order_number . ', response(' . $http_code . '): ' . wp_remote_retrieve_body($response));
 		}
 	}
 
-	if ($new_status == 'on-hold' || $new_status == 'processing') {
-		// If being created, do some checks and then create
-		$order_submitted = get_post_meta($order_id, 'billing_okoskabet_done', true);
+	if ($new_status === 'on-hold' || $new_status === 'processing') {
+		$order_submitted = $order->get_meta('billing_okoskabet_done', true);
 		if (!empty($order_submitted)) {
 			return;
 		}
@@ -507,7 +475,6 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 		}
 
 		$order_number = $order->get_order_number();
-
 		$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 		$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 
@@ -540,9 +507,9 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 				'email' => $order->get_billing_email(),
 			],
 			'notes' => (string) $order->get_customer_note(),
-			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
+			'delivery_date' => $order_delivery_date,
 			'reservation' => [
-				'shed_id' => $order->get_meta('_billing_okoskabet_shed_id', true),
+				'shed_id' => $order_shed,
 				'max_duration_days' => 1,
 			]
 		] : [
@@ -564,63 +531,58 @@ function hey_after_order_placed($order_id, $old_status, $new_status, $order)
 				'postal_code' => $order->get_shipping_postcode()
 			],
 			'notes' => (string) $order->get_customer_note(),
-			'delivery_date' => $order->get_meta('_billing_okoskabet_delivery_date', true),
+			'delivery_date' => $order_delivery_date,
 		];
 
-		$data_json = json_encode($data);
+		$response = wp_remote_post($url, array(
+			'timeout' => 15,
+			'headers' => array(
+				'Content-Type'  => 'application/json',
+				'Authorization' => $settings['_api_key'],
+			),
+			'body' => wp_json_encode($data),
+		));
 
-		$ch = curl_init($url);
-
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_HTTPHEADER, [
-			'Content-Type: application/json',
-			'authorization: ' . $settings['_api_key'],
-			'Content-Length: ' . strlen($data_json)
-		]);
-
-		curl_setopt($ch, CURLOPT_POST, true);
-		curl_setopt($ch, CURLOPT_POSTFIELDS, $data_json);
-
-		$response = curl_exec($ch);
-		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-		curl_close($ch);
-
-		$shipment = json_decode($response, true);
-
-		if ($http_code != 201) {
-			// Set the order status to 'failed'
-			$order->update_status('failed', !empty($shipment['error_message']) ? $shipment['error_message'] : 'Order failed before processing.');
-
-			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
-
-			throw new Exception($error_text);
-		} else {
-			$customer_note = $order->get_customer_note();
-			$customer_note ?: '';
-			$oko_order_note = 'ØKOSKABET ' . $order_delivery_date;
-			if (empty($order_shed)) {
-				$oko_order_note .=  ' Hjemmelevering';
-			} else {
-				$oko_order_note .=  ' ' . $order_shed;
-			}
-			$order->set_customer_note($oko_order_note . "\n" . $customer_note, 0);
-
-			update_post_meta($order_id, 'billing_okoskabet_done', true);
+		if (is_wp_error($response)) {
+			$order->update_status('failed', $response->get_error_message());
+			throw new \Exception($response->get_error_message());
 		}
+
+		$http_code = wp_remote_retrieve_response_code($response);
+		$shipment = json_decode(wp_remote_retrieve_body($response), true);
+
+		if ($http_code !== 201) {
+			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
+			$order->update_status('failed', $error_text);
+			throw new \Exception($error_text);
+		}
+
+		$customer_note = $order->get_customer_note() ?: '';
+		$oko_order_note = 'ØKOSKABET ' . $order_delivery_date;
+		if (empty($order_shed)) {
+			$oko_order_note .= ' Hjemmelevering';
+		} else {
+			$oko_order_note .= ' ' . $order_shed;
+		}
+		$order->set_customer_note($oko_order_note . "\n" . $customer_note, 0);
+
+		$order->update_meta_data('billing_okoskabet_done', true);
+		$order->save();
 	}
 }
 
 add_action('woocommerce_after_checkout_validation', 'okoskabet_woocommerce_plugin_after_checkout_validation');
 
-function okoskabet_woocommerce_plugin_after_checkout_validation($fields)
+function okoskabet_woocommerce_plugin_after_checkout_validation(array $fields): void
 {
-	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_shed') {
+	$shipping_method = $fields['shipping_method'][0] ?? '';
+
+	if ($shipping_method === 'hey_okoskabet_shipping_shed') {
 		if (empty($fields['billing_okoskabet_shed_id']) || empty($fields['billing_okoskabet_delivery_date'])) {
 			wc_add_notice(__("Please select an Økoskab and Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
 	}
-	if ($fields['shipping_method'][0] == 'hey_okoskabet_shipping_home') {
+	if ($shipping_method === 'hey_okoskabet_shipping_home') {
 		if (empty($fields['billing_okoskabet_delivery_date'])) {
 			wc_add_notice(__("Please select a Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}

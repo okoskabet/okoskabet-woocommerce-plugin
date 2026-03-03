@@ -111,88 +111,103 @@ class OkoRest extends Base
 	}
 
 	/**
-	 * Examples
+	 * Get available sheds based on zip code and address.
 	 *
 	 * @since 1.0.0
 	 * @param \WP_REST_Request<array> $request Values.
-	 * @return array
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function get_sheds(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
 		$params = $request->get_params();
+		$settings = \o_get_settings();
 
-		$settings = get_option(O_TEXTDOMAIN . '-settings');
+		if (empty($settings['_api_key'])) {
+			return new \WP_Error('missing_api_key', 'API key not configured', array('status' => 500));
+		}
 
 		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
+		$maximum_days_in_future = $settings['_maximum_days_in_future'] ?? 21;
 
-		if (!empty($settings['_api_key'])) {
-			$curl = curl_init();
+		$request_url = \add_query_arg(array(
+			'delivery_dates'         => 'true',
+			'maximum_days_in_future' => $maximum_days_in_future,
+			'zipcode'                => $params['zip'],
+			'address'                => $params['address'] ?? '',
+		), $api_url . '/api/v1/sheds/');
 
-			$maximum_days_in_future = $settings['_maximum_days_in_future'];
+		$response = \wp_remote_get($request_url, array(
+			'timeout' => 15,
+			'headers' => array(
+				'Authorization' => $settings['_api_key'],
+			),
+		));
 
-			curl_setopt_array($curl, array(
-				CURLOPT_URL => $api_url . '/api/v1/sheds/?delivery_dates=true&maximum_days_in_future=' . $maximum_days_in_future . '&zipcode=' . $params['zip'] . '&address=' . $params['address'],
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_ENCODING => '',
-				CURLOPT_MAXREDIRS => 10,
-				CURLOPT_TIMEOUT => 0,
-				CURLOPT_FOLLOWLOCATION => true,
-				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-				CURLOPT_CUSTOMREQUEST => 'GET',
-				CURLOPT_HTTPHEADER => array(
-					'authorization: ' . $settings['_api_key']
-				),
-			));
-
-			$response = curl_exec($curl);
-			$output_content = json_decode($response, true);
-
-			curl_close($curl);
-
-			return array('settings' => $settings, 'results' => $output_content);
-		} else {
-			return false;
+		if (\is_wp_error($response)) {
+			return new \WP_Error('api_error', $response->get_error_message(), array('status' => 502));
 		}
+
+		$body = \wp_remote_retrieve_body($response);
+		$output_content = \json_decode($body, true);
+
+		$public_settings = array(
+			'_display_option'                  => $settings['_display_option'] ?? '',
+			'_description_shipping_okoskabet'  => $settings['_description_shipping_okoskabet'] ?? '',
+			'_description_shipping_private'    => $settings['_description_shipping_private'] ?? '',
+			'_maximum_days_in_future'          => $maximum_days_in_future,
+		);
+
+		return new \WP_REST_Response(array('settings' => $public_settings, 'results' => $output_content), 200);
 	}
 
+	/**
+	 * Get home delivery dates based on zip code.
+	 *
+	 * @since 1.0.0
+	 * @param \WP_REST_Request<array> $request Values.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
 	public function get_home_delivery(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
 		$params = $request->get_params();
+		$settings = \o_get_settings();
 
-		$settings = get_option(O_TEXTDOMAIN . '-settings');
+		if (empty($settings['_api_key'])) {
+			return new \WP_Error('missing_api_key', 'API key not configured', array('status' => 500));
+		}
 
 		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
+		$maximum_days_in_future = $settings['_maximum_days_in_future'] ?? 21;
 
-		if (!empty($settings['_api_key'])) {
-			$curl = curl_init();
+		$request_url = \add_query_arg(array(
+			'maximum_days_in_future' => $maximum_days_in_future,
+			'postal_code'            => $params['zip'],
+		), $api_url . '/api/v1/home_delivery');
 
-			$maximum_days_in_future = $settings['_maximum_days_in_future'];
+		$response = \wp_remote_get($request_url, array(
+			'timeout' => 15,
+			'headers' => array(
+				'Authorization' => $settings['_api_key'],
+			),
+		));
 
-			curl_setopt_array($curl, array(
-				CURLOPT_URL => $api_url . '/api/v1/home_delivery?maximum_days_in_future=' . $maximum_days_in_future . '&postal_code=' . $params['zip'],
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_ENCODING => '',
-				CURLOPT_MAXREDIRS => 10,
-				CURLOPT_TIMEOUT => 0,
-				CURLOPT_FOLLOWLOCATION => true,
-				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-				CURLOPT_CUSTOMREQUEST => 'GET',
-				CURLOPT_HTTPHEADER => array(
-					'authorization: ' . $settings['_api_key']
-				),
-			));
-
-			$response = curl_exec($curl);
-			$output_content = json_decode($response, true);
-
-			curl_close($curl);
-
-			return array('settings' => $settings, 'results' => $output_content);
-		} else {
-			return false;
+		if (\is_wp_error($response)) {
+			return new \WP_Error('api_error', $response->get_error_message(), array('status' => 502));
 		}
+
+		$body = \wp_remote_retrieve_body($response);
+		$output_content = \json_decode($body, true);
+
+		$public_settings = array(
+			'_display_option'                  => $settings['_display_option'] ?? '',
+			'_description_shipping_okoskabet'  => $settings['_description_shipping_okoskabet'] ?? '',
+			'_description_shipping_private'    => $settings['_description_shipping_private'] ?? '',
+			'_maximum_days_in_future'          => $maximum_days_in_future,
+		);
+
+		return new \WP_REST_Response(array('settings' => $public_settings, 'results' => $output_content), 200);
 	}
 
 	/**
@@ -206,7 +221,7 @@ class OkoRest extends Base
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
 		$params = $request->get_params();
-		$settings = get_option(O_TEXTDOMAIN . '-settings');
+		$settings = \o_get_settings();
 
 		// Check if webhook is enabled
 		if (empty($settings['_webhook_enabled'])) {
@@ -232,7 +247,7 @@ class OkoRest extends Base
 		$webhook_events = !empty($settings['_webhook_events']) ? $settings['_webhook_events'] : array();
 
 		// Check if this event should trigger order completion
-		if (!in_array($event, $webhook_events)) {
+		if (!in_array($event, $webhook_events, true)) {
 			return array(
 				'success' => true,
 				'message' => 'Event not configured for order completion',

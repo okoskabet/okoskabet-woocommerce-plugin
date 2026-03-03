@@ -34,8 +34,10 @@ class Context {
 	 * @return bool
 	 * @SuppressWarnings("StaticAccess")
 	 */
-	public function request( string $type ) {
-		$this->context = WpContext::determine();
+	public function request( string $type ): bool {
+		if ( $this->context === null ) {
+			$this->context = WpContext::determine();
+		}
 
 		switch ( $type ) {
 			case 'backend':

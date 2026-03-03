@@ -10,14 +10,14 @@
  * Plugin Name:		Økoskabet WooCommerce Plugin
  * Plugin URI:		https://github.com/okoskabet/okoskabet-woocommerce-plugin
  * Description:		Connect your WooCommerce store to Økoskabet
- * Version:         1.1.42
+ * Version:         1.2.0
  * Author:          Kim Frederiksen
  * Author URI:      https://heyrobot.ai
  * Text Domain:     okoskabet-woocommerce-plugin
  * License:         GPL 2.0+
  * License URI:     http://www.gnu.org/licenses/gpl-3.0.txt
  * Domain Path:     /languages
- * Requires PHP:    7.4
+ * Requires PHP:    8.1
  * WordPress-Plugin-Boilerplate-Powered: v3.3.0
  */
 
@@ -26,13 +26,13 @@ if (!defined('ABSPATH')) {
 	die('We\'re sorry, but you can not directly access this file.');
 }
 
-define('O_VERSION', '1.1.42');
+define('O_VERSION', '1.2.0');
 define('O_TEXTDOMAIN', 'okoskabet-woocommerce-plugin');
 define('O_NAME', 'Økoskabet WooCommerce Plugin');
 define('O_PLUGIN_ROOT', plugin_dir_path(__FILE__));
 define('O_PLUGIN_ROOT_URL', plugin_dir_url(__FILE__));
 define('O_PLUGIN_ABSOLUTE', __FILE__);
-define('O_MIN_PHP_VERSION', '7.4');
+define('O_MIN_PHP_VERSION', '8.1');
 define('O_WP_VERSION', '5.3');
 
 add_action(
@@ -42,7 +42,7 @@ add_action(
 	}
 );
 
-if (version_compare(PHP_VERSION, O_MIN_PHP_VERSION, '<=')) {
+if (version_compare(PHP_VERSION, O_MIN_PHP_VERSION, '<')) {
 	add_action(
 		'admin_init',
 		static function () {
@@ -55,7 +55,7 @@ if (version_compare(PHP_VERSION, O_MIN_PHP_VERSION, '<=')) {
 			echo wp_kses_post(
 				sprintf(
 					'<div class="notice notice-error"><p>%s</p></div>',
-					__('"okoskabet-woocommerce-plugin" requires PHP 7.4 or newer.', O_TEXTDOMAIN)
+					__('"okoskabet-woocommerce-plugin" requires PHP 8.1 or newer.', O_TEXTDOMAIN)
 				)
 			);
 		}

@@ -12,7 +12,7 @@ Please go to [https://okoskabet.dk](https://okoskabet.dk) to read more.
 * Danish
 
 #### Requirements
-* PHP: 7.4+
+* PHP: 8.1+
 * WordPress 5.3+
 
 ## Installation
