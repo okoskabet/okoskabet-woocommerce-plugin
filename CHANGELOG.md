@@ -1,35 +1,55 @@
 # Changelog
 
-## [1.2.0] - 2026-03-03
+All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
-### Breaking Changes
-- Minimum PHP version raised from 7.4 to 8.1 (PHP 7.4 has been EOL since November 2022)
-- REST API responses for `/okoskabet/sheds` and `/okoskabet/home_delivery` no longer return the full plugin settings object — only public-facing settings are included
+## 1.2.2 - 2026-03-05
 
-### Security
-- **Fixed API key leaking to frontend**: REST endpoints (`get_sheds`, `get_home_delivery`) were returning the entire settings array, including the API key, in the response body. Now only a whitelist of safe settings is returned.
-- **Fixed XSS in checkout JavaScript output**: Settings values were injected directly into an inline `<script>` tag without escaping. Now uses `wp_json_encode()` for safe serialization.
+= Housekeeping =
 
-### Performance
-- **Replaced all raw cURL calls with WordPress HTTP API** (`wp_remote_get`, `wp_remote_post`, `wp_remote_request`) across `functions.php` and `OkoRest.php`. This provides proper SSL verification, proxy support, timeout handling, and consistent error reporting via `WP_Error`.
-- **Fixed zero-timeout on external API calls**: The shed and home delivery REST endpoints used `CURLOPT_TIMEOUT => 0`, meaning requests would hang indefinitely if the Økoskabet API was unresponsive. All external calls now have a 15-second timeout.
-- **Cached WpContext determination**: `WpContext::determine()` was called on every `Context::request()` invocation (5–7 times during plugin init). Now cached after the first call.
-- **Added proper asset versioning**: Checkout scripts and styles now use `O_VERSION` for cache-busting instead of `null`.
-- **URL parameters properly encoded**: REST API proxy calls now use `add_query_arg()` instead of raw string concatenation, preventing issues with special characters in addresses.
+* Removed unused boilerplate AJAX endpoints that were publicly accessible
+* Removed unused boilerplate WP-CLI command
+* Removed demo metabox that was registered on a non-existent post type
+* Removed unused enqueue stubs and a boilerplate second settings tab
+* Cleaned up commented-out demo code from the settings page
 
-### PHP 8.x Compatibility
-- **Declared dynamic properties on shipping classes**: `WC_Hey_Okoskabet_Shipping_Method_Shed` and `WC_Hey_Okoskabet_Shipping_Method_Home` now declare `$cost_value`, `$cost_discount`, `$cost_discount_limit`, and `$cost_free_limit` as proper class properties. Dynamic properties are deprecated in PHP 8.2 and will throw an error in PHP 9.0.
-- **Fixed PHP version comparison operator**: Changed `<=` to `<` so that PHP 8.1 itself is correctly accepted.
-- **Replaced loose comparisons with strict**: All `==` comparisons changed to `===` throughout `functions.php` and `OkoRest.php`. `in_array()` calls now use strict mode.
-- **Added return type declarations** to functions throughout the codebase.
+## 1.2.1 - 2026-03-05
 
-### WooCommerce Compatibility
-- **HPOS (High-Performance Order Storage) support**: Replaced `get_post_meta()` / `update_post_meta()` with `$order->get_meta()` / `$order->update_meta_data()` + `$order->save()` in `hey_after_order_placed()`. This is required for WooCommerce's HPOS feature which is now the default storage engine.
-- **REST endpoints return proper types**: Endpoints now return `WP_REST_Response` / `WP_Error` objects instead of raw arrays or `false`.
+= Bug Fixes =
 
-### Bug Fixes
-- **Fixed no-op statement**: `$customer_note ?: '';` was not assigning the result. Changed to `$customer_note = $order->get_customer_note() ?: '';`.
-- **Used `o_get_settings()` consistently**: Replaced direct `get_option()` calls in REST handlers with the filterable `o_get_settings()` helper.
-- **Fixed Mapbox style handle collision**: The Mapbox JS and CSS were both registered with the handle `mapbox-gl-js`. CSS now uses `mapbox-gl-css`.
+* Fixed a fatal error (TypeError) caused by an unused boilerplate cron task on PHP 8.1+
 
-## [1.1.42] - Previous Release
+## 1.2.0 - 2026-03-03
+
+= Important =
+
+* Minimum PHP version is now 8.1 (previously 7.4, which has been end-of-life since November 2022)
+
+= Security =
+
+* Fixed an issue where the API key was exposed in REST API responses to the browser
+* Fixed a potential cross-site scripting (XSS) issue in the checkout page
+
+= Performance =
+
+* Replaced all direct cURL calls with the WordPress HTTP API for better reliability and error handling
+* Fixed a critical issue where API calls to Økoskabet had no timeout, which could cause the site to hang if the API was unresponsive
+* Improved plugin startup performance by caching request context detection
+* Added proper version numbers to checkout scripts and styles for correct cache busting
+
+= Compatibility =
+
+* Added support for WooCommerce High-Performance Order Storage (HPOS)
+* Fixed PHP 8.2 deprecation warnings for dynamic class properties on shipping methods
+* REST API endpoints now return proper response objects instead of raw arrays
+* Fixed the PHP version check so that the minimum version itself is correctly accepted
+
+= Bug Fixes =
+
+* Fixed order customer note not being saved correctly in some cases
+* Fixed special characters in addresses not being properly encoded in API requests
+* Fixed a style handle name collision between Mapbox JS and CSS assets
+* Settings are now loaded consistently through the filterable helper function
+
+## 1.1.42
+
+* Previous release

@@ -3,9 +3,6 @@
 /**
  * Represents the view for the administration dashboard.
  *
- * This includes the header, options, and other information that should provide
- * The User Interface to the end user.
- *
  * @package   okoskabet_woocommerce_plugin
  * @author    Kim Frederiksen <kim@heyrobot.com>
  * @copyright 2024 HeyRobot.AI aps
@@ -19,11 +16,8 @@
 	<h2><?php echo esc_html(get_admin_page_title()); ?></h2>
 
 	<div id="tabs" class="settings-tab">
-		<?php
-		require_once plugin_dir_path(__FILE__) . 'settings.php';
-		?>
-		<?php
-		?>
+		<?php require_once plugin_dir_path(__FILE__) . 'settings.php'; ?>
+
 		<div id="tabs-3" class="metabox-holder">
 			<div class="postbox">
 				<h3 class="hndle"><span><?php esc_html_e('Export Settings', O_TEXTDOMAIN); ?></span></h3>
@@ -56,8 +50,6 @@
 				</div>
 			</div>
 		</div>
-		<?php
-		?>
 	</div>
 
 </div>

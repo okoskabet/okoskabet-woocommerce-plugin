@@ -30,31 +30,4 @@ class Enqueue extends Base
 		parent::initialize();
 	}
 
-
-	/**
-	 * Register and enqueue public-facing style sheet.
-	 *
-	 * @since 1.0.0
-	 * @return array
-	 */
-	public function enqueue_styles()
-	{
-		$styles = array();
-
-		return $styles;
-	}
-
-
-	/**
-	 * Register and enqueues public-facing JavaScript files.
-	 *
-	 * @since 1.0.0
-	 * @return array
-	 */
-	public static function enqueue_scripts()
-	{
-		$scripts = array();
-
-		return $scripts;
-	}
 }

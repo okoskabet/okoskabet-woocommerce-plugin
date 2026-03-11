@@ -28,34 +28,6 @@ class Enqueue extends Base {
 		if ( !parent::initialize() ) {
 			return;
 		}
-
-	}
-
-	/**
-	 * Register and enqueue admin-specific style sheet.
-	 *
-	 * @since 1.0.0
-	 * @return array
-	 */
-	public function enqueue_admin_styles() {
-		$admin_page = \get_current_screen();
-		$styles     = array();
-
-
-		return $styles;
-	}
-
-	/**
-	 * Register and enqueue admin-specific JavaScript.
-	 *
-	 * @since 1.0.0
-	 * @return array
-	 */
-	public function enqueue_admin_scripts() {
-		$admin_page = \get_current_screen();
-		$scripts    = array();
-
-		return $scripts;
 	}
 
 }
