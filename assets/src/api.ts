@@ -9,15 +9,34 @@ function getUrl(shippingMethod: ShippingMethod): string {
   }
 }
 
+/**
+ * Read product IDs from the WooCommerce checkout page if we're on it.
+ * The plugin emits a hidden field `<input id="okoskabet-cart-product-ids">`
+ * containing a comma-separated list of product IDs server-side.
+ *
+ * Falling back to an empty list (no IDs) means the server-side filter will
+ * skip exception filtering entirely — same behaviour as before this change.
+ */
+function readCartProductIds(): string {
+  if (typeof document === 'undefined') return '';
+  const el = document.getElementById('okoskabet-cart-product-ids') as HTMLInputElement | null;
+  return el?.value ?? '';
+}
+
 export async function callApi(shippingMethod: 'shed-delivery', address: string, postalCode: string): Promise<ShedsResponse>
 export async function callApi(shippingMethod: 'home-delivery', address: string, postalCode: string): Promise<HomeDeliveryResponse>
 export async function callApi(shippingMethod: ShippingMethod, address: string, postalCode: string): Promise<ApiResponse>
 
 export async function callApi(shippingMethod: ShippingMethod, address: string, postalCode: string): Promise<ApiResponse> {
-  const queryParams = new URLSearchParams({
+  const params: Record<string, string> = {
     zip: postalCode,
     address: encodeURIComponent(address),
-  }).toString()
+  };
+  const productIds = readCartProductIds();
+  if (productIds) {
+    params.product_ids = productIds;
+  }
+  const queryParams = new URLSearchParams(params).toString();
 
   const myHeaders = new Headers();
   myHeaders.append("Accept", "application/json");
@@ -26,7 +45,10 @@ export async function callApi(shippingMethod: ShippingMethod, address: string, p
   const requestOptions: RequestInit = {
     method: "GET",
     headers: myHeaders,
-    redirect: "follow"
+    redirect: "follow",
+    // Send WordPress / WooCommerce session cookies so the request is
+    // authenticated as the same browser session.
+    credentials: "same-origin",
   };
 
   const url = getUrl(shippingMethod) + queryParams;

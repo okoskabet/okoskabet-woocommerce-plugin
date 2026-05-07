@@ -35,8 +35,8 @@
 
 	$cmb->add_field(
 		array(
-			'name'       => __('Maximum days into the future', O_TEXTDOMAIN),
-			'desc'       => __('Delivery options will be visible up to this many days into the future.', O_TEXTDOMAIN),
+			'name'       => __('Standard visningsvindue (dage)', O_TEXTDOMAIN),
+			'desc'       => __('Antal dage frem hvor leveringsdatoer vises som standard. Dato-undtagelser ("kun på en bestemt dag" og "fra/indtil") kan udvide visningen til specifikke datoer udenfor dette vindue. Anbefalet: 3-7 for normal drift, højere hvis du har mange undtagelser.', O_TEXTDOMAIN),
 			'id'         => '_maximum_days_in_future',
 			'type'       => 'text',
 			'attributes' => array(
@@ -45,7 +45,7 @@
 			),
 			'sanitization_cb' => 'absint',
 			'escape_cb'       => 'absint',
-			'default'         => '21'
+			'default'         => '3'
 		)
 	);
 
@@ -84,11 +84,73 @@
 		)
 	);
 
+	// Delivery location options settings
+	$cmb->add_field(
+		array(
+			'name' => __('Hjemmelevering: Leveringssted', O_TEXTDOMAIN),
+			'desc' => __('Indstillinger for leveringssted ved hjemmelevering', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_title',
+			'type' => 'title',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name' => __('Vis dropdown med leveringssteder', O_TEXTDOMAIN),
+			'desc' => __('Vis en dropdown med leveringssteder fra Økoskabets API (f.eks. "Ved trappen", "Ved hoveddøren"). Slå fra for kun at vise fritekstfeltet.', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_dropdown',
+			'type' => 'checkbox',
+			'default' => 'on',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name' => __('Label: Dropdown', O_TEXTDOMAIN),
+			'desc' => __('Label på dropdown-feltet i checkout (dansk)', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_dropdown_label',
+			'type' => 'text',
+			'default' => 'Leveringssted',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name' => __('Beskrivende tekst', O_TEXTDOMAIN),
+			'desc' => __('Tekst der vises over Leveringsinfo-dropdownen på checkout. Lad være tom for at skjule. Eksempel: "Din ordre leveres af Sublog natten".', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_note_label',
+			'type' => 'text',
+			'default' => 'Besked til chaufføren (valgfrit)',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'    => __('Skjul WooCommerce ordrenote', O_TEXTDOMAIN),
+			'desc'    => __('Skjul WooCommerce\'s standard "Tilføj ordrenote"-felt på checkout. Aktiver hvis du bruger Økoskabet leveringsinfo og kun vil have ét note-felt for kunden.', O_TEXTDOMAIN),
+			'id'      => '_hide_wc_order_comments',
+			'type'    => 'checkbox',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'    => __('Webhook Secret', O_TEXTDOMAIN),
+			'desc'    => __('Secret-nøglen fra din webhook-konfiguration i Økoskabets backoffice (under API & Webhooks). Bruges til at verificere at indkomne webhooks faktisk kommer fra Økoskabet. Påkrævet hvis webhook-funktionalitet er slået til.', O_TEXTDOMAIN),
+			'id'      => '_webhook_secret',
+			'type'    => 'text',
+			'attributes' => array(
+				'type' => 'password',
+				'autocomplete' => 'off',
+			),
+		)
+	);
+
 	// Webhook settings
 	$cmb->add_field(
 		array(
-			'name' => __('Webhook Settings', O_TEXTDOMAIN),
-			'desc' => __('Configure webhook events for automatic order status updates', O_TEXTDOMAIN),
+			'name' => __('Webhook & Betaling', O_TEXTDOMAIN),
+			'desc' => __('Konfigurer webhook-events og betalingshåndtering', O_TEXTDOMAIN),
 			'id'   => '_webhook_title',
 			'type' => 'title',
 		)
@@ -97,7 +159,7 @@
 	$cmb->add_field(
 		array(
 			'name' => __('Webhook Status', O_TEXTDOMAIN),
-			'desc' => __('Enable or disable webhook functionality', O_TEXTDOMAIN),
+			'desc' => __('Slå webhook-funktionalitet til eller fra', O_TEXTDOMAIN),
 			'id'   => '_webhook_enabled',
 			'type' => 'checkbox',
 			'default' => 'on',
@@ -106,12 +168,46 @@
 
 	$cmb->add_field(
 		array(
-			'name'             => __('Webhook Events', O_TEXTDOMAIN),
-			'desc'             => __('Select which events from Økoskabet should mark the order as completed', O_TEXTDOMAIN),
+			'name'    => __('Betalingsgateway', O_TEXTDOMAIN),
+			'desc'    => __('Vælg hvilken betalingsgateway der bruges. "Automatisk" forsøger at detektere den ud fra ordren.', O_TEXTDOMAIN),
+			'id'      => '_payment_gateway',
+			'type'    => 'select',
+			'default' => 'auto',
+			'options' => array(
+				'auto'            => __('Automatisk (detekteres fra ordren)', O_TEXTDOMAIN),
+				'quickpay_gateway' => __('Quickpay', O_TEXTDOMAIN),
+				'stripe'          => __('Stripe', O_TEXTDOMAIN),
+				'nets_easy'       => __('Nets Easy / DIBS Easy', O_TEXTDOMAIN),
+				'pensopay'        => __('Pensopay', O_TEXTDOMAIN),
+				'fallback'        => __('Andet (skift status til "processing")', O_TEXTDOMAIN),
+			),
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'    => __('Capture-events', O_TEXTDOMAIN),
+			'desc'    => __('Vælg hvilke events fra Økoskabet der skal trække betalingen (delayed capture). "Label Printed" sker tidligst — typisk når webshoppen printer labelen. "In Shed" sker når Økoskabet har lagt pakken i skabet. "Order Delivered" sker når kunden har afhentet pakken.', O_TEXTDOMAIN),
+			'id'      => '_capture_events',
+			'type'    => 'multicheck',
+			'options' => array(
+				'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
+				'in_shed'         => __('In Shed', O_TEXTDOMAIN),
+				'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
+			),
+			'default' => array('label_printed'),
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'             => __('Completion-events', O_TEXTDOMAIN),
+			'desc'             => __('Vælg hvilke events fra Økoskabet der skal markere ordren som afsluttet (completed). Typisk vil man vælge "Order Delivered" så ordren først lukkes når kunden har afhentet.', O_TEXTDOMAIN),
 			'id'               => '_webhook_events',
 			'type'             => 'multicheck',
 			'options'          => array(
-				'label_created' => __('Label Created', O_TEXTDOMAIN),
+				'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
+				'in_shed'         => __('In Shed', O_TEXTDOMAIN),
 				'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
 			),
 			'default'          => array('order_delivered'),

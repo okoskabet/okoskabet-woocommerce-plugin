@@ -52,4 +52,12 @@
 		</div>
 	</div>
 
+	<?php
+	/**
+	 * Fires inside the plugin's main settings page, after the main form.
+	 * Integrations can render extra panels here.
+	 */
+	do_action( 'okoskabet_after_settings_form' );
+	?>
+
 </div>
