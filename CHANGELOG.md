@@ -2,6 +2,40 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.3.6 - 2026-05-08
+
+= Security and code-review hardening =
+
+Five fixes from the post-1.3.5 review:
+
+1. **API key no longer leaks in the settings page.** The `_api_key`
+   field is now `<input type="password">`, matching the existing
+   webhook-secret field. The webhook-instructions panel no longer
+   interpolates the configured API key into the rendered HTML at all
+   (it previously appeared in `<code>` and `<pre>` blocks in plain
+   text).
+
+2. **Webhook docs rewritten to match the implementation.** The
+   instructions now describe the actual auth scheme — HMAC-SHA256 of
+   the raw request body, sent as the `X-HMAC-SHA256` header, signed
+   with the Webhook Secret field — instead of the misleading
+   "Authorization: <API key>" the previous text suggested. The 401
+   response description was updated correspondingly.
+
+3. **Checkout validation no longer mutates `$_POST`.** Clearing the
+   stale `_billing_okoskabet_shed_id` for home-delivery orders now
+   happens on `woocommerce_checkout_create_order` against the order
+   object (HPOS-safe), not by writing to the superglobal mid-validation.
+
+4. **Split-checkout AJAX nonce is bound to the WC session.** Generic
+   nonces shared across all anonymous browsers are replaced by per-
+   session nonces (action key `oko_split_<customer_id>`), closing a
+   guest CSRF window on `wp_ajax_nopriv_oko_start_split` /
+   `oko_resume_split`. Guest checkout flow is unchanged.
+
+5. **HMAC mismatch log no longer prints the expected signature.** Only
+   the received header is logged on rejection.
+
 ## 1.3.5 - 2026-05-07
 
 = Better thank-you transition between split orders =
