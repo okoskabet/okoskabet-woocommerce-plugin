@@ -437,7 +437,7 @@ class Split_Checkout extends Base {
 		// row and show an inline error rather than disabling the button
 		// (which made the button visually disappear in earlier UI tests).
 		$ajax_url = admin_url( 'admin-ajax.php' );
-		$nonce    = wp_create_nonce( 'oko_split' );
+		$nonce    = wp_create_nonce( $this->nonce_action() );
 		?>
 		<script>
 		(function () {
@@ -580,20 +580,49 @@ class Split_Checkout extends Base {
 	// AJAX: start the split (called from banner button click)
 	// ---------------------------------------------------------------------
 
-	public function ajax_start_split(): void {
-		check_ajax_referer( 'oko_split', '_wpnonce' );
-
-		// AJAX requests don't necessarily have WC session/cart bootstrapped
-		// the same way a normal page request does. Force-init both before
-		// touching them — otherwise WC()->cart can be null for guests.
-		if ( function_exists( 'WC' ) ) {
-			if ( WC()->session === null && function_exists( 'wc_load_cart' ) ) {
-				wc_load_cart();
-			}
-			if ( WC()->session && ! WC()->session->has_session() ) {
-				WC()->session->set_customer_session_cookie( true );
+	/**
+	 * Bind the split-checkout nonce to the current WC customer session.
+	 *
+	 * WP nonces are tied to user ID + tick, so for guest checkout (uid 0)
+	 * the action key is shared across all anonymous browsers in the nonce
+	 * window. Mixing in WC()->session->get_customer_id() — which is unique
+	 * per browser session even for guests — closes that gap.
+	 */
+	private function nonce_action(): string {
+		$cid = '0';
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			$candidate = WC()->session->get_customer_id();
+			if ( is_string( $candidate ) && $candidate !== '' ) {
+				$cid = $candidate;
 			}
 		}
+		return 'oko_split_' . $cid;
+	}
+
+	/**
+	 * Force-init WC session/cart for AJAX requests.
+	 *
+	 * AJAX requests don't necessarily have WC session/cart bootstrapped
+	 * the same way a normal page request does, and WC()->cart can be null
+	 * for guests until we do this.
+	 */
+	private function ensure_wc_session(): void {
+		if ( ! function_exists( 'WC' ) ) {
+			return;
+		}
+		if ( WC()->session === null && function_exists( 'wc_load_cart' ) ) {
+			wc_load_cart();
+		}
+		if ( WC()->session && ! WC()->session->has_session() ) {
+			WC()->session->set_customer_session_cookie( true );
+		}
+	}
+
+	public function ajax_start_split(): void {
+		// Bootstrap session BEFORE nonce check — the action key is bound
+		// to WC()->session->get_customer_id().
+		$this->ensure_wc_session();
+		check_ajax_referer( $this->nonce_action(), '_wpnonce' );
 
 		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
 			error_log( 'okoskabet_woocommerce_plugin: split start failed — WC()->cart unavailable' );
@@ -737,17 +766,9 @@ class Split_Checkout extends Base {
 	// ---------------------------------------------------------------------
 
 	public function ajax_resume_split(): void {
-		check_ajax_referer( 'oko_split', '_wpnonce' );
-
-		// Same session init as start_split — see comment there.
-		if ( function_exists( 'WC' ) ) {
-			if ( WC()->session === null && function_exists( 'wc_load_cart' ) ) {
-				wc_load_cart();
-			}
-			if ( WC()->session && ! WC()->session->has_session() ) {
-				WC()->session->set_customer_session_cookie( true );
-			}
-		}
+		// Bootstrap session BEFORE nonce check — see ajax_start_split().
+		$this->ensure_wc_session();
+		check_ajax_referer( $this->nonce_action(), '_wpnonce' );
 
 		if ( ! $this->is_split_active() ) {
 			wp_send_json_error( array( 'message' => 'No active split' ) );
@@ -961,7 +982,7 @@ class Split_Checkout extends Base {
 		echo '</div>';
 
 		$ajax_url = admin_url( 'admin-ajax.php' );
-		$nonce    = wp_create_nonce( 'oko_split' );
+		$nonce    = wp_create_nonce( $this->nonce_action() );
 		echo '<button type="button" id="oko-split-resume" class="oko-split-resume-cta">'
 			. esc_html__( 'Book next delivery now', O_TEXTDOMAIN )
 			. '</button>';
