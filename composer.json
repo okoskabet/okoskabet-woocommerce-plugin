@@ -5,9 +5,9 @@
     "type": "wordpress-plugin",
     "authors": [
         {
-            "name": "Kim Frederiksen",
-            "email": "kim@heyrobot.com",
-            "homepage": "https://author-url.test"
+            "name": "Foodshipper",
+            "email": "kontakt@okoskabet.dk",
+            "homepage": "https://okoskabet.dk"
         }
     ],
     "homepage": "https://github.com/WPBP/WordPress-Plugin-Boilerplate-Powered",
