@@ -699,6 +699,16 @@ function okoskabet_woocommerce_plugin_after_checkout_validation(array $fields): 
 		if (empty($fields['billing_okoskabet_delivery_date'])) {
 			wc_add_notice(__("Please select a Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
-		$_POST['billing_okoskabet_shed_id'] = '';
+	}
+}
+
+add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery', 10, 2);
+
+function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $data): void
+{
+	$shipping_methods = (array) ($data['shipping_method'] ?? array());
+
+	if (in_array('hey_okoskabet_shipping_home', $shipping_methods, true)) {
+		$order->update_meta_data('_billing_okoskabet_shed_id', '');
 	}
 }
