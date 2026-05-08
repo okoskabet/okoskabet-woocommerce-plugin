@@ -122,6 +122,9 @@ class ComposerStaticInit8d18d9b01caf28828fc36e7de364d1f3
         'okoskabet_woocommerce_plugin\\Integrations\\CMB' => __DIR__ . '/../..' . '/integrations/CMB.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Cron' => __DIR__ . '/../..' . '/integrations/Cron.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions' => __DIR__ . '/../..' . '/integrations/Delivery_Exceptions.php',
+        'okoskabet_woocommerce_plugin\\Integrations\\Payment_Capture' => __DIR__ . '/../..' . '/integrations/Payment_Capture.php',
+        'okoskabet_woocommerce_plugin\\Integrations\\Split_Checkout' => __DIR__ . '/../..' . '/integrations/Split_Checkout.php',
+        'okoskabet_woocommerce_plugin\\Integrations\\Upgrades' => __DIR__ . '/../..' . '/integrations/Upgrades.php',
         'okoskabet_woocommerce_plugin\\Rest\\OkoRest' => __DIR__ . '/../..' . '/rest/OkoRest.php',
     );
 

@@ -35,5 +35,8 @@ return array(
     'okoskabet_woocommerce_plugin\\Integrations\\CMB' => $baseDir . '/integrations/CMB.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Cron' => $baseDir . '/integrations/Cron.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions' => $baseDir . '/integrations/Delivery_Exceptions.php',
+    'okoskabet_woocommerce_plugin\\Integrations\\Payment_Capture' => $baseDir . '/integrations/Payment_Capture.php',
+    'okoskabet_woocommerce_plugin\\Integrations\\Split_Checkout' => $baseDir . '/integrations/Split_Checkout.php',
+    'okoskabet_woocommerce_plugin\\Integrations\\Upgrades' => $baseDir . '/integrations/Upgrades.php',
     'okoskabet_woocommerce_plugin\\Rest\\OkoRest' => $baseDir . '/rest/OkoRest.php',
 );

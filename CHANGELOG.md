@@ -2,6 +2,283 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.3.5 - 2026-05-07
+
+= Better thank-you transition between split orders =
+
+In 1.3.4 the "Book next delivery now" banner appeared below the order
+details on the thank-you page. Customers had to scroll to find it,
+which made it easy to miss the fact that they still had another order
+to place.
+
+This release:
+
+1. **Moves the banner above the order details** by hooking
+   `woocommerce_before_thankyou` (priority 5) instead of
+   `woocommerce_thankyou` (priority 20). The banner is now the first
+   thing the customer sees after placing their order.
+
+2. **Promotes the banner visually**:
+   - A "Step N of M completed" progress badge at the top
+   - A larger, bolder headline
+   - The next delivery's date and items shown in a contrasting white
+     box for clarity
+   - A full-width red "Book next delivery now" CTA button matching
+     the conflict banner's styling on checkout
+   - A subtle help line below: "You can also scroll down to see your
+     order confirmation first" — so customers who want to verify
+     their just-placed order know that's still possible
+
+3. **Code review pass.** Manual review of the entire plugin codebase
+   for common WordPress / WooCommerce mistakes. No issues found in
+   any of the integrations modified by 1.3.x. One pre-existing dead
+   code path in `backend/ImpExp.php` was noted (settings import/export
+   never registered in the classmap, plus a `json_decode` without
+   `, true`) — left alone since it's not currently active and a fix
+   would risk activating untested code.
+
+## 1.3.4 - 2026-05-07
+
+= UI polish on conflict banner =
+
+Three changes based on first-customer feedback:
+
+1. **Hide the rest of the checkout form while the banner is up.**
+   Previously the customer saw the banner AND a fully-rendered checkout
+   form (billing/shipping fields, "Place order" button, the legacy
+   "no available dates" notice in the order-review table). Now the form
+   is hidden until the customer has continued — they see only the
+   banner, with no distractions.
+
+2. **Bigger, always-visible CTA button.** The 1.3.3 version disabled the
+   button until the checkbox was ticked, which made it small and easy
+   to miss. The button is now full-width, prominent, and always
+   clickable. If the customer clicks without ticking the checkbox, the
+   checkbox row gives a brief shake animation and an inline error
+   appears under the button.
+
+3. **Inline error messaging** instead of `alert()`. Errors from the
+   server are shown in a small text under the button rather than as
+   a popup that interrupts the flow.
+
+## 1.3.3 - 2026-05-07
+
+= Bugfix: split-banner button did nothing on click =
+
+The split-banner's "Continue with delivery N of M" button silently
+failed to do anything. Symptom: clicking the button after ticking the
+checkbox produced no AJAX request, no error, no reload.
+
+Root cause: the inline `<script>` attached event listeners directly to
+the banner's elements (`#oko-split-ack`, `#oko-split-continue`).
+WooCommerce re-renders the entire checkout form on every checkout-update
+event (shipping change, address change, etc.), which removes the banner
+markup AND its listeners. The listeners only worked on the very first
+render before any WC update fired.
+
+Fix: switch to event delegation on `document`. Listeners survive any
+number of checkout re-renders. Also added `console.log` calls on the
+client side so the next time something silently fails, the browser
+console will show exactly what happened.
+
+## 1.3.2 - 2026-05-07
+
+= Bugfix for split checkout AJAX flow =
+
+When the customer clicked "Continue with delivery 1 of N", the AJAX
+endpoint did not always reduce the cart on the server side. This caused
+the page reload to show the full cart still — with the conflicting items
+intact and the "no available delivery dates" message still visible.
+
+Three fixes:
+
+1. **AJAX handler now force-initialises WC session and cart** before
+   touching them. WordPress's AJAX endpoints don't always have
+   `WC()->session` bootstrapped for guest users.
+2. **Cart changes are now explicitly persisted** to the session before
+   the AJAX response returns. WC's auto-save on shutdown was sometimes
+   not firing reliably in AJAX context.
+3. **Detailed debug logging** added on every step of the split flow
+   (gated behind `WP_DEBUG`). When something goes wrong the next time,
+   we'll have a clear trail in `debug.log` showing exactly where.
+
+## 1.3.1 - 2026-05-07
+
+= Polish for split checkout =
+
+Fixes three issues found during initial testing of 1.3.0:
+
+**Feature toggle.** Split-checkout is now opt-in via a new "Allow split
+checkout" setting (default: OFF). When OFF, the plugin behaves exactly
+like 1.2.18 — the legacy "remove an item to get more delivery options"
+explanation is shown in the dates dropdown, and customers cannot place
+the order until they've reduced the cart to a compatible set. When ON,
+the new split-banner takes over and the legacy explanation is
+suppressed (so the customer doesn't see two conflicting messages).
+
+**Danish translations.** All split-checkout strings now have Danish
+translations in `languages/okoskabet-woocommerce-plugin-da_DK.po`/`.mo`.
+
+**Clarification on detection logic.** When a cart contains, say, milk
+(only Mondays) and bread (any day), the algorithm correctly finds the
+intersection (Mondays) and treats the cart as a SINGLE delivery group
+— no split is suggested. Splits are only triggered when there is no
+single date that satisfies every item's rules. This was already the
+behaviour in 1.3.0; the changelog entry documents it explicitly because
+testing revealed it was easy to misread the algorithm.
+
+## 1.3.0 - 2026-05-07
+
+= Split checkout (MVP) =
+
+When a cart contains products whose delivery rules are mutually
+incompatible (no single date works for all items), the customer is now
+guided through N sequential orders — one per delivery date.
+
+**How it works (customer perspective):**
+
+1. On the checkout page, if a split is required, a red banner appears
+   above the form listing the delivery groups with suggested dates.
+2. The standard "Place order" button is disabled while the banner is
+   open. The customer must tick an acknowledgment checkbox.
+3. Clicking "Continue with delivery 1 of N" reduces the cart to
+   only the items for delivery 1 and reloads the checkout. A green
+   "you're ordering delivery 1 of N" banner takes the red one's place.
+4. Customer completes a normal checkout for delivery 1 → pays → sees the
+   thank-you page.
+5. The thank-you page shows a yellow banner: "You have N-1 more
+   deliveries to book — Book next delivery now". Clicking it restores
+   the next group's items and redirects back to checkout.
+6. Repeat until all groups are completed. The final thank-you page
+   shows a green "All deliveries booked!" message.
+
+**How it works (backend perspective):**
+
+- Each split order is fully independent — no parent/child link, no
+  payment coordination, no completion rollup.
+- Each order is tagged with three post_meta values:
+  - `_oko_split_token` — random hex string shared across orders in the
+    same split (so an admin can find sibling orders by querying)
+  - `_oko_split_step` — 1-based position of this order in the split
+  - `_oko_split_total_steps` — total steps for the split
+- The split state lives entirely in the WooCommerce session under the
+  key `oko_split_state`. No new DB tables.
+- Detection reuses `Delivery_Exceptions::collect_applicable_rules` and
+  `Delivery_Exceptions::date_passes_rule` — no duplication of business
+  logic.
+
+**Out of scope for this MVP (see ROADMAP.md):**
+
+- Email reminder if the customer abandons mid-flow
+- Admin order-list UI showing split-membership
+- Custom emails referencing the split
+- Stock-rollback if step N fails after step N-1 succeeded
+- Settings toggle to disable the feature (currently always-on)
+
+## 1.2.18 - 2026-05-07
+
+= Technical debt + performance =
+
+Closes the two remaining items from the 1.2.16 code review (#6 and #8) and
+adds two performance fixes for the checkout filter.
+
+**#6 — One-shot upgrade routine for legacy `label_created` event name.**
+Before 1.2.7 the plugin stored "label_created" in `_capture_events` and
+`_webhook_events` settings; from 1.2.7 onwards the same event is called
+"in_shed". Until now `OkoRest::handle_webhook` had to remap the legacy key
+on every webhook call. A new `Integrations\Upgrades` class runs a single
+migration on `admin_init` that rewrites stored settings once and records
+completion in `okoskabet_completed_migrations`. The runtime remap is kept as
+a defense-in-depth measure but no longer fires for any site that has loaded
+the admin since 1.2.18.
+
+**#8 — Refactor inline checkout JS to enqueued external file.**
+The 300+ lines of inline JavaScript that lived in `functions/functions.php`
+(delivery-exceptions overlay + delivery-location dropdown UI) have moved
+into a new file `assets/build/checkout-helpers.js`. The file is enqueued
+via `wp_register_script` / `wp_enqueue_script` so it is cacheable by
+browsers and CDNs. PHP-controlled configuration and translatable strings
+are passed via two `window` globals injected with `wp_add_inline_script`.
+
+**Performance — per-request cache for `collect_applicable_rules`.**
+During a single checkout render Svelte triggers many re-renders, which
+previously caused the exceptions filter to re-query category and tag terms
+for every product on every call. The result is now memoised per cart-shape
+within a single PHP request.
+
+**Performance — deduplicated exception filter logging.**
+The same checkout render that triggered repeated rule collection also
+emitted 30+ identical "Økoskabet exceptions: ..." lines into `debug.log`
+within a few seconds. The log line is now de-duplicated per unique cart
+shape per request, leaving the log readable.
+
+## 1.2.17 - 2026-05-07
+
+= Hotfix for 1.2.16 =
+
+Fixes a fatal PHP parse error introduced in 1.2.16 that crashed the plugin's settings page.
+
+The 1.2.16 build inadvertently shipped an orphan code fragment in `backend/views/settings.php` (lines 216-220) — leftover from an earlier cleanup that removed the opening of an `add_field()` call but didn't remove the body. PHP failed with `syntax error, unexpected token "=>"` whenever an admin tried to open the plugin's settings page.
+
+No other changes vs 1.2.16. All 1.2.16 fixes (Payment_Capture in classmap, order-status gate on capture, i18n, JSON_HEX_TAG, sanitization, etc.) are retained.
+
+## 1.2.16 - 2026-05-07
+
+= Critical fixes from external code review =
+
+This release addresses findings from a code review of the 1.2.2 → 1.2.15 changeset.
+
+= Blocker: Payment_Capture missing from autoloader =
+
+The Payment_Capture class — added back in 1.2.2 — was never registered in the optimised Composer classmap. As a result, every webhook attempting payment capture would hit a fatal class-not-found error in production. Both `vendor/composer/autoload_classmap.php` and `vendor/composer/autoload_static.php` are now updated.
+
+= Bug: Capture protected against terminal order statuses =
+
+`Payment_Capture::capture()` now refuses to capture orders that are already cancelled, refunded, or in another non-capturable state. Previously, a late webhook from Økoskabet could re-flip a cancelled order to "processing". The capturable status list defaults to `pending`, `on-hold`, `failed` and is filterable via `okoskabet_capturable_order_statuses`.
+
+= Bug: Timezone-aware date arithmetic =
+
+All `DateTime` constructions in the Delivery Exceptions module now use the WordPress site timezone (via `wp_timezone()`) rather than the server's PHP default. This eliminates a class of off-by-one-day bugs that could appear when the server's timezone (typically UTC) differs from the store's configured timezone (Europe/Copenhagen).
+
+= Bug: Cache key for delivery location options =
+
+The transient holding delivery location options now includes the API environment (production vs staging) and the site locale in its key. Previously, toggling the staging flag would serve stale options for up to 10 minutes.
+
+= i18n regression repaired =
+
+Plugin source strings have been reverted to English, with all Danish text moved into a `da_DK.po`/`.mo` translation file under `languages/`. The previous changes had hard-coded Danish into `__()` calls, which broke display in non-Danish locales and prevented standard translation workflows. Four `__()` calls in `functions.php` were also using the wrong text domain (`'woocommerce'`) — corrected to `O_TEXTDOMAIN`.
+
+* Plugin display in any locale now respects the active language
+* Translation can be extended via standard WordPress workflows (`.pot` template included)
+* The Danish strings users see today are unchanged — they're just delivered through the proper translation pipeline now
+
+= Security: JSON injection hardening =
+
+The inline JSON payload injected into checkout (`window._okoskabet_checkout`) is now encoded with `JSON_HEX_TAG | JSON_HEX_AMP` flags. This prevents any future malicious or accidental `</script>` sequence in admin-controlled settings from breaking out of the script tag.
+
+= Security: Webhook secret sanitization =
+
+The `_webhook_secret` CMB2 field now declares `sanitize_text_field` as its sanitization callback and `esc_attr` as its escape callback. Previously the field had neither.
+
+= Security & privacy: Webhook diagnostic logging =
+
+The webhook diagnostic logger no longer dumps raw request bodies to `debug.log`. It now logs only a summary (body length, signature presence, event name, shipment reference) and emits even that only when `WP_DEBUG` is enabled. Sensitive headers (`x-hmac-sha256`, `authorization`) are redacted in the dump.
+
+= Code quality =
+
+* All informational `error_log()` calls in `OkoRest`, `Delivery_Exceptions` and `Payment_Capture` are now gated behind `WP_DEBUG`. Exception-path error logging in payment capture remains unconditional (since those represent genuine failures worth recording).
+* Filter log line in `Delivery_Exceptions::filter_dates_for_cart` rewritten to be human-readable.
+* Customer-facing strings in the explanation overlay JS are now injected from PHP (so they translate via the standard pipeline) instead of being hard-coded.
+
+= Known remaining technical debt =
+
+These were identified in the review and are tracked in `ROADMAP.md` for future releases:
+
+* Inline JS in `functions/functions.php` should move to a properly enqueued file
+* The legacy `label_created` event mapping should become a one-shot upgrade routine instead of being applied on every webhook
+* No automated test suite yet
+* Svelte bundle is hand-patched; needs build pipeline restored
+
 ## 1.2.15 - 2026-05-06
 
 = Bedre fejlbesked når kurven har modstridende leveringsregler =

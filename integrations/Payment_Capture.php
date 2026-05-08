@@ -45,16 +45,38 @@ class Payment_Capture extends Base {
 			return array( 'success' => true, 'message' => 'Order already paid' );
 		}
 
+		// Don't capture orders that have moved to a terminal or out-of-flow
+		// status. A late webhook from Økoskabet must not flip a cancelled,
+		// refunded, or failed order back into 'processing'. Accept only the
+		// statuses where capture is meaningful.
+		$capturable_statuses = apply_filters(
+			'okoskabet_capturable_order_statuses',
+			array( 'pending', 'on-hold', 'failed' )
+		);
+		if ( ! $order->has_status( $capturable_statuses ) ) {
+			$msg = sprintf(
+				'Order #%s is in status "%s"; capture skipped (not in capturable statuses).',
+				$order->get_order_number(),
+				$order->get_status()
+			);
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'okoskabet_woocommerce_plugin: ' . $msg );
+			}
+			return array( 'success' => false, 'message' => $msg );
+		}
+
 		// Detect which gateway was actually used for this order.
 		$payment_method = $order->get_payment_method();
 
 		// If gateway_hint is 'auto', use the order's actual payment method.
 		$gateway = ( $gateway_hint === 'auto' || empty( $gateway_hint ) ) ? $payment_method : $gateway_hint;
 
-		error_log( sprintf(
-			'okoskabet_woocommerce_plugin: Attempting capture for order %s, gateway=%s, payment_method=%s',
-			$order->get_order_number(), $gateway, $payment_method
-		) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf(
+				'okoskabet_woocommerce_plugin: Attempting capture for order %s, gateway=%s, payment_method=%s',
+				$order->get_order_number(), $gateway, $payment_method
+			) );
+		}
 
 		switch ( $gateway ) {
 

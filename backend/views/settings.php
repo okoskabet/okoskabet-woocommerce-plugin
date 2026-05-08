@@ -35,8 +35,8 @@
 
 	$cmb->add_field(
 		array(
-			'name'       => __('Standard visningsvindue (dage)', O_TEXTDOMAIN),
-			'desc'       => __('Antal dage frem hvor leveringsdatoer vises som standard. Dato-undtagelser ("kun på en bestemt dag" og "fra/indtil") kan udvide visningen til specifikke datoer udenfor dette vindue. Anbefalet: 3-7 for normal drift, højere hvis du har mange undtagelser.', O_TEXTDOMAIN),
+			'name'       => __('Standard display window (days)', O_TEXTDOMAIN),
+			'desc'       => __('How many days into the future delivery dates are shown by default. Date-based exceptions ("only on a specific day" and "from/until") can extend the display to specific dates outside this window. Recommended: 3-7 for normal operation, higher if you have many exceptions.', O_TEXTDOMAIN),
 			'id'         => '_maximum_days_in_future',
 			'type'       => 'text',
 			'attributes' => array(
@@ -87,8 +87,8 @@
 	// Delivery location options settings
 	$cmb->add_field(
 		array(
-			'name' => __('Hjemmelevering: Leveringssted', O_TEXTDOMAIN),
-			'desc' => __('Indstillinger for leveringssted ved hjemmelevering', O_TEXTDOMAIN),
+			'name' => __('Home Delivery: Delivery Location', O_TEXTDOMAIN),
+			'desc' => __('Settings for delivery location on home delivery', O_TEXTDOMAIN),
 			'id'   => '_delivery_location_title',
 			'type' => 'title',
 		)
@@ -96,8 +96,8 @@
 
 	$cmb->add_field(
 		array(
-			'name' => __('Vis dropdown med leveringssteder', O_TEXTDOMAIN),
-			'desc' => __('Vis en dropdown med leveringssteder fra Økoskabets API (f.eks. "Ved trappen", "Ved hoveddøren"). Slå fra for kun at vise fritekstfeltet.', O_TEXTDOMAIN),
+			'name' => __('Show delivery location dropdown', O_TEXTDOMAIN),
+			'desc' => __('Show a dropdown with delivery locations from Økoskabet\'s API (e.g. "By the stairs", "By the front door"). Disable to show only the free-text field.', O_TEXTDOMAIN),
 			'id'   => '_delivery_location_dropdown',
 			'type' => 'checkbox',
 			'default' => 'on',
@@ -107,27 +107,29 @@
 	$cmb->add_field(
 		array(
 			'name' => __('Label: Dropdown', O_TEXTDOMAIN),
-			'desc' => __('Label på dropdown-feltet i checkout (dansk)', O_TEXTDOMAIN),
+			'desc' => __('Label on the dropdown field at checkout', O_TEXTDOMAIN),
 			'id'   => '_delivery_location_dropdown_label',
 			'type' => 'text',
-			'default' => 'Leveringssted',
+			'sanitization_cb' => 'sanitize_text_field',
+			'default' => 'Leveringsinfo',
 		)
 	);
 
 	$cmb->add_field(
 		array(
-			'name' => __('Beskrivende tekst', O_TEXTDOMAIN),
-			'desc' => __('Tekst der vises over Leveringsinfo-dropdownen på checkout. Lad være tom for at skjule. Eksempel: "Din ordre leveres af Sublog natten".', O_TEXTDOMAIN),
+			'name' => __('Descriptive text', O_TEXTDOMAIN),
+			'desc' => __('Text shown above the delivery info dropdown at checkout. Leave empty to hide. Example: "Your order is delivered overnight to your delivery day".', O_TEXTDOMAIN),
 			'id'   => '_delivery_location_note_label',
 			'type' => 'text',
-			'default' => 'Besked til chaufføren (valgfrit)',
+			'sanitization_cb' => 'sanitize_text_field',
+			'default' => '',
 		)
 	);
 
 	$cmb->add_field(
 		array(
-			'name'    => __('Skjul WooCommerce ordrenote', O_TEXTDOMAIN),
-			'desc'    => __('Skjul WooCommerce\'s standard "Tilføj ordrenote"-felt på checkout. Aktiver hvis du bruger Økoskabet leveringsinfo og kun vil have ét note-felt for kunden.', O_TEXTDOMAIN),
+			'name'    => __('Hide WooCommerce order note', O_TEXTDOMAIN),
+			'desc'    => __('Hide WooCommerce\'s standard "Add order note" field at checkout. Enable if you use Økoskabet\'s delivery info and want only one note field for the customer.', O_TEXTDOMAIN),
 			'id'      => '_hide_wc_order_comments',
 			'type'    => 'checkbox',
 		)
@@ -135,23 +137,21 @@
 
 	$cmb->add_field(
 		array(
-			'name'    => __('Webhook Secret', O_TEXTDOMAIN),
-			'desc'    => __('Secret-nøglen fra din webhook-konfiguration i Økoskabets backoffice (under API & Webhooks). Bruges til at verificere at indkomne webhooks faktisk kommer fra Økoskabet. Påkrævet hvis webhook-funktionalitet er slået til.', O_TEXTDOMAIN),
-			'id'      => '_webhook_secret',
-			'type'    => 'text',
-			'attributes' => array(
-				'type' => 'password',
-				'autocomplete' => 'off',
-			),
+			'name'            => __('Webhook Secret', O_TEXTDOMAIN),
+			'desc'            => __('Secret key from your webhook configuration in Økoskabet\'s backoffice (under API & Webhooks). Used to verify that incoming webhooks really come from Økoskabet. Required if webhook functionality is enabled.', O_TEXTDOMAIN),
+			'id'              => '_webhook_secret',
+			'type'            => 'text',
+			'attributes'      => array('type' => 'password'),
+			'sanitization_cb' => 'sanitize_text_field',
+			'escape_cb'       => 'esc_attr',
 		)
 	);
 
-	// Webhook settings
 	$cmb->add_field(
 		array(
-			'name' => __('Webhook & Betaling', O_TEXTDOMAIN),
-			'desc' => __('Konfigurer webhook-events og betalingshåndtering', O_TEXTDOMAIN),
-			'id'   => '_webhook_title',
+			'name' => __('Webhook & Payment', O_TEXTDOMAIN),
+			'desc' => __('Configure webhook events and payment handling', O_TEXTDOMAIN),
+			'id'   => '_webhook_settings_title',
 			'type' => 'title',
 		)
 	);
@@ -159,7 +159,7 @@
 	$cmb->add_field(
 		array(
 			'name' => __('Webhook Status', O_TEXTDOMAIN),
-			'desc' => __('Slå webhook-funktionalitet til eller fra', O_TEXTDOMAIN),
+			'desc' => __('Enable or disable webhook functionality', O_TEXTDOMAIN),
 			'id'   => '_webhook_enabled',
 			'type' => 'checkbox',
 			'default' => 'on',
@@ -168,26 +168,26 @@
 
 	$cmb->add_field(
 		array(
-			'name'    => __('Betalingsgateway', O_TEXTDOMAIN),
-			'desc'    => __('Vælg hvilken betalingsgateway der bruges. "Automatisk" forsøger at detektere den ud fra ordren.', O_TEXTDOMAIN),
+			'name'    => __('Payment Gateway', O_TEXTDOMAIN),
+			'desc'    => __('Choose which payment gateway is used. "Automatic" attempts to detect it from the order.', O_TEXTDOMAIN),
 			'id'      => '_payment_gateway',
 			'type'    => 'select',
-			'default' => 'auto',
 			'options' => array(
-				'auto'            => __('Automatisk (detekteres fra ordren)', O_TEXTDOMAIN),
+				'auto'             => __('Automatic (detect from order)', O_TEXTDOMAIN),
 				'quickpay_gateway' => __('Quickpay', O_TEXTDOMAIN),
-				'stripe'          => __('Stripe', O_TEXTDOMAIN),
-				'nets_easy'       => __('Nets Easy / DIBS Easy', O_TEXTDOMAIN),
-				'pensopay'        => __('Pensopay', O_TEXTDOMAIN),
-				'fallback'        => __('Andet (skift status til "processing")', O_TEXTDOMAIN),
+				'stripe'           => __('Stripe', O_TEXTDOMAIN),
+				'nets_easy'        => __('Nets Easy / DIBS Easy', O_TEXTDOMAIN),
+				'pensopay'         => __('Pensopay', O_TEXTDOMAIN),
+				'fallback'         => __('Other (change status to "processing")', O_TEXTDOMAIN),
 			),
+			'default' => 'auto',
 		)
 	);
 
 	$cmb->add_field(
 		array(
-			'name'    => __('Capture-events', O_TEXTDOMAIN),
-			'desc'    => __('Vælg hvilke events fra Økoskabet der skal trække betalingen (delayed capture). "Label Printed" sker tidligst — typisk når webshoppen printer labelen. "In Shed" sker når Økoskabet har lagt pakken i skabet. "Order Delivered" sker når kunden har afhentet pakken.', O_TEXTDOMAIN),
+			'name'    => __('Capture events', O_TEXTDOMAIN),
+			'desc'    => __('Choose which events from Økoskabet should capture the payment (delayed capture). "Label Printed" happens earliest — typically when the webshop prints the label. "In Shed" happens when Økoskabet has placed the package in the shed. "Order Delivered" happens when the customer has collected the package.', O_TEXTDOMAIN),
 			'id'      => '_capture_events',
 			'type'    => 'multicheck',
 			'options' => array(
@@ -201,8 +201,8 @@
 
 	$cmb->add_field(
 		array(
-			'name'             => __('Completion-events', O_TEXTDOMAIN),
-			'desc'             => __('Vælg hvilke events fra Økoskabet der skal markere ordren som afsluttet (completed). Typisk vil man vælge "Order Delivered" så ordren først lukkes når kunden har afhentet.', O_TEXTDOMAIN),
+			'name'             => __('Completion events', O_TEXTDOMAIN),
+			'desc'             => __('Choose which events from Økoskabet should mark the order as completed. Typically you would choose "Order Delivered" so the order only closes when the customer has collected.', O_TEXTDOMAIN),
 			'id'               => '_webhook_events',
 			'type'             => 'multicheck',
 			'options'          => array(
@@ -211,6 +211,16 @@
 				'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
 			),
 			'default'          => array('order_delivered'),
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'    => __('Allow split checkout', O_TEXTDOMAIN),
+			'desc'    => __('When ON: if a customer\'s cart contains items that cannot all be delivered on the same day, they\'ll be guided through one separate order per delivery date. When OFF: a notice tells the customer to remove items so they all share at least one delivery date.', O_TEXTDOMAIN),
+			'id'      => '_split_checkout_enabled',
+			'type'    => 'checkbox',
+			'default' => '',
 		)
 	);
 

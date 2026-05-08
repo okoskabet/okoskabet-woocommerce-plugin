@@ -198,17 +198,17 @@ class Delivery_Exceptions extends Base {
 
 		?>
 		<div id="okoskabet-delivery-exceptions" style="margin-top:32px;">
-			<h2><?php esc_html_e( 'Leveringsundtagelser', 'okoskabet-woocommerce-plugin' ); ?></h2>
+			<h2><?php esc_html_e( 'Delivery Exceptions', O_TEXTDOMAIN ); ?></h2>
 
 			<p>
-				<?php esc_html_e( 'Definér undtagelser for leveringsdatoer baseret på kategorier og tags. Reglerne er undtagelser — produkter der ikke er tilknyttet en regel, har ingen begrænsning.', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'Define exceptions for delivery dates based on categories and tags. The rules are exceptions — products not associated with a rule have no restriction.', O_TEXTDOMAIN ); ?>
 				<br>
-				<?php esc_html_e( 'Hvis et produkt matcher flere regler, skal ALLE reglerne være opfyldt for at en dato vises.', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'If a product matches multiple rules, ALL rules must be satisfied for a date to be shown.', O_TEXTDOMAIN ); ?>
 			</p>
 
 			<?php if ( $saved ) : ?>
 				<div class="notice notice-success is-dismissible">
-					<p><?php esc_html_e( 'Leveringsundtagelser gemt.', 'okoskabet-woocommerce-plugin' ); ?></p>
+					<p><?php esc_html_e( 'Delivery exceptions saved.', O_TEXTDOMAIN ); ?></p>
 				</div>
 			<?php endif; ?>
 
@@ -222,7 +222,7 @@ class Delivery_Exceptions extends Base {
 				$this->render_from_until_section( $config, $categories, $tags );
 				?>
 
-				<?php submit_button( __( 'Gem leveringsundtagelser', 'okoskabet-woocommerce-plugin' ) ); ?>
+				<?php submit_button( __( 'Save delivery exceptions', O_TEXTDOMAIN ) ); ?>
 			</form>
 		</div>
 
@@ -314,22 +314,22 @@ class Delivery_Exceptions extends Base {
 		// Display weekdays in Mon→Sun order (Danish convention).
 		$display_order = array( 1, 2, 3, 4, 5, 6, 0 );
 		$labels = array(
-			1 => __( 'Mandag', 'okoskabet-woocommerce-plugin' ),
-			2 => __( 'Tirsdag', 'okoskabet-woocommerce-plugin' ),
-			3 => __( 'Onsdag', 'okoskabet-woocommerce-plugin' ),
-			4 => __( 'Torsdag', 'okoskabet-woocommerce-plugin' ),
-			5 => __( 'Fredag', 'okoskabet-woocommerce-plugin' ),
-			6 => __( 'Lørdag', 'okoskabet-woocommerce-plugin' ),
-			0 => __( 'Søndag', 'okoskabet-woocommerce-plugin' ),
+			1 => __( 'Monday', O_TEXTDOMAIN ),
+			2 => __( 'Tuesday', O_TEXTDOMAIN ),
+			3 => __( 'Wednesday', O_TEXTDOMAIN ),
+			4 => __( 'Thursday', O_TEXTDOMAIN ),
+			5 => __( 'Friday', O_TEXTDOMAIN ),
+			6 => __( 'Saturday', O_TEXTDOMAIN ),
+			0 => __( 'Sunday', O_TEXTDOMAIN ),
 		);
 		?>
 		<div class="oko-section <?php echo $enabled ? '' : 'is-disabled'; ?>">
 			<label class="oko-master-toggle">
 				<input type="checkbox" name="weekdays_enabled" value="1" <?php checked( $enabled ); ?> />
-				<?php esc_html_e( 'Aktivér: Levering kun på faste ugedage', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'Enable: Delivery only on fixed weekdays', O_TEXTDOMAIN ); ?>
 			</label>
 			<p class="oko-help">
-				<?php esc_html_e( 'Vælg under hver ugedag hvilke kategorier og/eller tags der KUN må leveres på den dag. Produkter uden tilknytning får ingen begrænsning.', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'Under each weekday, choose which categories and/or tags may ONLY be delivered on that day. Products without an association have no restriction.', O_TEXTDOMAIN ); ?>
 			</p>
 			<div class="oko-section-body">
 				<?php foreach ( $display_order as $w ) : ?>
@@ -345,11 +345,11 @@ class Delivery_Exceptions extends Base {
 						</div>
 						<div class="oko-row-fields">
 							<div>
-								<label><?php esc_html_e( 'Kategorier', 'okoskabet-woocommerce-plugin' ); ?></label>
+								<label><?php esc_html_e( 'Categories', O_TEXTDOMAIN ); ?></label>
 								<?php $this->render_term_select( "weekdays[$w][categories][]", $categories, (array) ( $entry['categories'] ?? array() ) ); ?>
 							</div>
 							<div>
-								<label><?php esc_html_e( 'Tags', 'okoskabet-woocommerce-plugin' ); ?></label>
+								<label><?php esc_html_e( 'Tags', O_TEXTDOMAIN ); ?></label>
 								<?php $this->render_term_select( "weekdays[$w][tags][]", $tags, (array) ( $entry['tags'] ?? array() ) ); ?>
 							</div>
 						</div>
@@ -367,10 +367,10 @@ class Delivery_Exceptions extends Base {
 		<div class="oko-section <?php echo $enabled ? '' : 'is-disabled'; ?>">
 			<label class="oko-master-toggle">
 				<input type="checkbox" name="only_on_enabled" value="1" <?php checked( $enabled ); ?> />
-				<?php esc_html_e( 'Aktivér: Levering kun på en bestemt dag', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'Enable: Delivery only on a specific day', O_TEXTDOMAIN ); ?>
 			</label>
 			<p class="oko-help">
-				<?php esc_html_e( 'Opret én eller flere undtagelser hvor bestemte kategorier/tags KUN kan leveres på en specifik dato. Hver undtagelse kan slås individuelt til/fra.', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'Create one or more exceptions where specific categories/tags can ONLY be delivered on a specific date. Each exception can be enabled/disabled individually.', O_TEXTDOMAIN ); ?>
 			</p>
 			<div class="oko-section-body">
 				<div id="only_on_rows">
@@ -379,7 +379,7 @@ class Delivery_Exceptions extends Base {
 					<?php endforeach; ?>
 				</div>
 				<button type="button" class="button oko-add-btn oko-add-only-on">
-					+ <?php esc_html_e( 'Tilføj undtagelse', 'okoskabet-woocommerce-plugin' ); ?>
+					+ <?php esc_html_e( 'Add exception', O_TEXTDOMAIN ); ?>
 				</button>
 			</div>
 		</div>
@@ -390,27 +390,27 @@ class Delivery_Exceptions extends Base {
 		?>
 		<div class="oko-row">
 			<div class="oko-row-row">
-				<label><?php esc_html_e( 'Navn', 'okoskabet-woocommerce-plugin' ); ?>:
-					<input type="text" name="only_on[<?php echo esc_attr( $index ); ?>][label]" value="<?php echo esc_attr( $row['label'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'fx Juleudbringning', 'okoskabet-woocommerce-plugin' ); ?>" style="width:240px;" />
+				<label><?php esc_html_e( 'Name', O_TEXTDOMAIN ); ?>:
+					<input type="text" name="only_on[<?php echo esc_attr( $index ); ?>][label]" value="<?php echo esc_attr( $row['label'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'e.g. Christmas delivery', O_TEXTDOMAIN ); ?>" style="width:240px;" />
 				</label>
-				<label><?php esc_html_e( 'Dato', 'okoskabet-woocommerce-plugin' ); ?>:
+				<label><?php esc_html_e( 'Date', O_TEXTDOMAIN ); ?>:
 					<input type="date" name="only_on[<?php echo esc_attr( $index ); ?>][date]" value="<?php echo esc_attr( $row['date'] ?? '' ); ?>" />
 				</label>
 				<label>
 					<input type="checkbox" name="only_on[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
-					<?php esc_html_e( 'Aktiv', 'okoskabet-woocommerce-plugin' ); ?>
+					<?php esc_html_e( 'Active', O_TEXTDOMAIN ); ?>
 				</label>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
-					<?php esc_html_e( 'Fjern', 'okoskabet-woocommerce-plugin' ); ?>
+					<?php esc_html_e( 'Remove', O_TEXTDOMAIN ); ?>
 				</button>
 			</div>
 			<div class="oko-row-fields">
 				<div>
-					<label><?php esc_html_e( 'Kategorier', 'okoskabet-woocommerce-plugin' ); ?></label>
+					<label><?php esc_html_e( 'Kategorier', O_TEXTDOMAIN ); ?></label>
 					<?php $this->render_term_select( "only_on[$index][categories][]", $categories, (array) ( $row['categories'] ?? array() ) ); ?>
 				</div>
 				<div>
-					<label><?php esc_html_e( 'Tags', 'okoskabet-woocommerce-plugin' ); ?></label>
+					<label><?php esc_html_e( 'Tags', O_TEXTDOMAIN ); ?></label>
 					<?php $this->render_term_select( "only_on[$index][tags][]", $tags, (array) ( $row['tags'] ?? array() ) ); ?>
 				</div>
 			</div>
@@ -425,10 +425,10 @@ class Delivery_Exceptions extends Base {
 		<div class="oko-section <?php echo $enabled ? '' : 'is-disabled'; ?>">
 			<label class="oko-master-toggle">
 				<input type="checkbox" name="from_until_enabled" value="1" <?php checked( $enabled ); ?> />
-				<?php esc_html_e( 'Aktivér: Levering fra (og evt. indtil) en bestemt dag', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'Enable: Delivery from (and optionally until) a specific day', O_TEXTDOMAIN ); ?>
 			</label>
 			<p class="oko-help">
-				<?php esc_html_e( 'Opret undtagelser hvor bestemte kategorier/tags kun kan leveres mellem to datoer. Slut-dato er valgfri — undlad den hvis produktet skal kunne leveres ubegrænset efter start-datoen.', 'okoskabet-woocommerce-plugin' ); ?>
+				<?php esc_html_e( 'Create exceptions where specific categories/tags can only be delivered between two dates. The end date is optional — leave it out if the product should be deliverable indefinitely after the start date.', O_TEXTDOMAIN ); ?>
 			</p>
 			<div class="oko-section-body">
 				<div id="from_until_rows">
@@ -437,7 +437,7 @@ class Delivery_Exceptions extends Base {
 					<?php endforeach; ?>
 				</div>
 				<button type="button" class="button oko-add-btn oko-add-from-until">
-					+ <?php esc_html_e( 'Tilføj undtagelse', 'okoskabet-woocommerce-plugin' ); ?>
+					+ <?php esc_html_e( 'Add exception', O_TEXTDOMAIN ); ?>
 				</button>
 			</div>
 		</div>
@@ -448,30 +448,30 @@ class Delivery_Exceptions extends Base {
 		?>
 		<div class="oko-row">
 			<div class="oko-row-row">
-				<label><?php esc_html_e( 'Navn', 'okoskabet-woocommerce-plugin' ); ?>:
-					<input type="text" name="from_until[<?php echo esc_attr( $index ); ?>][label]" value="<?php echo esc_attr( $row['label'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'fx Sommerprodukter', 'okoskabet-woocommerce-plugin' ); ?>" style="width:240px;" />
+				<label><?php esc_html_e( 'Navn', O_TEXTDOMAIN ); ?>:
+					<input type="text" name="from_until[<?php echo esc_attr( $index ); ?>][label]" value="<?php echo esc_attr( $row['label'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'e.g. Summer products', O_TEXTDOMAIN ); ?>" style="width:240px;" />
 				</label>
-				<label><?php esc_html_e( 'Fra', 'okoskabet-woocommerce-plugin' ); ?>:
+				<label><?php esc_html_e( 'From', O_TEXTDOMAIN ); ?>:
 					<input type="date" name="from_until[<?php echo esc_attr( $index ); ?>][from]" value="<?php echo esc_attr( $row['from'] ?? '' ); ?>" />
 				</label>
-				<label><?php esc_html_e( 'Indtil (valgfri)', 'okoskabet-woocommerce-plugin' ); ?>:
+				<label><?php esc_html_e( 'Until (optional)', O_TEXTDOMAIN ); ?>:
 					<input type="date" name="from_until[<?php echo esc_attr( $index ); ?>][until]" value="<?php echo esc_attr( $row['until'] ?? '' ); ?>" />
 				</label>
 				<label>
 					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
-					<?php esc_html_e( 'Aktiv', 'okoskabet-woocommerce-plugin' ); ?>
+					<?php esc_html_e( 'Aktiv', O_TEXTDOMAIN ); ?>
 				</label>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
-					<?php esc_html_e( 'Fjern', 'okoskabet-woocommerce-plugin' ); ?>
+					<?php esc_html_e( 'Fjern', O_TEXTDOMAIN ); ?>
 				</button>
 			</div>
 			<div class="oko-row-fields">
 				<div>
-					<label><?php esc_html_e( 'Kategorier', 'okoskabet-woocommerce-plugin' ); ?></label>
+					<label><?php esc_html_e( 'Kategorier', O_TEXTDOMAIN ); ?></label>
 					<?php $this->render_term_select( "from_until[$index][categories][]", $categories, (array) ( $row['categories'] ?? array() ) ); ?>
 				</div>
 				<div>
-					<label><?php esc_html_e( 'Tags', 'okoskabet-woocommerce-plugin' ); ?></label>
+					<label><?php esc_html_e( 'Tags', O_TEXTDOMAIN ); ?></label>
 					<?php $this->render_term_select( "from_until[$index][tags][]", $tags, (array) ( $row['tags'] ?? array() ) ); ?>
 				</div>
 			</div>
@@ -487,7 +487,7 @@ class Delivery_Exceptions extends Base {
 		$selected_str = array_map( 'strval', array_map( 'intval', $selected ) );
 		echo '<select name="' . esc_attr( $name ) . '" multiple class="oko-multi">';
 		if ( empty( $terms ) ) {
-			echo '<option disabled>' . esc_html__( '(ingen oprettet)', 'okoskabet-woocommerce-plugin' ) . '</option>';
+			echo '<option disabled>' . esc_html__( '(none created)', O_TEXTDOMAIN ) . '</option>';
 		} else {
 			foreach ( $terms as $term ) {
 				$id = (string) (int) $term->term_id;
@@ -504,7 +504,7 @@ class Delivery_Exceptions extends Base {
 
 	public function handle_save(): void {
 		if ( ! current_user_can( self::CAPABILITY ) ) {
-			wp_die( esc_html__( 'Du har ikke adgang.', 'okoskabet-woocommerce-plugin' ) );
+			wp_die( esc_html__( 'You do not have access.', O_TEXTDOMAIN ) );
 		}
 		check_admin_referer( 'okoskabet_save_exceptions' );
 
@@ -578,7 +578,7 @@ class Delivery_Exceptions extends Base {
 		// so the browser scrolls to where they were.
 		wp_safe_redirect( add_query_arg(
 			array(
-				'page'           => 'okoskabet-woocommerce-plugin',
+				'page'           => O_TEXTDOMAIN,
 				'oko_exc_saved'  => '1',
 			),
 			admin_url( 'admin.php' )
@@ -677,14 +677,24 @@ class Delivery_Exceptions extends Base {
 			sort( $result );
 		}
 
-		error_log( sprintf(
-			'Økoskabet exceptions: %d input dates → %d after restriction, +%d extension(s) = %d final. Rules: %s',
-			count( $dates ),
-			count( $dates ) - max( 0, count( $dates ) - count( array_intersect( $dates, $result ) ) ),
-			count( $extra ),
-			count( $result ),
-			wp_json_encode( $applicable_rules )
-		) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// De-duplicate the log line per unique product-set per request.
+			// The filter fires many times during a single Svelte checkout
+			// render; logging every call buries useful information.
+			static $logged_cart_keys = array();
+			$cart_key = implode( ',', $product_ids );
+			if ( ! isset( $logged_cart_keys[ $cart_key ] ) ) {
+				$logged_cart_keys[ $cart_key ] = true;
+				error_log( sprintf(
+					'Økoskabet exceptions: %d input dates → %d kept after restriction, +%d extension(s) = %d final. Rules: %s',
+					count( $dates ),
+					count( array_intersect( $dates, $result ) ) - count( $extra ),
+					count( $extra ),
+					count( $result ),
+					wp_json_encode( $applicable_rules )
+				) );
+			}
+		}
 
 		return $result;
 	}
@@ -712,6 +722,17 @@ class Delivery_Exceptions extends Base {
 			return $out;
 		}
 
+		// If the merchant has opted in to split-checkout, the new banner at
+		// the top of the checkout page will guide the customer through
+		// multiple orders — we don't want to ALSO show this "remove an item"
+		// explanation in the dates dropdown area, which would conflict with
+		// the new flow's messaging. The split-banner is the authoritative UI
+		// in that case.
+		if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Split_Checkout' )
+			&& \okoskabet_woocommerce_plugin\Integrations\Split_Checkout::is_feature_enabled() ) {
+			return $out;
+		}
+
 		$config = self::get_config();
 
 		// Pre-collect cat/tag IDs and names per product, since we need to
@@ -728,7 +749,7 @@ class Delivery_Exceptions extends Base {
 			foreach ( wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) ) as $tid ) { $cat_ids[ (int) $tid ] = true; }
 			foreach ( wp_get_post_terms( $pid, 'product_tag', array( 'fields' => 'ids' ) ) as $tid ) { $tag_ids[ (int) $tid ] = true; }
 			$product_meta[ $pid ] = array(
-				'name'    => $post->post_title !== '' ? $post->post_title : sprintf( __( 'Vare #%d', 'okoskabet-woocommerce-plugin' ), $pid ),
+				'name'    => $post->post_title !== '' ? $post->post_title : sprintf( __( 'Item #%d', O_TEXTDOMAIN ), $pid ),
 				'cat_ids' => $cat_ids,
 				'tag_ids' => $tag_ids,
 				'rules'   => array(), // populated below
@@ -750,7 +771,7 @@ class Delivery_Exceptions extends Base {
 				}
 				if ( ! empty( $matching_weekdays ) ) {
 					$descriptions[] = sprintf(
-						__( 'kan kun leveres %s', 'okoskabet-woocommerce-plugin' ),
+						__( 'can only be delivered on %s', O_TEXTDOMAIN ),
 						self::format_weekday_list( $matching_weekdays )
 					);
 				}
@@ -762,7 +783,7 @@ class Delivery_Exceptions extends Base {
 					if ( empty( $row['enabled'] ) || empty( $row['date'] ) ) { continue; }
 					if ( self::rule_matches_terms( $row, $cat_ids, $tag_ids ) ) {
 						$descriptions[] = sprintf(
-							__( 'kan kun leveres %s', 'okoskabet-woocommerce-plugin' ),
+							__( 'can only be delivered on %s', O_TEXTDOMAIN ),
 							self::format_date_human( $row['date'] )
 						);
 					}
@@ -776,13 +797,13 @@ class Delivery_Exceptions extends Base {
 					if ( self::rule_matches_terms( $row, $cat_ids, $tag_ids ) ) {
 						if ( ! empty( $row['until'] ) ) {
 							$descriptions[] = sprintf(
-								__( 'kan kun leveres mellem %1$s og %2$s', 'okoskabet-woocommerce-plugin' ),
+								__( 'can only be delivered between %1$s and %2$s', O_TEXTDOMAIN ),
 								self::format_date_human( $row['from'] ),
 								self::format_date_human( $row['until'] )
 							);
 						} else {
 							$descriptions[] = sprintf(
-								__( 'kan tidligst leveres fra %s', 'okoskabet-woocommerce-plugin' ),
+								__( 'can be delivered no earlier than %s', O_TEXTDOMAIN ),
 								self::format_date_human( $row['from'] )
 							);
 						}
@@ -813,7 +834,7 @@ class Delivery_Exceptions extends Base {
 
 		// One-line summary used by the frontend headline.
 		if ( $any ) {
-			$out['summary'] = __( 'Varerne i din kurv har modstridende leveringsregler så ingen dato passer til dem alle. Se nedenfor.', 'okoskabet-woocommerce-plugin' );
+			$out['summary'] = __( 'The items in your cart have conflicting delivery rules, so no single date works for all of them. See below.', O_TEXTDOMAIN );
 		}
 
 		return $out;
@@ -838,13 +859,13 @@ class Delivery_Exceptions extends Base {
 	/** Format weekday numbers (0=Sun…6=Sat) as a Danish phrase. */
 	private static function format_weekday_list( array $weekdays ): string {
 		$labels = array(
-			0 => __( 'søndage', 'okoskabet-woocommerce-plugin' ),
-			1 => __( 'mandage', 'okoskabet-woocommerce-plugin' ),
-			2 => __( 'tirsdage', 'okoskabet-woocommerce-plugin' ),
-			3 => __( 'onsdage', 'okoskabet-woocommerce-plugin' ),
-			4 => __( 'torsdage', 'okoskabet-woocommerce-plugin' ),
-			5 => __( 'fredage', 'okoskabet-woocommerce-plugin' ),
-			6 => __( 'lørdage', 'okoskabet-woocommerce-plugin' ),
+			0 => __( 'Sundays', O_TEXTDOMAIN ),
+			1 => __( 'Mondays', O_TEXTDOMAIN ),
+			2 => __( 'Tuesdays', O_TEXTDOMAIN ),
+			3 => __( 'Wednesdays', O_TEXTDOMAIN ),
+			4 => __( 'Thursdays', O_TEXTDOMAIN ),
+			5 => __( 'Fridays', O_TEXTDOMAIN ),
+			6 => __( 'Saturdays', O_TEXTDOMAIN ),
 		);
 		// Sort so Mondays come first (Danish week-order).
 		usort( $weekdays, function ( $a, $b ) {
@@ -860,13 +881,31 @@ class Delivery_Exceptions extends Base {
 			return $names[0];
 		}
 		$last = array_pop( $names );
-		return implode( ', ', $names ) . ' ' . __( 'eller', 'okoskabet-woocommerce-plugin' ) . ' ' . $last;
+		return implode( ', ', $names ) . ' ' . __( 'or', O_TEXTDOMAIN ) . ' ' . $last;
 	}
 
-	/** Format a Y-m-d date as a Danish "d. F Y" string. */
+	/**
+	 * Build a DateTime in the WordPress site's configured timezone.
+	 *
+	 * Without this, all DateTime constructions fall back to the server's
+	 * default timezone (typically UTC on managed hosts), which can produce
+	 * off-by-one-day errors in weekday and range comparisons when the store
+	 * operates in a different timezone (Europe/Copenhagen for our case).
+	 *
+	 * @param string $when 'now', 'today', 'YYYY-MM-DD' etc. — anything
+	 *                     DateTime accepts.
+	 * @return \DateTime
+	 * @throws \Exception if $when is unparseable
+	 */
+	private static function wp_datetime( string $when ): \DateTime {
+		$tz = function_exists( 'wp_timezone' ) ? wp_timezone() : new \DateTimeZone( 'UTC' );
+		return new \DateTime( $when, $tz );
+	}
+
+	/** Format a Y-m-d date as a Danish "den d. F YYYY" string. */
 	private static function format_date_human( string $date ): string {
 		try {
-			$dt = new \DateTime( $date );
+			$dt = self::wp_datetime( $date );
 		} catch ( \Exception $e ) {
 			return $date;
 		}
@@ -914,14 +953,14 @@ class Delivery_Exceptions extends Base {
 		$config   = self::get_config();
 		$rules    = $instance->collect_applicable_rules( $product_ids, $config );
 
-		$today = new \DateTime( 'today' );
+		$today = self::wp_datetime( 'today' );
 		$max   = $default_days;
 
 		foreach ( $rules as $rule ) {
 			$candidates = self::extension_candidates_for_rule( $rule );
 			foreach ( $candidates as $date ) {
 				try {
-					$dt = new \DateTime( $date );
+					$dt = self::wp_datetime( $date );
 				} catch ( \Exception $e ) {
 					continue;
 				}
@@ -939,6 +978,16 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
+	 * Per-request cache for collect_applicable_rules. Keyed by sorted product
+	 * IDs joined with commas. The same cart will hit the filter multiple
+	 * times during a single checkout render (Svelte triggers many re-renders);
+	 * caching avoids re-querying terms for every call.
+	 *
+	 * @var array<string, array>
+	 */
+	private static $rules_cache = array();
+
+	/**
 	 * Walk through the configuration, returning every rule that applies to
 	 * at least one product in $product_ids.
 	 *
@@ -947,13 +996,20 @@ class Delivery_Exceptions extends Base {
 	 * @return array<int, array>  Each entry: ['type'=>..., ...rule fields...]
 	 */
 	public function collect_applicable_rules( array $product_ids, array $config ): array {
+		// Normalise + cache key based on sorted product IDs.
+		$normalised = array_values( array_unique( array_filter( array_map( 'intval', $product_ids ), function ( $id ) { return $id > 0; } ) ) );
+		sort( $normalised );
+		$cache_key = implode( ',', $normalised );
+
+		if ( isset( self::$rules_cache[ $cache_key ] ) ) {
+			return self::$rules_cache[ $cache_key ];
+		}
+
 		// Pre-collect category and tag IDs for every cart product so we
 		// don't repeat the term query for each rule.
 		$cart_cat_ids = array();
 		$cart_tag_ids = array();
-		foreach ( $product_ids as $pid ) {
-			$pid = (int) $pid;
-			if ( $pid <= 0 ) { continue; }
+		foreach ( $normalised as $pid ) {
 			foreach ( wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) ) as $tid ) {
 				$cart_cat_ids[ (int) $tid ] = true;
 			}
@@ -1033,6 +1089,8 @@ class Delivery_Exceptions extends Base {
 				'weekdays' => array_values( array_unique( $weekday_rules ) ),
 			);
 		}
+
+		self::$rules_cache[ $cache_key ] = $rest;
 		return $rest;
 	}
 
@@ -1068,7 +1126,7 @@ class Delivery_Exceptions extends Base {
 	 */
 	public static function date_passes_rule( string $date, array $rule ): bool {
 		try {
-			$dt = new \DateTime( $date );
+			$dt = self::wp_datetime( $date );
 		} catch ( \Exception $e ) {
 			return true;
 		}
@@ -1091,7 +1149,7 @@ class Delivery_Exceptions extends Base {
 					return true;
 				}
 				try {
-					$from_dt = new \DateTime( $from );
+					$from_dt = self::wp_datetime( $from );
 				} catch ( \Exception $e ) {
 					return true;
 				}
@@ -1100,7 +1158,7 @@ class Delivery_Exceptions extends Base {
 				}
 				if ( ! empty( $until ) ) {
 					try {
-						$until_dt = new \DateTime( $until );
+						$until_dt = self::wp_datetime( $until );
 					} catch ( \Exception $e ) {
 						return true;
 					}

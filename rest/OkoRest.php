@@ -368,7 +368,12 @@ class OkoRest extends Base
 		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
 
 		// Use transient to avoid hammering the API — options rarely change.
-		$transient_key = 'okoskabet_delivery_location_options';
+		// Cache key includes the API environment (production vs staging) and
+		// the site locale, so toggling staging or switching language flushes
+		// rather than serves stale options.
+		$env = !empty($settings['_staging_api']) ? 'staging' : 'production';
+		$locale = function_exists('determine_locale') ? determine_locale() : (function_exists('get_locale') ? get_locale() : 'default');
+		$transient_key = 'okoskabet_delivery_location_options_' . md5($env . '|' . $locale);
 		$cached = get_transient($transient_key);
 
 		if ($cached !== false) {
@@ -416,17 +421,33 @@ class OkoRest extends Base
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
 		// === DIAGNOSTIC LOGGING ===
-		// Logs every incoming webhook request including auth failures, so we can
-		// diagnose what Økoskabet is actually sending. Useful during testing;
-		// can be removed in a future stable release.
-		$diag_headers = $request->get_headers();
-		$diag_body    = $request->get_body();
-		$diag_params  = $request->get_params();
-		error_log('=== ØKOSKABET WEBHOOK INCOMING ===');
-		error_log('Headers: ' . wp_json_encode($diag_headers));
-		error_log('Raw body: ' . $diag_body);
-		error_log('Parsed params: ' . wp_json_encode($diag_params));
-		error_log('=== END WEBHOOK DUMP ===');
+		// Only emits when WP_DEBUG is enabled. The raw body is redacted to
+		// length only, so any PII Økoskabet may include in the future doesn't
+		// land in production logs indefinitely. The signature header is also
+		// redacted (we log its presence and length, not its value).
+		if (defined('WP_DEBUG') && WP_DEBUG) {
+			$diag_headers = $request->get_headers();
+			$diag_params  = $request->get_params();
+			$body_len     = strlen($request->get_body());
+			$has_sig      = !empty($diag_headers['x_hmac_sha256']) || !empty($diag_headers['x-hmac-sha256']);
+			// Redact known-sensitive headers from the dump.
+			$redacted = $diag_headers;
+			foreach (array('x_hmac_sha256', 'x-hmac-sha256', 'authorization') as $sensitive) {
+				if (isset($redacted[$sensitive])) {
+					$redacted[$sensitive] = array('[REDACTED ' . strlen(is_array($diag_headers[$sensitive]) ? ($diag_headers[$sensitive][0] ?? '') : $diag_headers[$sensitive]) . ' chars]');
+				}
+			}
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				error_log(sprintf(
+				'Økoskabet webhook incoming: body=%d bytes, signature_present=%s, event=%s, shipment_reference=%s',
+				$body_len,
+				$has_sig ? 'yes' : 'no',
+				isset($diag_params['event']) ? $diag_params['event'] : '(none)',
+				isset($diag_params['shipment_reference']) ? $diag_params['shipment_reference'] : '(none)'
+				));
+			}
+			if (defined('WP_DEBUG') && WP_DEBUG) { error_log('Økoskabet webhook headers (redacted): ' . wp_json_encode($redacted)); }
+		}
 		// === END DIAGNOSTIC LOGGING ===
 
 		$params   = $request->get_params();
@@ -436,7 +457,7 @@ class OkoRest extends Base
 
 		// --- Step 0: Webhook must be enabled in plugin settings ---
 		if (empty($settings['_webhook_enabled'])) {
-			error_log('Økoskabet webhook: REJECTED — webhook functionality is disabled in plugin settings');
+			if (defined('WP_DEBUG') && WP_DEBUG) { error_log('Økoskabet webhook: REJECTED — webhook functionality is disabled in plugin settings'); }
 			return new \WP_Error('webhook_disabled', 'Webhook functionality is disabled', array('status' => 403));
 		}
 
@@ -445,7 +466,7 @@ class OkoRest extends Base
 		// the per-webhook Secret configured in their backoffice. The signature is
 		// transmitted in the x-hmac-sha256 header, hex-encoded.
 		if (empty($settings['_webhook_secret'])) {
-			error_log('Økoskabet webhook: REJECTED — webhook secret is not configured in plugin settings');
+			if (defined('WP_DEBUG') && WP_DEBUG) { error_log('Økoskabet webhook: REJECTED — webhook secret is not configured in plugin settings'); }
 			return new \WP_Error('webhook_secret_missing', 'Webhook secret not configured', array('status' => 500));
 		}
 
@@ -455,7 +476,7 @@ class OkoRest extends Base
 		}
 
 		if (empty($received_signature)) {
-			error_log('Økoskabet webhook: REJECTED — missing x-hmac-sha256 signature header');
+			if (defined('WP_DEBUG') && WP_DEBUG) { error_log('Økoskabet webhook: REJECTED — missing x-hmac-sha256 signature header'); }
 			return new \WP_Error('signature_missing', 'Missing signature header', array('status' => 401));
 		}
 
@@ -464,11 +485,13 @@ class OkoRest extends Base
 		// Compare timing-safe and case-insensitive (Økoskabet sends uppercase hex,
 		// hash_hmac produces lowercase by default).
 		if (!hash_equals($expected_signature, strtolower($received_signature))) {
-			error_log(sprintf(
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				error_log(sprintf(
 				'Økoskabet webhook: REJECTED — HMAC signature mismatch. Received=%s Expected=%s',
 				$received_signature,
 				$expected_signature
-			));
+				));
+			}
 			return new \WP_Error('signature_invalid', 'Invalid HMAC signature', array('status' => 401));
 		}
 
@@ -512,9 +535,15 @@ class OkoRest extends Base
 			}
 		}
 
-		// Backwards compatibility: if a settings array still references the old
-		// 'label_created' key (from plugin version 1.2.6 or earlier), treat it as
-		// equivalent to 'in_shed' (which is what label_created actually mapped to before).
+		// Backwards compatibility safety net: if any settings array still
+		// references the legacy 'label_created' key (from plugin version 1.2.6
+		// or earlier), treat it as equivalent to 'in_shed' (which is what
+		// label_created actually mapped to before).
+		// Note: the Upgrades integration runs a one-shot migration on
+		// admin_init that rewrites these stored values. This runtime remap is
+		// kept as a defense-in-depth measure for sites that bypass the admin
+		// (e.g. direct REST traffic right after upgrade, before an admin
+		// loads any page).
 		$webhook_events_raw = !empty($settings['_webhook_events']) ? $settings['_webhook_events'] : array();
 		$capture_events_raw = !empty($settings['_capture_events']) ? $settings['_capture_events'] : array();
 		$webhook_events = array_map(function($e) { return $e === 'label_created' ? 'in_shed' : $e; }, $webhook_events_raw);
@@ -524,11 +553,13 @@ class OkoRest extends Base
 		// Return 200 so Økoskabet doesn't retry indefinitely — we acknowledge receipt
 		// even though we don't act on it.
 		if ($internal_event === null) {
-			error_log(sprintf(
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				error_log(sprintf(
 				'Økoskabet webhook: ignored — no internal mapping for event=%s, status=%s',
 				$raw_event,
 				isset($params['changes']['status']['value']) ? $params['changes']['status']['value'] : '(none)'
-			));
+				));
+			}
 			return array(
 				'success' => true,
 				'message' => 'Event acknowledged but not actionable',
@@ -543,10 +574,12 @@ class OkoRest extends Base
 		$triggers_complete = in_array($internal_event, $webhook_events, true);
 
 		if (!$triggers_capture && !$triggers_complete) {
-			error_log(sprintf(
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				error_log(sprintf(
 				'Økoskabet webhook: ignored — internal event "%s" not enabled in plugin settings',
 				$internal_event
-			));
+				));
+			}
 			return array(
 				'success'  => true,
 				'message'  => 'Event not configured for any action',
@@ -562,7 +595,7 @@ class OkoRest extends Base
 
 		$order = wc_get_order($shipment_reference);
 		if (!$order) {
-			error_log(sprintf('Økoskabet webhook: order not found for shipment_reference=%s', $shipment_reference));
+			if (defined('WP_DEBUG') && WP_DEBUG) { error_log(sprintf('Økoskabet webhook: order not found for shipment_reference=%s', $shipment_reference)); }
 			return new \WP_Error('order_not_found', 'Order not found', array('status' => 404));
 		}
 
@@ -595,14 +628,16 @@ class OkoRest extends Base
 		}
 
 		// Log the successfully processed webhook.
-		error_log(sprintf(
+		if (defined('WP_DEBUG') && WP_DEBUG) {
+			error_log(sprintf(
 			'Økoskabet webhook processed: RawEvent=%s, InternalEvent=%s, Order=%s, Capture=%s, Complete=%s',
 			$raw_event,
 			$internal_event,
 			$shipment_reference,
 			$triggers_capture ? 'yes' : 'no',
 			$triggers_complete ? 'yes' : 'no'
-		));
+			));
+		}
 
 		return array(
 			'success'        => true,
