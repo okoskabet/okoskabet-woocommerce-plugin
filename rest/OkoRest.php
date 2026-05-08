@@ -487,9 +487,8 @@ class OkoRest extends Base
 		if (!hash_equals($expected_signature, strtolower($received_signature))) {
 			if (defined('WP_DEBUG') && WP_DEBUG) {
 				error_log(sprintf(
-				'Økoskabet webhook: REJECTED — HMAC signature mismatch. Received=%s Expected=%s',
-				$received_signature,
-				$expected_signature
+				'Økoskabet webhook: REJECTED — HMAC signature mismatch. Received=%s',
+				$received_signature
 				));
 			}
 			return new \WP_Error('signature_invalid', 'Invalid HMAC signature', array('status' => 401));
