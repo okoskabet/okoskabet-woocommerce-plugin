@@ -12,11 +12,14 @@
 
 	$cmb->add_field(
 		array(
-			'name'    => __('API Key', O_TEXTDOMAIN),
-			'desc'    => __('Økoskabet API Key', O_TEXTDOMAIN),
-			'id'      => '_api_key',
-			'type'    => 'text',
-			'default' => '',
+			'name'            => __('API Key', O_TEXTDOMAIN),
+			'desc'            => __('Økoskabet API Key', O_TEXTDOMAIN),
+			'id'              => '_api_key',
+			'type'            => 'text',
+			'attributes'      => array('type' => 'password'),
+			'sanitization_cb' => 'sanitize_text_field',
+			'escape_cb'       => 'esc_attr',
+			'default'         => '',
 		)
 	);
 
@@ -249,10 +252,10 @@
 						<li><strong>' . __('Navigate to Webhook Settings', O_TEXTDOMAIN) . '</strong></li>
 						<li><strong>' . __('Add New Webhook with these settings:', O_TEXTDOMAIN) . '</strong>
 							<ul style="margin-top: 5px;">
-								<li><strong>' . __('URL:', O_TEXTDOMAIN) . '</strong> <code>' . get_site_url() . '/wp-json/wp/v2/okoskabet/webhook</code></li>
+								<li><strong>' . __('URL:', O_TEXTDOMAIN) . '</strong> <code>' . esc_html( get_site_url() ) . '/wp-json/wp/v2/okoskabet/webhook</code></li>
 								<li><strong>' . __('Method:', O_TEXTDOMAIN) . '</strong> <code>POST</code></li>
 								<li><strong>' . __('Content-Type:', O_TEXTDOMAIN) . '</strong> <code>application/json</code></li>
-								<li><strong>' . __('Authorization Header:', O_TEXTDOMAIN) . '</strong> <code>' . (!empty($settings['_api_key']) ? $settings['_api_key'] : __('Your API Key', O_TEXTDOMAIN)) . '</code></li>
+								<li><strong>' . __('Signing secret:', O_TEXTDOMAIN) . '</strong> ' . __('use the value of the <em>Webhook Secret</em> field above. Økoskabet uses this to sign each webhook.', O_TEXTDOMAIN) . '</li>
 							</ul>
 						</li>
 						<li><strong>' . __('Select Events to Send:', O_TEXTDOMAIN) . '</strong>
@@ -262,7 +265,7 @@
 							</ul>
 						</li>
 					</ol>
-					
+
 					<h4>' . __('Expected Payload Format:', O_TEXTDOMAIN) . '</h4>
 					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">{
   "event": "label_created", // or "order_delivered"
@@ -271,17 +274,22 @@
     // Additional event data (optional)
   }
 }</pre>
-					
+
 					<h4>' . __('Authentication:', O_TEXTDOMAIN) . '</h4>
-					<p>' . __('Include your API key in the Authorization header:', O_TEXTDOMAIN) . '</p>
-					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">Authorization: ' . (!empty($settings['_api_key']) ? $settings['_api_key'] : __('your-api-key-here', O_TEXTDOMAIN)) . '</pre>
-					
+					<p>' . __('Each webhook is verified by an HMAC-SHA256 signature of the raw request body, using the Webhook Secret configured above. Økoskabet computes the signature on its side and sends it as the lowercase hex value of the following header:', O_TEXTDOMAIN) . '</p>
+					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">X-HMAC-SHA256: &lt;hex(hmac_sha256(body, webhook_secret))&gt;</pre>
+					<p>' . __('If the header is missing, malformed or does not match, the request is rejected with HTTP 401. The API Key field is <strong>not</strong> used to authenticate webhooks.', O_TEXTDOMAIN) . '</p>
+
 					<h4>' . __('Testing the Webhook:', O_TEXTDOMAIN) . '</h4>
-					<p>' . __('You can test the webhook using curl:', O_TEXTDOMAIN) . '</p>
-					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">curl -X POST "' . get_site_url() . '/wp-json/wp/v2/okoskabet/webhook" \
+					<p>' . __('You can replay a payload locally with curl. Replace <code>your-webhook-secret</code> with the value from the field above (do not commit it):', O_TEXTDOMAIN) . '</p>
+					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">BODY=\'{"event":"order_delivered","shipment_reference":"12345"}\'
+SECRET="your-webhook-secret"
+SIG=$(printf "%s" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk \'{print $2}\')
+
+curl -X POST "' . esc_html( get_site_url() ) . '/wp-json/wp/v2/okoskabet/webhook" \
   -H "Content-Type: application/json" \
-  -H "Authorization: ' . (!empty($settings['_api_key']) ? $settings['_api_key'] : __('your-api-key', O_TEXTDOMAIN)) . '" \
-  -d \'{"event": "order_delivered", "shipment_reference": "12345"}\'</pre>
+  -H "X-HMAC-SHA256: $SIG" \
+  --data-raw "$BODY"</pre>
 				</div>
 			',
 			'id'   => '_webhook_instructions',
@@ -297,7 +305,7 @@
 					<h4 style="margin-top: 0;">' . __('Response Codes:', O_TEXTDOMAIN) . '</h4>
 					<ul>
 						<li><strong>200 OK:</strong> ' . __('Webhook processed successfully', O_TEXTDOMAIN) . '</li>
-						<li><strong>401 Unauthorized:</strong> ' . __('Invalid or missing API key', O_TEXTDOMAIN) . '</li>
+						<li><strong>401 Unauthorized:</strong> ' . __('Invalid or missing HMAC signature', O_TEXTDOMAIN) . '</li>
 						<li><strong>403 Forbidden:</strong> ' . __('Webhook functionality is disabled', O_TEXTDOMAIN) . '</li>
 						<li><strong>404 Not Found:</strong> ' . __('Order not found', O_TEXTDOMAIN) . '</li>
 						<li><strong>503 Service Unavailable:</strong> ' . __('WooCommerce is not available', O_TEXTDOMAIN) . '</li>
