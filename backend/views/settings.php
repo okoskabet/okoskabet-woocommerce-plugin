@@ -1,4 +1,21 @@
-<?php ?>
+<?php
+/**
+ * Plugin settings page.
+ *
+ * Historically all configuration lived on this CMB2-rendered form. As
+ * of 1.4.0 the credentials, descriptions, payment gateway and webhook
+ * event lists have moved to the per-merchant section below (see
+ * `Merchants` integration). This view now only carries the GLOBAL UX
+ * settings that aren't merchant-specific.
+ *
+ * Pre-migration installs (no merchants configured yet) still see the
+ * legacy fields so the migration can pick them up later — once at least
+ * one merchant exists, those fields are replaced with a notice pointing
+ * to the Merchants section.
+ */
+$oko_multi_merchant_active = class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' )
+	&& \okoskabet_woocommerce_plugin\Integrations\Merchants::has_any();
+?>
 <div id="tabs-1" class="wrap">
 	<?php
 	$cmb = new_cmb2_box(
@@ -10,18 +27,20 @@
 		)
 	);
 
-	$cmb->add_field(
-		array(
-			'name'            => __('API Key', O_TEXTDOMAIN),
-			'desc'            => __('Økoskabet API Key', O_TEXTDOMAIN),
-			'id'              => '_api_key',
-			'type'            => 'text',
-			'attributes'      => array('type' => 'password'),
-			'sanitization_cb' => 'sanitize_text_field',
-			'escape_cb'       => 'esc_attr',
-			'default'         => '',
-		)
-	);
+	if ( ! $oko_multi_merchant_active ) {
+		$cmb->add_field(
+			array(
+				'name'            => __('API Key', O_TEXTDOMAIN),
+				'desc'            => __('Økoskabet API Key. (Once you save, this becomes the default merchant\'s API key — manage it under "Økoskabet merchants" below.)', O_TEXTDOMAIN),
+				'id'              => '_api_key',
+				'type'            => 'text',
+				'attributes'      => array('type' => 'password'),
+				'sanitization_cb' => 'sanitize_text_field',
+				'escape_cb'       => 'esc_attr',
+				'default'         => '',
+			)
+		);
+	}
 
 	$cmb->add_field(
 		array(
@@ -36,22 +55,23 @@
 		)
 	);
 
-	$cmb->add_field(
-		array(
-			'name'       => __('Standard display window (days)', O_TEXTDOMAIN),
-			'desc'       => __('How many days into the future delivery dates are shown by default. Date-based exceptions ("only on a specific day" and "from/until") can extend the display to specific dates outside this window. Recommended: 3-7 for normal operation, higher if you have many exceptions.', O_TEXTDOMAIN),
-			'id'         => '_maximum_days_in_future',
-			'type'       => 'text',
-			'attributes' => array(
-				'type'      => 'number',
-				'pattern'   => '\d*',
-			),
-			'sanitization_cb' => 'absint',
-			'escape_cb'       => 'absint',
-			'default'         => '3'
-		)
-	);
-
+	if ( ! $oko_multi_merchant_active ) {
+		$cmb->add_field(
+			array(
+				'name'       => __('Standard display window (days)', O_TEXTDOMAIN),
+				'desc'       => __('How many days into the future delivery dates are shown by default. (After multi-merchant migration this moves into each merchant\'s configuration.)', O_TEXTDOMAIN),
+				'id'         => '_maximum_days_in_future',
+				'type'       => 'text',
+				'attributes' => array(
+					'type'      => 'number',
+					'pattern'   => '\d*',
+				),
+				'sanitization_cb' => 'absint',
+				'escape_cb'       => 'absint',
+				'default'         => '3'
+			)
+		);
+	}
 	?>
 	<style>
 		.cmb2-id--staging-api {
@@ -59,33 +79,34 @@
 		}
 	</style>
 	<?php
-	$cmb->add_field(
-		array(
-			'name' => __('Staging API', O_TEXTDOMAIN),
-			'desc' => __('Check this to use staging API', O_TEXTDOMAIN),
-			'id'   => '_staging_api',
-			'type' => 'checkbox',
-		)
-	);
+	if ( ! $oko_multi_merchant_active ) {
+		$cmb->add_field(
+			array(
+				'name' => __('Staging API', O_TEXTDOMAIN),
+				'desc' => __('Check this to use staging API', O_TEXTDOMAIN),
+				'id'   => '_staging_api',
+				'type' => 'checkbox',
+			)
+		);
 
+		$cmb->add_field(
+			array(
+				'name' => __('Økoskabet Description (Optional)', O_TEXTDOMAIN),
+				'desc' => __('Økoskabet shipping method description, overwrites default description', O_TEXTDOMAIN),
+				'id'   => '_description_shipping_okoskabet',
+				'type' => 'textarea',
+			)
+		);
 
-	$cmb->add_field(
-		array(
-			'name' => __('Økoskabet Description (Optional)', O_TEXTDOMAIN),
-			'desc' => __('Økoskabet shipping method description, overwrites default description', O_TEXTDOMAIN),
-			'id'   => '_description_shipping_okoskabet',
-			'type' => 'textarea',
-		)
-	);
-
-	$cmb->add_field(
-		array(
-			'name' => __('Økoskabet Home Delivery Description (Optional)', O_TEXTDOMAIN),
-			'desc' => __('Økoskabet Home Delivery shipping method description, overwrites default description', O_TEXTDOMAIN),
-			'id'   => '_description_shipping_private',
-			'type' => 'textarea',
-		)
-	);
+		$cmb->add_field(
+			array(
+				'name' => __('Økoskabet Home Delivery Description (Optional)', O_TEXTDOMAIN),
+				'desc' => __('Økoskabet Home Delivery shipping method description, overwrites default description', O_TEXTDOMAIN),
+				'id'   => '_description_shipping_private',
+				'type' => 'textarea',
+			)
+		);
+	}
 
 	// Delivery location options settings
 	$cmb->add_field(
@@ -138,22 +159,24 @@
 		)
 	);
 
-	$cmb->add_field(
-		array(
-			'name'            => __('Webhook Secret', O_TEXTDOMAIN),
-			'desc'            => __('Secret key from your webhook configuration in Økoskabet\'s backoffice (under API & Webhooks). Used to verify that incoming webhooks really come from Økoskabet. Required if webhook functionality is enabled.', O_TEXTDOMAIN),
-			'id'              => '_webhook_secret',
-			'type'            => 'text',
-			'attributes'      => array('type' => 'password'),
-			'sanitization_cb' => 'sanitize_text_field',
-			'escape_cb'       => 'esc_attr',
-		)
-	);
+	if ( ! $oko_multi_merchant_active ) {
+		$cmb->add_field(
+			array(
+				'name'            => __('Webhook Secret', O_TEXTDOMAIN),
+				'desc'            => __('Secret key from your webhook configuration. (After multi-merchant migration this moves into each merchant\'s configuration.)', O_TEXTDOMAIN),
+				'id'              => '_webhook_secret',
+				'type'            => 'text',
+				'attributes'      => array('type' => 'password'),
+				'sanitization_cb' => 'sanitize_text_field',
+				'escape_cb'       => 'esc_attr',
+			)
+		);
+	}
 
 	$cmb->add_field(
 		array(
 			'name' => __('Webhook & Payment', O_TEXTDOMAIN),
-			'desc' => __('Configure webhook events and payment handling', O_TEXTDOMAIN),
+			'desc' => __('Master switches that apply across all merchants.', O_TEXTDOMAIN),
 			'id'   => '_webhook_settings_title',
 			'type' => 'title',
 		)
@@ -162,60 +185,62 @@
 	$cmb->add_field(
 		array(
 			'name' => __('Webhook Status', O_TEXTDOMAIN),
-			'desc' => __('Enable or disable webhook functionality', O_TEXTDOMAIN),
+			'desc' => __('Enable or disable webhook functionality (applies to ALL merchants).', O_TEXTDOMAIN),
 			'id'   => '_webhook_enabled',
 			'type' => 'checkbox',
 			'default' => 'on',
 		)
 	);
 
-	$cmb->add_field(
-		array(
-			'name'    => __('Payment Gateway', O_TEXTDOMAIN),
-			'desc'    => __('Choose which payment gateway is used. "Automatic" attempts to detect it from the order.', O_TEXTDOMAIN),
-			'id'      => '_payment_gateway',
-			'type'    => 'select',
-			'options' => array(
-				'auto'             => __('Automatic (detect from order)', O_TEXTDOMAIN),
-				'quickpay_gateway' => __('Quickpay', O_TEXTDOMAIN),
-				'stripe'           => __('Stripe', O_TEXTDOMAIN),
-				'nets_easy'        => __('Nets Easy / DIBS Easy', O_TEXTDOMAIN),
-				'pensopay'         => __('Pensopay', O_TEXTDOMAIN),
-				'fallback'         => __('Other (change status to "processing")', O_TEXTDOMAIN),
-			),
-			'default' => 'auto',
-		)
-	);
+	if ( ! $oko_multi_merchant_active ) {
+		$cmb->add_field(
+			array(
+				'name'    => __('Payment Gateway', O_TEXTDOMAIN),
+				'desc'    => __('Choose which payment gateway is used. "Automatic" attempts to detect it from the order. (After multi-merchant migration this moves into each merchant\'s configuration.)', O_TEXTDOMAIN),
+				'id'      => '_payment_gateway',
+				'type'    => 'select',
+				'options' => array(
+					'auto'             => __('Automatic (detect from order)', O_TEXTDOMAIN),
+					'quickpay_gateway' => __('Quickpay', O_TEXTDOMAIN),
+					'stripe'           => __('Stripe', O_TEXTDOMAIN),
+					'nets_easy'        => __('Nets Easy / DIBS Easy', O_TEXTDOMAIN),
+					'pensopay'         => __('Pensopay', O_TEXTDOMAIN),
+					'fallback'         => __('Other (change status to "processing")', O_TEXTDOMAIN),
+				),
+				'default' => 'auto',
+			)
+		);
 
-	$cmb->add_field(
-		array(
-			'name'    => __('Capture events', O_TEXTDOMAIN),
-			'desc'    => __('Choose which events from Økoskabet should capture the payment (delayed capture). "Label Printed" happens earliest — typically when the webshop prints the label. "In Shed" happens when Økoskabet has placed the package in the shed. "Order Delivered" happens when the customer has collected the package.', O_TEXTDOMAIN),
-			'id'      => '_capture_events',
-			'type'    => 'multicheck',
-			'options' => array(
-				'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
-				'in_shed'         => __('In Shed', O_TEXTDOMAIN),
-				'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
-			),
-			'default' => array('label_printed'),
-		)
-	);
+		$cmb->add_field(
+			array(
+				'name'    => __('Capture events', O_TEXTDOMAIN),
+				'desc'    => __('Choose which events from Økoskabet should capture the payment. (After multi-merchant migration this moves into each merchant\'s configuration.)', O_TEXTDOMAIN),
+				'id'      => '_capture_events',
+				'type'    => 'multicheck',
+				'options' => array(
+					'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
+					'in_shed'         => __('In Shed', O_TEXTDOMAIN),
+					'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
+				),
+				'default' => array('label_printed'),
+			)
+		);
 
-	$cmb->add_field(
-		array(
-			'name'             => __('Completion events', O_TEXTDOMAIN),
-			'desc'             => __('Choose which events from Økoskabet should mark the order as completed. Typically you would choose "Order Delivered" so the order only closes when the customer has collected.', O_TEXTDOMAIN),
-			'id'               => '_webhook_events',
-			'type'             => 'multicheck',
-			'options'          => array(
-				'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
-				'in_shed'         => __('In Shed', O_TEXTDOMAIN),
-				'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
-			),
-			'default'          => array('order_delivered'),
-		)
-	);
+		$cmb->add_field(
+			array(
+				'name'             => __('Completion events', O_TEXTDOMAIN),
+				'desc'             => __('Choose which events from Økoskabet should mark the order as completed. (After multi-merchant migration this moves into each merchant\'s configuration.)', O_TEXTDOMAIN),
+				'id'               => '_webhook_events',
+				'type'             => 'multicheck',
+				'options'          => array(
+					'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
+					'in_shed'         => __('In Shed', O_TEXTDOMAIN),
+					'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
+				),
+				'default'          => array('order_delivered'),
+			)
+		);
+	}
 
 	$cmb->add_field(
 		array(
@@ -229,8 +254,10 @@
 
 	$cmb->add_field(
 		array(
-			'name' => __('Webhook URL', O_TEXTDOMAIN),
-			'desc' => __('Copy this URL and configure it in your Økoskabet webhook settings', O_TEXTDOMAIN),
+			'name' => __('Legacy Webhook URL', O_TEXTDOMAIN),
+			'desc' => $oko_multi_merchant_active
+				? __('Legacy URL — still works and routes to the default merchant. Each merchant has its own dedicated webhook URL listed under "Økoskabet merchants" below, which we recommend you configure at Økoskabet instead.', O_TEXTDOMAIN)
+				: __('Copy this URL and configure it in your Økoskabet webhook settings', O_TEXTDOMAIN),
 			'id'   => '_webhook_url_display',
 			'type' => 'text',
 			'default' => get_site_url() . '/wp-json/wp/v2/okoskabet/webhook',

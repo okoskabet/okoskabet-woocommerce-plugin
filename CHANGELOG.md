@@ -2,6 +2,136 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.4.0 - 2026-05-15
+
+= Multi-merchant support =
+
+The plugin can now talk to more than one Økoskabet merchant from the
+same WooCommerce installation, and decides which merchant fulfils each
+order from cart contents — end to end.
+
+### What's new
+
+1. **Merchants registry.** A new "Økoskabet merchants" section in the
+   plugin settings page lets shop managers create and manage any number
+   of merchant records. Each merchant has its own API key, webhook
+   secret, staging-flag, shipping descriptions, payment-gateway choice,
+   capture/completion event lists, optional product-category and
+   product-tag routing rules, and a numeric priority for tie-breaking.
+   The first merchant is seeded automatically from the legacy settings
+   the very first time WP-Admin is loaded after upgrading — your
+   existing API key, webhook secret and event configuration move into a
+   "Default merchant" record without you having to do anything.
+
+2. **Cart-to-merchant routing.** A new `Merchant_Router` decides which
+   merchant should handle each cart with simple, predictable rules:
+
+   - **Per-product:** each product resolves to a merchant by checking
+     (1) its own `_okoskabet_merchant` override, (2) per-merchant
+     category/tag rules with priority tie-breaking, then (3) the
+     default merchant.
+   - **Per-cart:** if EVERY item in the cart resolves to the same
+     merchant, that merchant handles the order. The moment a cart
+     contains items from more than one merchant — for any reason —
+     the whole cart falls back to the **default merchant**. Mixed
+     carts are never blocked and never split across merchants.
+
+   This makes additional merchants strictly opt-in: a non-default
+   merchant only handles orders where the customer is shopping wholly
+   within that merchant's product range. Everything else is delivered
+   by the default merchant, exactly as before.
+
+3. **End-to-end binding.** Once a cart resolves to a merchant, every
+   downstream call uses that merchant's credentials and configuration:
+
+   - Sheds, home-delivery dates and delivery-location options fetched
+     for that merchant.
+   - Shipping-method descriptions and "standard display window" come
+     from that merchant.
+   - Order submission (`POST /shipments/`) goes to that merchant's
+     base URL with that merchant's API key.
+   - Webhook callbacks come back in on a per-merchant URL (each
+     merchant has its own signing secret) and are checked against the
+     order's recorded merchant — a webhook for merchant A can never
+     mutate an order owned by merchant B.
+
+4. **Per-merchant webhook URLs.** Each merchant exposes a dedicated
+   webhook URL at `…/wp-json/wp/v2/okoskabet/webhook/<merchant_id>`.
+   The legacy `…/webhook` URL keeps working and is treated as an alias
+   for the default merchant, so upgrading does not require you to
+   reconfigure Økoskabet's webhook settings — but new merchants get
+   their own URLs to keep secret-handling cleanly isolated.
+
+5. **Cart-resolution endpoint.** A new read-only REST endpoint
+   `GET /wp-json/wp/v2/okoskabet/cart_resolution` reports which
+   merchant a cart routes to, plus informational `is_mixed` and
+   `fell_back_to_default` flags so the frontend can show context like
+   *"this cart will be handled by the default merchant because it
+   contains items from multiple merchants"*. No sensitive data leaks.
+
+### Backward compatibility
+
+- Existing single-merchant installs are upgraded in-place via a
+  one-shot migration (`seed_default_merchant_v1`) that runs on the
+  first WP-Admin load after upgrade. The migration creates a "Default
+  merchant" from your existing API key, webhook secret, staging flag,
+  descriptions, payment-gateway choice and event lists. No manual
+  reconfiguration is needed.
+- The legacy webhook URL (`…/webhook` without a merchant ID) keeps
+  routing to the default merchant indefinitely.
+- Orders created before the upgrade have no recorded merchant; the
+  webhook handler treats them as belonging to the default merchant
+  for compatibility.
+- The legacy CMB settings form hides the per-merchant fields once at
+  least one merchant exists — they live in the new section instead.
+  Global fields (display option, delivery-location dropdown, webhook
+  master switch, hide-WC-order-comments, split-checkout-enabled) stay
+  in the legacy form.
+- The existing `Split_Checkout` integration is unchanged from its
+  pre-1.4.0 behavior: it splits a cart when items have conflicting
+  delivery dates. Multi-merchant routing never adds a split.
+
+### Security model
+
+- Each merchant has its own webhook secret. The per-merchant URL
+  identifies the merchant up front; only that merchant's secret is
+  ever used for the HMAC comparison — the plugin never tries multiple
+  secrets against an incoming webhook.
+- Order-to-merchant binding is recorded in order meta at
+  `woocommerce_checkout_create_order` time, so a later cart-meta or
+  category-mapping change cannot accidentally re-route an existing
+  order. Webhooks for an order are rejected with HTTP 403 if the
+  merchant in the URL doesn't match the order's recorded merchant
+  (defence-in-depth against cross-merchant tampering).
+- Merchant IDs are strict `sanitize_key()` slugs (lowercase
+  alphanumeric + `_` and `-`) and are validated against the registry
+  before being interpolated into REST routes, HTML attributes or SQL
+  queries.
+- All admin actions are protected by nonces plus the
+  `manage_woocommerce` capability. API keys and webhook secrets are
+  rendered as `<input type="password">` and never echoed outside form
+  values.
+- Renaming a merchant ID rewrites every product-meta reference to it
+  in a single `wpdb->update` call so per-product routing overrides
+  don't silently fall back to the default merchant.
+
+### Files added
+
+- `integrations/Merchants.php` — registry, admin UI, AJAX test-connection
+- `integrations/Merchant_Router.php` — routing pipeline
+- `integrations/Product_Merchant_Meta.php` — per-product override metabox
+
+### Files modified
+
+- `rest/OkoRest.php` — every endpoint resolves a merchant first;
+  per-merchant webhook route added; cart_resolution endpoint added
+- `functions/functions.php` — order creation stamps the merchant on
+  the order; shipment submission and cancellation use the order's
+  merchant credentials; checkout JS payload exposes the merchant
+- `integrations/Upgrades.php` — seed-default-merchant migration
+- `backend/views/settings.php` — hides the per-merchant fields once
+  multi-merchant is active
+
 ## 1.3.6 - 2026-05-08
 
 = Security and code-review hardening =
