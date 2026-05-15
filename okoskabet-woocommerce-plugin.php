@@ -2,17 +2,17 @@
 
 /**
  * @package   okoskabet_woocommerce_plugin
- * @author    Kim Frederiksen <kim@heyrobot.com>
- * @copyright 2024 HeyRobot.AI aps
+ * @author    Foodshipper <kontakt@okoskabet.dk>
+ * @copyright 2026 Foodshipper
  * @license   GPL 2.0+
- * @link      https://heyrobot.ai
+ * @link      https://okoskabet.dk
  *
  * Plugin Name:		Økoskabet WooCommerce Plugin
  * Plugin URI:		https://github.com/okoskabet/okoskabet-woocommerce-plugin
  * Description:		Connect your WooCommerce store to Økoskabet
- * Version:         1.2.2
- * Author:          Kim Frederiksen
- * Author URI:      https://heyrobot.ai
+ * Version:         1.3.6
+ * Author:          Foodshipper
+ * Author URI:      https://okoskabet.dk
  * Text Domain:     okoskabet-woocommerce-plugin
  * License:         GPL 2.0+
  * License URI:     http://www.gnu.org/licenses/gpl-3.0.txt
@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) {
 	die('We\'re sorry, but you can not directly access this file.');
 }
 
-define('O_VERSION', '1.2.2');
+define('O_VERSION', '1.3.6');
 define('O_TEXTDOMAIN', 'okoskabet-woocommerce-plugin');
 define('O_NAME', 'Økoskabet WooCommerce Plugin');
 define('O_PLUGIN_ROOT', plugin_dir_path(__FILE__));

@@ -1,8 +1,8 @@
 {
     "name": "okoskabet-woocommerce-plugin",
-    "version": "1.2.2",
-    "description": "",
-    "author": "Kim Frederiksen <kim@heyrobot.com>",
+    "version": "1.3.6",
+    "description": "Connect your WooCommerce store to Økoskabet",
+    "author": "Foodshipper <kontakt@okoskabet.dk>",
     "files": [
         "ajax",
         "assets",

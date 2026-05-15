@@ -81,26 +81,95 @@ function enqueue_checkout_scripts(): void
 add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
 
 
-add_action('woocommerce_review_order_before_submit', 'custom_content_for_custom_shipping_checkout', 10);
+add_action('woocommerce_review_order_after_shipping', 'custom_content_for_custom_shipping_checkout', 10);
 function custom_content_for_custom_shipping_checkout(): void
 {
 	$settings = o_get_settings();
 	if (empty($settings['_api_key'])) return;
-	$shed_description = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : 'Afkølet afhentningssted hvor du kan hente dine varer hele døgnet vha. kode.';
-	$local_description = !empty($settings['_description_shipping_private']) ? $settings['_description_shipping_private'] : 'Økoskabet leverer dine varer til døren.';
-?>
-	<script type="text/javascript">
-		window._okoskabet_checkout = <?php echo wp_json_encode(array(
-			'locale'        => get_locale(),
-			'displayOption' => $settings['_display_option'] ?? '',
-			'descriptions'  => array(
-				'homeDelivery' => $local_description,
-				'shedDelivery' => $shed_description,
-			),
-		)); ?>;
-	</script>
-<?php
+	$shed_description  = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
+	$local_description = !empty($settings['_description_shipping_private'])   ? $settings['_description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
+
+	$config = wp_json_encode(array(
+		'locale'        => get_locale(),
+		'displayOption' => $settings['_display_option'] ?? '',
+		'descriptions'  => array(
+			'homeDelivery' => $local_description,
+			'shedDelivery' => $shed_description,
+		),
+		'deliveryLocation' => array(
+			'dropdownEnabled' => !empty($settings['_delivery_location_dropdown']),
+			'dropdownLabel'   => !empty($settings['_delivery_location_dropdown_label'])
+				? $settings['_delivery_location_dropdown_label']
+				: __('Delivery location', O_TEXTDOMAIN),
+			'noteLabel' => !empty($settings['_delivery_location_note_label'])
+				? $settings['_delivery_location_note_label']
+				: __('Note to the driver (optional)', O_TEXTDOMAIN),
+			'hideWcOrderComments' => !empty($settings['_hide_wc_order_comments']),
+		),
+		'endpoints' => array(
+			'deliveryLocationOptions' => get_rest_url(null, 'wp/v2/okoskabet/delivery_location_options'),
+		),
+	), JSON_HEX_TAG | JSON_HEX_AMP);
+
+	// Strings shown to the user are localised via PHP and injected as a
+	// JSON object on window so translations work in the .po/.mo file.
+	$overlay_strings = wp_json_encode(array(
+		'helpText' => __('You can remove one or more of the marked items from your cart to get more delivery options, or contact us for help.', O_TEXTDOMAIN),
+		// The placeholder text below MUST match what Svelte renders so we
+		// can find and replace it. Don't translate it without also rebuilding
+		// the Svelte bundle to emit the same translated text.
+		'placeholderText' => 'Ingen tilgængelige datoer.',
+	), JSON_HEX_TAG | JSON_HEX_AMP);
+
+	// Enqueue the external checkout-helpers.js file. Both the overlay
+	// (exception explanation) module and the delivery-location dropdown
+	// module live there. Configuration objects are passed via two
+	// window globals injected via wp_add_inline_script — this keeps the
+	// .js file static and cacheable while still letting PHP control all
+	// translatable strings and merchant-configurable values.
+	wp_register_script(
+		'okoskabet-checkout-helpers',
+		O_PLUGIN_ROOT_URL . 'assets/build/checkout-helpers.js',
+		array(),
+		O_VERSION,
+		true
+	);
+	wp_add_inline_script(
+		'okoskabet-checkout-helpers',
+		'window._okoskabet_checkout = ' . $config . ';' . "\n"
+		. 'window._okoskabet_overlay_strings = ' . $overlay_strings . ';',
+		'before'
+	);
+	wp_enqueue_script('okoskabet-checkout-helpers');
+
+	// Emit a hidden input listing the product IDs currently in the cart, so
+	// the Svelte frontend can pass them to the home_delivery / sheds REST
+	// endpoints. The endpoints use the IDs to apply Delivery_Exceptions
+	// without depending on WooCommerce session state — which is unreliable
+	// in REST context (cookies aren't always sent).
+	$product_ids = array();
+	if (function_exists('WC') && WC()->cart) {
+		foreach (WC()->cart->get_cart() as $cart_item) {
+			if (!empty($cart_item['product_id'])) {
+				$product_ids[] = (int) $cart_item['product_id'];
+			}
+		}
+	}
+	echo '<input type="hidden" id="okoskabet-cart-product-ids" value="' . esc_attr(implode(',', array_unique($product_ids))) . '" />';
+
+	// CSS: hide WooCommerce-rendered billing input fields — our JS injects
+	// the visible UI dynamically. We hide only the labels and inputs, not the
+	// wrapper, so our injected UI inside the wrapper remains visible.
+	echo '<style>
+		.okoskabet-delivery-location > label,
+		.okoskabet-delivery-location > .woocommerce-input-wrapper > input,
+		.okoskabet-delivery-note > label,
+		.okoskabet-delivery-note > .woocommerce-input-wrapper > input {
+			display: none !important;
+		}
+	</style>';
 }
+
 
 
 add_filter('woocommerce_shipping_methods', 'hey_register_okoskabet_shipping_shed_method');
@@ -382,7 +451,7 @@ add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
 function custom_override_checkout_fields(array $fields): array
 {
 	$fields['billing']['billing_okoskabet_shed_id'] = array(
-		'label'       => __('Økoskabet ID', 'woocommerce'),
+		'label'       => __('Økoskabet ID', O_TEXTDOMAIN),
 		'placeholder' => '',
 		'required'    => false,
 		'class'       => array('okoskabet-shed-id form-row-wide'),
@@ -390,11 +459,27 @@ function custom_override_checkout_fields(array $fields): array
 	);
 
 	$fields['billing']['billing_okoskabet_delivery_date'] = array(
-		'label'       => __('Økoskabet Delivery Date', 'woocommerce'),
+		'label'       => __('Økoskabet Delivery Date', O_TEXTDOMAIN),
 		'placeholder' => '',
 		'required'    => false,
 		'class'       => array('okoskabet-delivery-date form-row-wide'),
 		'clear'       => true
+	);
+
+	$fields['billing']['billing_okoskabet_delivery_location'] = array(
+		'label'       => __('Delivery location', O_TEXTDOMAIN),
+		'placeholder' => '',
+		'required'    => false,
+		'class'       => array('okoskabet-delivery-location form-row-wide'),
+		'clear'       => true,
+	);
+
+	$fields['billing']['billing_okoskabet_delivery_note'] = array(
+		'label'       => __('Note to the driver (optional)', O_TEXTDOMAIN),
+		'placeholder' => '',
+		'required'    => false,
+		'class'       => array('okoskabet-delivery-note form-row-wide'),
+		'clear'       => true,
 	);
 
 	return $fields;
@@ -406,6 +491,8 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 	$order_done = $order->get_meta('billing_okoskabet_done', true);
 	$shed_id = $order->get_meta('_billing_okoskabet_shed_id', true);
 	$delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
+	$delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
+	$delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
 	echo '<pre>';
 	if (!empty($order_done)) {
 		echo 'Økoskabet Done' . ': ' . esc_html($order_done) . "\n";
@@ -414,7 +501,13 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 		echo 'Økoskabet SHED ID' . ': ' . esc_html($shed_id) . "\n";
 	}
 	if (!empty($delivery_date)) {
-		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date);
+		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date) . "\n";
+	}
+	if (!empty($delivery_location)) {
+		echo esc_html__('Økoskabet Delivery location', O_TEXTDOMAIN) . ': ' . esc_html($delivery_location) . "\n";
+	}
+	if (!empty($delivery_note)) {
+		echo esc_html__('Note to driver', O_TEXTDOMAIN) . ': ' . esc_html($delivery_note);
 	}
 	echo '</pre>';
 }
@@ -477,6 +570,21 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		$order_number = $order->get_order_number();
 		$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 		$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
+		// _billing_okoskabet_delivery_location stores the English label (from dropdown).
+		$order_delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
+		// _billing_okoskabet_delivery_note stores the free-text note from the customer.
+		$order_delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+
+		// Build the logistics note sent to Økoskabet's API.
+		// Always in English: combine dropdown selection and free-text note.
+		$logistics_note_parts = array();
+		if (!empty($order_delivery_location)) {
+			$logistics_note_parts[] = $order_delivery_location; // Already stored in English.
+		}
+		if (!empty($order_delivery_note)) {
+			$logistics_note_parts[] = $order_delivery_note;
+		}
+		$logistics_note = implode(' — ', $logistics_note_parts);
 
 		if (empty($order_delivery_date)) {
 			return;
@@ -523,14 +631,19 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 				'phone' => $order->get_billing_phone(),
 				'email' => $order->get_billing_email(),
 			],
-			'home_delivery' => [
+			'home_delivery' => array_filter([
 				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
 				'address_1' => $order->get_shipping_address_1(),
 				'address_2' => $order->get_shipping_address_2(),
 				'city' => $order->get_shipping_city(),
-				'postal_code' => $order->get_shipping_postcode()
-			],
-			'notes' => (string) $order->get_customer_note(),
+				'postal_code' => $order->get_shipping_postcode(),
+				// Combined English location + free-text note, or null if empty.
+				'location' => !empty($logistics_note) ? $logistics_note : null,
+			]),
+			// Send the logistics note (dropdown selection + free-text) as the API
+			// notes field so it appears in Økoskabet's Notes column. Falls back to
+			// the standard WooCommerce customer note when no logistics note is set.
+			'notes' => !empty($logistics_note) ? $logistics_note : (string) $order->get_customer_note(),
 			'delivery_date' => $order_delivery_date,
 		];
 
@@ -586,6 +699,16 @@ function okoskabet_woocommerce_plugin_after_checkout_validation(array $fields): 
 		if (empty($fields['billing_okoskabet_delivery_date'])) {
 			wc_add_notice(__("Please select a Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
-		$_POST['billing_okoskabet_shed_id'] = '';
+	}
+}
+
+add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery', 10, 2);
+
+function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $data): void
+{
+	$shipping_methods = (array) ($data['shipping_method'] ?? array());
+
+	if (in_array('hey_okoskabet_shipping_home', $shipping_methods, true)) {
+		$order->update_meta_data('_billing_okoskabet_shed_id', '');
 	}
 }

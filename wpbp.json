@@ -4,11 +4,11 @@
     "version": "1.0.0"
   },
   "author": {
-    "name": "Kim Frederiksen",
-    "email": "kim@heyrobot.com",
-    "url": "https://heyrobot.ai",
+    "name": "Foodshipper",
+    "email": "kontakt@okoskabet.dk",
+    "url": "https://okoskabet.dk",
     "license": "GPL 2.0+",
-    "copyright": "2024 HeyRobot.AI aps"
+    "copyright": "2026 Foodshipper"
   },
   "public-assets": {
     "js": "true",

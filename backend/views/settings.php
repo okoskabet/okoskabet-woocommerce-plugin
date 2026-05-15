@@ -12,11 +12,14 @@
 
 	$cmb->add_field(
 		array(
-			'name'    => __('API Key', O_TEXTDOMAIN),
-			'desc'    => __('Økoskabet API Key', O_TEXTDOMAIN),
-			'id'      => '_api_key',
-			'type'    => 'text',
-			'default' => '',
+			'name'            => __('API Key', O_TEXTDOMAIN),
+			'desc'            => __('Økoskabet API Key', O_TEXTDOMAIN),
+			'id'              => '_api_key',
+			'type'            => 'text',
+			'attributes'      => array('type' => 'password'),
+			'sanitization_cb' => 'sanitize_text_field',
+			'escape_cb'       => 'esc_attr',
+			'default'         => '',
 		)
 	);
 
@@ -35,8 +38,8 @@
 
 	$cmb->add_field(
 		array(
-			'name'       => __('Maximum days into the future', O_TEXTDOMAIN),
-			'desc'       => __('Delivery options will be visible up to this many days into the future.', O_TEXTDOMAIN),
+			'name'       => __('Standard display window (days)', O_TEXTDOMAIN),
+			'desc'       => __('How many days into the future delivery dates are shown by default. Date-based exceptions ("only on a specific day" and "from/until") can extend the display to specific dates outside this window. Recommended: 3-7 for normal operation, higher if you have many exceptions.', O_TEXTDOMAIN),
 			'id'         => '_maximum_days_in_future',
 			'type'       => 'text',
 			'attributes' => array(
@@ -45,7 +48,7 @@
 			),
 			'sanitization_cb' => 'absint',
 			'escape_cb'       => 'absint',
-			'default'         => '21'
+			'default'         => '3'
 		)
 	);
 
@@ -84,12 +87,74 @@
 		)
 	);
 
-	// Webhook settings
+	// Delivery location options settings
 	$cmb->add_field(
 		array(
-			'name' => __('Webhook Settings', O_TEXTDOMAIN),
-			'desc' => __('Configure webhook events for automatic order status updates', O_TEXTDOMAIN),
-			'id'   => '_webhook_title',
+			'name' => __('Home Delivery: Delivery Location', O_TEXTDOMAIN),
+			'desc' => __('Settings for delivery location on home delivery', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_title',
+			'type' => 'title',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name' => __('Show delivery location dropdown', O_TEXTDOMAIN),
+			'desc' => __('Show a dropdown with delivery locations from Økoskabet\'s API (e.g. "By the stairs", "By the front door"). Disable to show only the free-text field.', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_dropdown',
+			'type' => 'checkbox',
+			'default' => 'on',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name' => __('Label: Dropdown', O_TEXTDOMAIN),
+			'desc' => __('Label on the dropdown field at checkout', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_dropdown_label',
+			'type' => 'text',
+			'sanitization_cb' => 'sanitize_text_field',
+			'default' => 'Leveringsinfo',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name' => __('Descriptive text', O_TEXTDOMAIN),
+			'desc' => __('Text shown above the delivery info dropdown at checkout. Leave empty to hide. Example: "Your order is delivered overnight to your delivery day".', O_TEXTDOMAIN),
+			'id'   => '_delivery_location_note_label',
+			'type' => 'text',
+			'sanitization_cb' => 'sanitize_text_field',
+			'default' => '',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'    => __('Hide WooCommerce order note', O_TEXTDOMAIN),
+			'desc'    => __('Hide WooCommerce\'s standard "Add order note" field at checkout. Enable if you use Økoskabet\'s delivery info and want only one note field for the customer.', O_TEXTDOMAIN),
+			'id'      => '_hide_wc_order_comments',
+			'type'    => 'checkbox',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'            => __('Webhook Secret', O_TEXTDOMAIN),
+			'desc'            => __('Secret key from your webhook configuration in Økoskabet\'s backoffice (under API & Webhooks). Used to verify that incoming webhooks really come from Økoskabet. Required if webhook functionality is enabled.', O_TEXTDOMAIN),
+			'id'              => '_webhook_secret',
+			'type'            => 'text',
+			'attributes'      => array('type' => 'password'),
+			'sanitization_cb' => 'sanitize_text_field',
+			'escape_cb'       => 'esc_attr',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name' => __('Webhook & Payment', O_TEXTDOMAIN),
+			'desc' => __('Configure webhook events and payment handling', O_TEXTDOMAIN),
+			'id'   => '_webhook_settings_title',
 			'type' => 'title',
 		)
 	);
@@ -106,15 +171,59 @@
 
 	$cmb->add_field(
 		array(
-			'name'             => __('Webhook Events', O_TEXTDOMAIN),
-			'desc'             => __('Select which events from Økoskabet should mark the order as completed', O_TEXTDOMAIN),
+			'name'    => __('Payment Gateway', O_TEXTDOMAIN),
+			'desc'    => __('Choose which payment gateway is used. "Automatic" attempts to detect it from the order.', O_TEXTDOMAIN),
+			'id'      => '_payment_gateway',
+			'type'    => 'select',
+			'options' => array(
+				'auto'             => __('Automatic (detect from order)', O_TEXTDOMAIN),
+				'quickpay_gateway' => __('Quickpay', O_TEXTDOMAIN),
+				'stripe'           => __('Stripe', O_TEXTDOMAIN),
+				'nets_easy'        => __('Nets Easy / DIBS Easy', O_TEXTDOMAIN),
+				'pensopay'         => __('Pensopay', O_TEXTDOMAIN),
+				'fallback'         => __('Other (change status to "processing")', O_TEXTDOMAIN),
+			),
+			'default' => 'auto',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'    => __('Capture events', O_TEXTDOMAIN),
+			'desc'    => __('Choose which events from Økoskabet should capture the payment (delayed capture). "Label Printed" happens earliest — typically when the webshop prints the label. "In Shed" happens when Økoskabet has placed the package in the shed. "Order Delivered" happens when the customer has collected the package.', O_TEXTDOMAIN),
+			'id'      => '_capture_events',
+			'type'    => 'multicheck',
+			'options' => array(
+				'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
+				'in_shed'         => __('In Shed', O_TEXTDOMAIN),
+				'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
+			),
+			'default' => array('label_printed'),
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'             => __('Completion events', O_TEXTDOMAIN),
+			'desc'             => __('Choose which events from Økoskabet should mark the order as completed. Typically you would choose "Order Delivered" so the order only closes when the customer has collected.', O_TEXTDOMAIN),
 			'id'               => '_webhook_events',
 			'type'             => 'multicheck',
 			'options'          => array(
-				'label_created' => __('Label Created', O_TEXTDOMAIN),
+				'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
+				'in_shed'         => __('In Shed', O_TEXTDOMAIN),
 				'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
 			),
 			'default'          => array('order_delivered'),
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'    => __('Allow split checkout', O_TEXTDOMAIN),
+			'desc'    => __('When ON: if a customer\'s cart contains items that cannot all be delivered on the same day, they\'ll be guided through one separate order per delivery date. When OFF: a notice tells the customer to remove items so they all share at least one delivery date.', O_TEXTDOMAIN),
+			'id'      => '_split_checkout_enabled',
+			'type'    => 'checkbox',
+			'default' => '',
 		)
 	);
 
@@ -143,10 +252,10 @@
 						<li><strong>' . __('Navigate to Webhook Settings', O_TEXTDOMAIN) . '</strong></li>
 						<li><strong>' . __('Add New Webhook with these settings:', O_TEXTDOMAIN) . '</strong>
 							<ul style="margin-top: 5px;">
-								<li><strong>' . __('URL:', O_TEXTDOMAIN) . '</strong> <code>' . get_site_url() . '/wp-json/wp/v2/okoskabet/webhook</code></li>
+								<li><strong>' . __('URL:', O_TEXTDOMAIN) . '</strong> <code>' . esc_html( get_site_url() ) . '/wp-json/wp/v2/okoskabet/webhook</code></li>
 								<li><strong>' . __('Method:', O_TEXTDOMAIN) . '</strong> <code>POST</code></li>
 								<li><strong>' . __('Content-Type:', O_TEXTDOMAIN) . '</strong> <code>application/json</code></li>
-								<li><strong>' . __('Authorization Header:', O_TEXTDOMAIN) . '</strong> <code>' . (!empty($settings['_api_key']) ? $settings['_api_key'] : __('Your API Key', O_TEXTDOMAIN)) . '</code></li>
+								<li><strong>' . __('Signing secret:', O_TEXTDOMAIN) . '</strong> ' . __('use the value of the <em>Webhook Secret</em> field above. Økoskabet uses this to sign each webhook.', O_TEXTDOMAIN) . '</li>
 							</ul>
 						</li>
 						<li><strong>' . __('Select Events to Send:', O_TEXTDOMAIN) . '</strong>
@@ -156,7 +265,7 @@
 							</ul>
 						</li>
 					</ol>
-					
+
 					<h4>' . __('Expected Payload Format:', O_TEXTDOMAIN) . '</h4>
 					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">{
   "event": "label_created", // or "order_delivered"
@@ -165,17 +274,22 @@
     // Additional event data (optional)
   }
 }</pre>
-					
+
 					<h4>' . __('Authentication:', O_TEXTDOMAIN) . '</h4>
-					<p>' . __('Include your API key in the Authorization header:', O_TEXTDOMAIN) . '</p>
-					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">Authorization: ' . (!empty($settings['_api_key']) ? $settings['_api_key'] : __('your-api-key-here', O_TEXTDOMAIN)) . '</pre>
-					
+					<p>' . __('Each webhook is verified by an HMAC-SHA256 signature of the raw request body, using the Webhook Secret configured above. Økoskabet computes the signature on its side and sends it as the lowercase hex value of the following header:', O_TEXTDOMAIN) . '</p>
+					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">X-HMAC-SHA256: &lt;hex(hmac_sha256(body, webhook_secret))&gt;</pre>
+					<p>' . __('If the header is missing, malformed or does not match, the request is rejected with HTTP 401. The API Key field is <strong>not</strong> used to authenticate webhooks.', O_TEXTDOMAIN) . '</p>
+
 					<h4>' . __('Testing the Webhook:', O_TEXTDOMAIN) . '</h4>
-					<p>' . __('You can test the webhook using curl:', O_TEXTDOMAIN) . '</p>
-					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">curl -X POST "' . get_site_url() . '/wp-json/wp/v2/okoskabet/webhook" \
+					<p>' . __('You can replay a payload locally with curl. Replace <code>your-webhook-secret</code> with the value from the field above (do not commit it):', O_TEXTDOMAIN) . '</p>
+					<pre style="background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">BODY=\'{"event":"order_delivered","shipment_reference":"12345"}\'
+SECRET="your-webhook-secret"
+SIG=$(printf "%s" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk \'{print $2}\')
+
+curl -X POST "' . esc_html( get_site_url() ) . '/wp-json/wp/v2/okoskabet/webhook" \
   -H "Content-Type: application/json" \
-  -H "Authorization: ' . (!empty($settings['_api_key']) ? $settings['_api_key'] : __('your-api-key', O_TEXTDOMAIN)) . '" \
-  -d \'{"event": "order_delivered", "shipment_reference": "12345"}\'</pre>
+  -H "X-HMAC-SHA256: $SIG" \
+  --data-raw "$BODY"</pre>
 				</div>
 			',
 			'id'   => '_webhook_instructions',
@@ -191,7 +305,7 @@
 					<h4 style="margin-top: 0;">' . __('Response Codes:', O_TEXTDOMAIN) . '</h4>
 					<ul>
 						<li><strong>200 OK:</strong> ' . __('Webhook processed successfully', O_TEXTDOMAIN) . '</li>
-						<li><strong>401 Unauthorized:</strong> ' . __('Invalid or missing API key', O_TEXTDOMAIN) . '</li>
+						<li><strong>401 Unauthorized:</strong> ' . __('Invalid or missing HMAC signature', O_TEXTDOMAIN) . '</li>
 						<li><strong>403 Forbidden:</strong> ' . __('Webhook functionality is disabled', O_TEXTDOMAIN) . '</li>
 						<li><strong>404 Not Found:</strong> ' . __('Order not found', O_TEXTDOMAIN) . '</li>
 						<li><strong>503 Service Unavailable:</strong> ' . __('WooCommerce is not available', O_TEXTDOMAIN) . '</li>
