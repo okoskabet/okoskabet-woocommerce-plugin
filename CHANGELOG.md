@@ -82,11 +82,20 @@ order from cart contents — end to end.
 - Orders created before the upgrade have no recorded merchant; the
   webhook handler treats them as belonging to the default merchant
   for compatibility.
-- The legacy CMB settings form hides the per-merchant fields once at
-  least one merchant exists — they live in the new section instead.
-  Global fields (display option, delivery-location dropdown, webhook
+- **Single-merchant UX is preserved unchanged.** Sites with one
+  Økoskabet merchant — the vast majority — see the same settings
+  page as they did in v1.3.x: API key, webhook secret, staging
+  flag, descriptions, payment gateway, and capture/completion
+  events all on one CMB form at the top. These fields are a facade
+  over the default merchant record; admins never see the multi-
+  merchant management UI, the merchants table, or the "Default
+  merchant"/"merchant ID"/"priority"/"routing rules" terminology
+  unless they opt in by clicking *"+ Add another Økoskabet
+  merchant"* or by configuring a second merchant. The datamodel
+  is unchanged either way — the toggle is purely UX.
+- Global fields (display option, delivery-location dropdown, webhook
   master switch, hide-WC-order-comments, split-checkout-enabled) stay
-  in the legacy form.
+  in the legacy form regardless of mode.
 - The existing `Split_Checkout` integration is unchanged from its
   pre-1.4.0 behavior: it splits a cart when items have conflicting
   delivery dates. Multi-merchant routing never adds a split.
@@ -111,9 +120,19 @@ order from cart contents — end to end.
   `manage_woocommerce` capability. API keys and webhook secrets are
   rendered as `<input type="password">` and never echoed outside form
   values.
-- Renaming a merchant ID rewrites every product-meta reference to it
-  in a single `wpdb->update` call so per-product routing overrides
-  don't silently fall back to the default merchant.
+- Renaming a merchant ID rewrites every product-meta reference and
+  every order-meta `_okoskabet_merchant_id` stamp so per-product
+  routing overrides don't silently fall back to the default merchant
+  and existing orders' webhooks don't start failing the
+  merchant-mismatch check (HTTP 403). The order-meta rewrite is
+  HPOS-aware: it goes through `wc_get_orders()` and
+  `$order->update_meta_data()` rather than a raw `wp_postmeta`
+  UPDATE, so it works correctly on stores that have HPOS enabled.
+- Switching the default merchant surfaces an inline warning about
+  the legacy `…/okoskabet/webhook` URL now verifying against a
+  different merchant's secret — Økoskabet's webhook configuration
+  needs to be updated to match (or moved to the per-merchant URL)
+  to avoid 401 failures.
 
 ### Files added
 
@@ -127,10 +146,34 @@ order from cart contents — end to end.
   per-merchant webhook route added; cart_resolution endpoint added
 - `functions/functions.php` — order creation stamps the merchant on
   the order; shipment submission and cancellation use the order's
-  merchant credentials; checkout JS payload exposes the merchant
+  merchant credentials; checkout JS payload exposes the merchant.
+  The merchant-stamp hook falls back to the order's own line items
+  when `WC()->cart` is empty (REST API, admin "Add order",
+  subscription renewals).
 - `integrations/Upgrades.php` — seed-default-merchant migration
-- `backend/views/settings.php` — hides the per-merchant fields once
-  multi-merchant is active
+- `backend/views/settings.php` — renders the legacy single-merchant
+  CMB form by default and mirrors the default merchant's values
+  into the option row before CMB reads it; only hides the
+  merchant-scoped fields once the admin opts into multi-merchant
+  mode (count > 1 or `?oko_show_merchants=1`)
+
+### Performance
+
+- `Merchants::get_config()` is now memoised per-request. Calls from
+  `Merchant_Router` no longer pay the `merge_with_defaults()` cost
+  on every product lookup; `save_config()` refreshes the cache;
+  tests can call `purge_config_cache()` to reset between cases.
+
+### Tests added
+
+- `tests/wpunit/integrations/MerchantsTest.php` — normalisation,
+  default-id fallback when the stored ID is stale, request-cache
+  semantics, legacy-options mirror, single-↔-multi mode toggle,
+  seed-default-merchant migration idempotency.
+- `tests/wpunit/integrations/MerchantRouterTest.php` —
+  `resolve_for_products` for empty / single / mixed carts, plus the
+  per-product override path including the "override targets a
+  merchant that doesn't exist" fall-through.
 
 ## 1.3.6 - 2026-05-08
 

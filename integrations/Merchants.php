@@ -64,6 +64,40 @@ class Merchants extends Base {
 	/** Default merchant ID seeded at activation. */
 	const DEFAULT_MERCHANT_ID = 'default';
 
+	/** Query-string flag that opts a single-merchant install into the advanced multi-merchant UI. */
+	const QUERY_SHOW_MERCHANTS = 'oko_show_merchants';
+
+	/**
+	 * Map of legacy settings option keys → merchant record fields. Used to
+	 * bidirectionally sync the simple (single-merchant) CMB form on the
+	 * main settings page with the default merchant record. See
+	 * `mirror_default_to_options()` and `handle_legacy_options_saved()`.
+	 *
+	 * @var array<string, string>
+	 */
+	private static $legacy_option_to_merchant = array(
+		'_api_key'                        => 'api_key',
+		'_webhook_secret'                 => 'webhook_secret',
+		'_staging_api'                    => 'staging',
+		'_description_shipping_okoskabet' => 'description_shipping_okoskabet',
+		'_description_shipping_private'   => 'description_shipping_private',
+		'_maximum_days_in_future'         => 'maximum_days_in_future',
+		'_payment_gateway'                => 'payment_gateway',
+		'_capture_events'                 => 'capture_events',
+		'_webhook_events'                 => 'webhook_events',
+	);
+
+	/**
+	 * Request-level cache of the merge_with_defaults() output. Cleared by
+	 * `save_config()` and by `purge_config_cache()` (which the tests can
+	 * call). Avoids re-running merge_with_defaults() for every call inside
+	 * a single request — meaningful for carts with many items where
+	 * resolve_for_products() walks every merchant repeatedly.
+	 *
+	 * @var array|null
+	 */
+	private static $config_cache = null;
+
 	/**
 	 * Initialize.
 	 */
@@ -79,6 +113,16 @@ class Merchants extends Base {
 		add_action( 'admin_post_' . self::ACTION_SAVE_MERCHANT, array( $this, 'handle_save_merchant' ) );
 		add_action( 'admin_post_' . self::ACTION_DELETE_MERCHANT, array( $this, 'handle_delete_merchant' ) );
 		add_action( 'admin_post_' . self::ACTION_TEST_CONNECTION, array( $this, 'handle_test_connection' ) );
+
+		// Sync the simple CMB form on the main settings page (single-
+		// merchant mode) back to the default merchant record. CMB2 emits
+		// this action after persisting the form's option row.
+		add_action(
+			'cmb2_save_options-page_fields_' . O_TEXTDOMAIN . '_options',
+			array( $this, 'handle_legacy_options_saved' ),
+			10,
+			3
+		);
 	}
 
 	// =========================================================================
@@ -126,14 +170,23 @@ class Merchants extends Base {
 	/**
 	 * Load the full multi-merchant configuration with sane defaults.
 	 *
+	 * Memoised per-request so a cart with many items doesn't pay the
+	 * merge_with_defaults() cost on every lookup. The WordPress object
+	 * cache already handles the DB roundtrip for `get_option`, but
+	 * merge_with_defaults() does its own work on top.
+	 *
 	 * @return array
 	 */
 	public static function get_config(): array {
+		if ( self::$config_cache !== null ) {
+			return self::$config_cache;
+		}
 		$stored = get_option( self::OPTION_KEY, array() );
 		if ( ! is_array( $stored ) ) {
 			$stored = array();
 		}
-		return self::merge_with_defaults( $stored );
+		self::$config_cache = self::merge_with_defaults( $stored );
+		return self::$config_cache;
 	}
 
 	/**
@@ -142,7 +195,18 @@ class Merchants extends Base {
 	 * @param array $config
 	 */
 	public static function save_config( array $config ): void {
-		update_option( self::OPTION_KEY, self::merge_with_defaults( $config ) );
+		$normalised = self::merge_with_defaults( $config );
+		update_option( self::OPTION_KEY, $normalised );
+		self::$config_cache = $normalised;
+	}
+
+	/**
+	 * Drop the in-process cache. Mostly useful for tests; production
+	 * callers don't need this — `save_config()` already refreshes the
+	 * cache on its own.
+	 */
+	public static function purge_config_cache(): void {
+		self::$config_cache = null;
 	}
 
 	/**
@@ -297,6 +361,133 @@ class Merchants extends Base {
 	}
 
 	/**
+	 * True when the admin should see the full multi-merchant management UI
+	 * (the merchants table, per-merchant edit form, routing rules etc.).
+	 *
+	 * For 95% of installs with exactly one Økoskabet account this returns
+	 * `false` and the admin gets the legacy single-merchant CMB form
+	 * unchanged. The advanced UI only kicks in when:
+	 *
+	 *   1. The site has more than one merchant configured, OR
+	 *   2. The admin has explicitly opted into the advanced UI via the
+	 *      `?oko_show_merchants=1` query string (the "+ Add another
+	 *      Økoskabet merchant" link below the simple form sets this).
+	 *
+	 * Crucially, this is a UX-only flag — every routing/webhook/security
+	 * path uses the merchants registry regardless. Toggling this flag
+	 * does not affect the datamodel or webhook URLs.
+	 */
+	public static function is_multi_merchant_mode(): bool {
+		if ( count( self::get_all() ) > 1 ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET[ self::QUERY_SHOW_MERCHANTS ] ) && (string) $_GET[ self::QUERY_SHOW_MERCHANTS ] === '1' ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Mirror the default merchant's stored values into the legacy plugin
+	 * settings option so the simple CMB form on the main settings page
+	 * shows the current default-merchant values. Called from the settings
+	 * view right before CMB2 reads the option.
+	 *
+	 * This keeps the simple form a true facade — the merchant record is
+	 * always the source of truth, and the option row is rewritten from it
+	 * on every render so admins switching back and forth between simple
+	 * and advanced UI never see stale values.
+	 *
+	 * Skipped in multi-merchant mode (where the legacy fields aren't
+	 * rendered anyway) and pre-migration (no default merchant yet).
+	 */
+	public static function mirror_default_to_options(): void {
+		if ( self::is_multi_merchant_mode() ) {
+			return;
+		}
+		$default = self::get_default();
+		if ( ! $default ) {
+			return;
+		}
+
+		$option_key = O_TEXTDOMAIN . '-settings';
+		$option     = (array) get_option( $option_key, array() );
+		$changed    = false;
+
+		foreach ( self::$legacy_option_to_merchant as $opt_key => $merchant_key ) {
+			$source = $default[ $merchant_key ] ?? null;
+			// Translate bool→on/empty so CMB2 checkboxes render correctly.
+			if ( $merchant_key === 'staging' ) {
+				$source = ! empty( $source ) ? 'on' : '';
+			}
+			$current = array_key_exists( $opt_key, $option ) ? $option[ $opt_key ] : null;
+			if ( $current !== $source ) {
+				$option[ $opt_key ] = $source;
+				$changed            = true;
+			}
+		}
+
+		if ( $changed ) {
+			update_option( $option_key, $option );
+		}
+	}
+
+	/**
+	 * After the simple CMB form is saved, copy the just-saved option values
+	 * back into the default merchant record. The default merchant is the
+	 * canonical source for all downstream routing/webhook code, so without
+	 * this sync the form would appear to "save" but routing would still
+	 * see the old credentials.
+	 *
+	 * Skipped in multi-merchant mode — the table-driven UI saves directly
+	 * via `handle_save_merchant()` and we don't want a stray form
+	 * submission on the main page to clobber a per-merchant value.
+	 *
+	 * @param int|string                  $object_id The option name.
+	 * @param array<int|string,mixed>     $updated   List of CMB2 field IDs that changed.
+	 * @param \CMB2|null                  $cmb       The CMB2 instance.
+	 */
+	public function handle_legacy_options_saved( $object_id, $updated, $cmb ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+		if ( self::is_multi_merchant_mode() ) {
+			return;
+		}
+
+		$option = (array) get_option( O_TEXTDOMAIN . '-settings', array() );
+		$config = self::get_config();
+		$id     = $config['default_merchant_id'];
+
+		if ( $id === '' ) {
+			$id = self::DEFAULT_MERCHANT_ID;
+		}
+
+		$existing = $config['merchants'][ $id ] ?? self::default_merchant();
+		$existing['id'] = $id;
+		if ( empty( $existing['label'] ) ) {
+			$existing['label'] = __( 'Default merchant', O_TEXTDOMAIN );
+		}
+
+		foreach ( self::$legacy_option_to_merchant as $opt_key => $merchant_key ) {
+			if ( ! array_key_exists( $opt_key, $option ) ) {
+				continue;
+			}
+			$value = $option[ $opt_key ];
+			if ( $merchant_key === 'staging' ) {
+				$value = ! empty( $value );
+			}
+			$existing[ $merchant_key ] = $value;
+		}
+
+		$normalised = self::normalise_merchant( $id, $existing );
+		if ( $normalised === null ) {
+			return;
+		}
+		$config['merchants'][ $id ]    = $normalised;
+		$config['default_merchant_id'] = $id;
+		self::save_config( $config );
+	}
+
+	/**
 	 * Resolve a merchant's API base URL — staging vs production.
 	 */
 	public static function api_url_for( array $merchant ): string {
@@ -309,6 +500,29 @@ class Merchants extends Base {
 
 	public function render_section(): void {
 		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return;
+		}
+
+		// In single-merchant mode (the default for the vast majority of
+		// installs) we deliberately render NOTHING merchant-related
+		// except a small link to opt into the multi-merchant UI. The
+		// simple CMB form on the main settings page already mirrors the
+		// default merchant's values and is the only UI a single-merchant
+		// admin should see.
+		if ( ! self::is_multi_merchant_mode() ) {
+			$show_url = add_query_arg(
+				array( 'page' => O_TEXTDOMAIN, self::QUERY_SHOW_MERCHANTS => '1' ),
+				admin_url( 'admin.php' )
+			) . '#okoskabet-merchants';
+			?>
+			<div id="okoskabet-merchants" style="margin-top:24px;">
+				<p>
+					<a href="<?php echo esc_url( $show_url ); ?>">
+						+ <?php esc_html_e( 'Add another Økoskabet merchant', O_TEXTDOMAIN ); ?>
+					</a>
+				</p>
+			</div>
+			<?php
 			return;
 		}
 
@@ -406,6 +620,9 @@ class Merchants extends Base {
 							</select>
 							<p class="oko-help">
 								<?php esc_html_e( 'Used for any cart that isn\'t handled cleanly by another merchant. Additional merchants ONLY handle carts where every item matches that merchant\'s product categories, tags or per-product override. The moment a cart contains items from more than one merchant — for any reason — the cart routes to the default merchant. Mixed carts are never blocked and never split across merchants.', O_TEXTDOMAIN ); ?>
+							</p>
+							<p class="oko-help" style="color:#a44; font-weight:600;">
+								<?php esc_html_e( 'Heads up: changing the default merchant also changes which merchant\'s webhook secret backs the legacy webhook URL (…/okoskabet/webhook without a merchant ID). Any pre-existing Økoskabet webhook still pointing at the legacy URL will start failing HMAC verification unless you also update Økoskabet\'s webhook secret to match the new default merchant — or, better, switch the webhook to the per-merchant URL listed for each merchant below.', O_TEXTDOMAIN ); ?>
 							</p>
 						</td>
 					</tr>
@@ -765,6 +982,10 @@ class Merchants extends Base {
 			// Also rewrite any product meta that pointed at the old ID
 			// so per-product routing doesn't silently fall back to default.
 			$this->rewrite_product_meta_merchant( $original_id, $normalised['id'] );
+			// And every order ever stamped with the old ID — otherwise
+			// their webhooks would start failing the merchant-mismatch
+			// check (HTTP 403) in OkoRest::handle_webhook.
+			$this->rewrite_order_meta_merchant( $original_id, $normalised['id'] );
 		}
 
 		$config['merchants'][ $normalised['id'] ] = $normalised;
@@ -799,11 +1020,16 @@ class Merchants extends Base {
 		$id       = isset( $_POST['merchant_id'] ) ? sanitize_key( wp_unslash( $_POST['merchant_id'] ) ) : '';
 		$merchant = $id !== '' ? self::get( $id ) : null;
 
+		// `redirect_back()` itself calls exit. The explicit `return`s here
+		// just keep static analysers happy that we aren't falling through
+		// into the next branch.
 		if ( ! $merchant ) {
 			$this->redirect_back( array( 'oko_merchants_tested' => rawurlencode( __( 'Unknown merchant', O_TEXTDOMAIN ) ) ) );
+			return;
 		}
 		if ( empty( $merchant['api_key'] ) ) {
 			$this->redirect_back( array( 'oko_merchants_tested' => rawurlencode( __( 'API key not configured', O_TEXTDOMAIN ) ) ) );
+			return;
 		}
 
 		$response = wp_remote_get( self::api_url_for( $merchant ) . '/api/v1/configuration', array(
@@ -815,11 +1041,13 @@ class Merchants extends Base {
 
 		if ( is_wp_error( $response ) ) {
 			$this->redirect_back( array( 'oko_merchants_tested' => rawurlencode( $response->get_error_message() ) ) );
+			return;
 		}
 
 		$code = wp_remote_retrieve_response_code( $response );
 		if ( $code !== 200 ) {
 			$this->redirect_back( array( 'oko_merchants_tested' => rawurlencode( sprintf( 'HTTP %d', (int) $code ) ) ) );
+			return;
 		}
 
 		// Bust the per-merchant shipping-methods cache so the next page
@@ -832,6 +1060,10 @@ class Merchants extends Base {
 	/**
 	 * Rewrite product_meta `_okoskabet_merchant` from $old to $new in a
 	 * single SQL query — fast even on stores with many products.
+	 *
+	 * Products are still custom post types under WooCommerce (HPOS only
+	 * moves orders out of the posts table), so a direct postmeta update
+	 * is safe and correct here.
 	 */
 	private function rewrite_product_meta_merchant( string $old, string $new ): void {
 		global $wpdb;
@@ -843,6 +1075,68 @@ class Merchants extends Base {
 			array( '%s' ),
 			array( '%s', '%s' )
 		);
+	}
+
+	/**
+	 * Rewrite the per-order merchant stamp `_okoskabet_merchant_id` from
+	 * $old → $new. Otherwise orders booked under the old ID would start
+	 * failing the merchant-mismatch check on incoming webhooks (HTTP
+	 * 403 in OkoRest::handle_webhook).
+	 *
+	 * HPOS-aware: we deliberately go through `wc_get_orders()` and
+	 * `$order->update_meta_data()` rather than a raw postmeta UPDATE,
+	 * because once HPOS is enabled the order data lives in
+	 * `wp_wc_orders_meta` (or a custom table) and a postmeta UPDATE
+	 * would silently miss those rows.
+	 *
+	 * Stores with N orders pay an O(N) cost here, but this only runs on
+	 * the rare path where an admin renames a merchant ID — which the
+	 * field's help text already warns about — so the cost is acceptable.
+	 */
+	private function rewrite_order_meta_merchant( string $old, string $new ): void {
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			return;
+		}
+
+		$paged    = 1;
+		$per_page = 200;
+
+		// Defensive ceiling so a misconfigured callsite can never spin
+		// forever; 200k orders is well beyond anything realistic for an
+		// Økoskabet shop and we'd still complete this in a few minutes
+		// at that size. Larger stores can re-run the rename — the loop
+		// is idempotent.
+		$safety_limit = 1000;
+
+		while ( $paged <= $safety_limit ) {
+			$orders = wc_get_orders( array(
+				'limit'        => $per_page,
+				'paged'        => $paged,
+				'meta_key'     => Merchant_Router::ORDER_META_KEY,
+				'meta_value'   => $old,
+				'meta_compare' => '=',
+				'return'       => 'objects',
+				'orderby'      => 'ID',
+				'order'        => 'ASC',
+			) );
+
+			if ( empty( $orders ) ) {
+				break;
+			}
+
+			foreach ( $orders as $order ) {
+				if ( ! $order instanceof \WC_Order ) {
+					continue;
+				}
+				$order->update_meta_data( Merchant_Router::ORDER_META_KEY, $new );
+				$order->save();
+			}
+
+			if ( count( $orders ) < $per_page ) {
+				break;
+			}
+			$paged++;
+		}
 	}
 
 	private function redirect_back( array $extra ): void {

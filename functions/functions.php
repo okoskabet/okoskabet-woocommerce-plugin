@@ -851,6 +851,13 @@ function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $d
  * the order is permanently bound to the merchant the customer routed to
  * at checkout, even if a later admin action changes the cart contents
  * of a saved order or a product's category mapping moves underneath us.
+ *
+ * Cart vs order fallback: at the regular checkout, WC()->cart holds the
+ * canonical list of products. But for orders created programmatically —
+ * REST API, admin "Add order", subscription renewals — the cart is
+ * empty (or belongs to a different session) at hook-fire time. We fall
+ * back to the order's own line items so the stamp is correct for every
+ * code path that creates an order.
  */
 add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_stamp_merchant_on_order', 20, 2);
 
@@ -859,7 +866,29 @@ function okoskabet_woocommerce_plugin_stamp_merchant_on_order($order, $data): vo
 	if (! class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
 		return;
 	}
-	$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_cart();
+
+	$product_ids = array();
+	if (function_exists('WC') && WC()->cart) {
+		foreach (WC()->cart->get_cart() as $cart_item) {
+			$pid = (int) ($cart_item['product_id'] ?? 0);
+			if ($pid > 0) {
+				$product_ids[] = $pid;
+			}
+		}
+	}
+
+	if (empty($product_ids) && $order instanceof \WC_Order) {
+		foreach ($order->get_items() as $item) {
+			if ($item instanceof \WC_Order_Item_Product) {
+				$pid = (int) $item->get_product_id();
+				if ($pid > 0) {
+					$product_ids[] = $pid;
+				}
+			}
+		}
+	}
+
+	$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_products($product_ids);
 	$mid      = $resolved['merchant_id'] ?? '';
 	if ($mid !== '') {
 		$order->update_meta_data(
