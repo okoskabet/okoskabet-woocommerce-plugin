@@ -572,12 +572,16 @@ class Merchants extends Base {
 			<?php $this->render_global_settings( $config ); ?>
 
 			<?php
+			// Always render the merchants table as context so admins can
+			// see their existing merchants while creating/editing — the
+			// "where did my first merchant go?" surprise is otherwise
+			// genuinely disorienting in the create/edit flow.
+			$this->render_merchant_list( $config );
+
 			if ( $creating ) {
 				$this->render_merchant_form( null, $categories, $tags );
 			} elseif ( $editing_id !== '' && isset( $merchants[ $editing_id ] ) ) {
 				$this->render_merchant_form( $merchants[ $editing_id ], $categories, $tags );
-			} else {
-				$this->render_merchant_list( $config );
 			}
 			?>
 		</div>
