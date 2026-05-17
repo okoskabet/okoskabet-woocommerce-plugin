@@ -720,3 +720,16 @@ msgstr "WooCommerce er ikke indlæst."
 
 msgid "Success response example"
 msgstr "Eksempel på success-response"
+
+# Pre-flight check messages (main plugin file)
+msgid "requires PHP %1$s or newer. You are running PHP %2$s. Ask your hosting provider to upgrade PHP, then re-activate the plugin."
+msgstr "kræver PHP %1$s eller nyere. Du kører PHP %2$s. Bed dit webhotel om at opgradere PHP, og aktivér derefter plugin'et igen."
+
+msgid "requires WordPress %1$s or newer. You are running WordPress %2$s. Update WordPress, then re-activate the plugin."
+msgstr "kræver WordPress %1$s eller nyere. Du kører WordPress %2$s. Opdater WordPress, og aktivér derefter plugin'et igen."
+
+msgid "requires the <a href=\"https://wordpress.org/plugins/woocommerce/\">WooCommerce</a> plugin to be installed and active. Install WooCommerce, then re-activate Økoskabet."
+msgstr "kræver at <a href=\"https://wordpress.org/plugins/woocommerce/\">WooCommerce</a>-plugin'et er installeret og aktivt. Installér WooCommerce, og aktivér derefter Økoskabet igen."
+
+msgid "requires WooCommerce %1$s or newer. You are running WooCommerce %2$s. Update WooCommerce, then re-activate Økoskabet."
+msgstr "kræver WooCommerce %1$s eller nyere. Du kører WooCommerce %2$s. Opdater WooCommerce, og aktivér derefter Økoskabet igen."
