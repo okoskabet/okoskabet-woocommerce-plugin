@@ -759,9 +759,17 @@ class Merchants extends Base {
 			),
 			admin_url( 'admin.php' )
 		) . '#okoskabet-merchants';
-		$webhook_url  = $is_new
-			? '—'
-			: home_url( '/wp-json/wp/v2/okoskabet/webhook/' . rawurlencode( $merchant['id'] ) );
+		// Render the webhook URL preview from the merchant's current slug,
+		// or fall back to a placeholder when the slug is still empty (i.e.
+		// a brand-new "Add merchant" form). A small inline JS below the
+		// form keeps this in sync with whatever the admin types in the
+		// Identifier field so they can copy the URL into Økoskabet's
+		// webhook settings without having to save the merchant first.
+		$webhook_base_url       = home_url( '/wp-json/wp/v2/okoskabet/webhook/' );
+		$webhook_url_placeholder = __( '<your-identifier>', O_TEXTDOMAIN );
+		$webhook_url            = $merchant['id'] !== ''
+			? $webhook_base_url . rawurlencode( $merchant['id'] )
+			: $webhook_base_url . $webhook_url_placeholder;
 
 		?>
 		<div class="oko-merchant-form">
@@ -814,7 +822,7 @@ class Merchants extends Base {
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Webhook URL', O_TEXTDOMAIN ); ?></th>
 						<td>
-							<span class="oko-webhook-url"><?php echo esc_html( $webhook_url ); ?></span>
+							<span class="oko-webhook-url" id="oko-webhook-url-preview"><?php echo esc_html( $webhook_url ); ?></span>
 							<p class="oko-help"><?php esc_html_e( 'Configure this URL in Økoskabet\'s webhook settings for this merchant. Each merchant has its own URL so signatures can be verified against the correct secret.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
@@ -927,6 +935,23 @@ class Merchants extends Base {
 				</p>
 			</form>
 		</div>
+		<script>
+			(function() {
+				var idField = document.getElementById('merchant-id');
+				var preview = document.getElementById('oko-webhook-url-preview');
+				if (!idField || !preview) { return; }
+				var baseUrl = <?php echo wp_json_encode( $webhook_base_url ); ?>;
+				var placeholder = <?php echo wp_json_encode( $webhook_url_placeholder ); ?>;
+				function update() {
+					// Mirror the sanitize_key() PHP rules so the preview
+					// matches what will actually be stored.
+					var slug = idField.value.toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+					preview.textContent = baseUrl + (slug || placeholder);
+				}
+				idField.addEventListener('input', update);
+				update();
+			})();
+		</script>
 		<?php
 	}
 
