@@ -128,23 +128,75 @@
 			}
 		}
 
+		function escapeHtml(s) {
+			return String(s == null ? "" : s)
+				.replace(/&/g, "&amp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;")
+				.replace(/"/g, "&quot;");
+		}
+
+		// Generic fallback for when the customer sees the empty-dates
+		// placeholder but no Delivery_Exceptions explanation is active —
+		// typically because the merchant's date window is too narrow or
+		// the API genuinely returned nothing. Replace the bare placeholder
+		// with a "please contact the shop" message rather than leaving it
+		// as an inscrutable "no dates available." line.
+		function applyFallback() {
+			if (lastExplanation) { return; }
+			var heading = STR.noDatesHeading || "No delivery dates available right now";
+			var body = STR.noDatesBody || "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
+			var spans = findPlaceholders();
+			for (var i = 0; i < spans.length; i++) {
+				var span = spans[i];
+				if (span.dataset.okoFallback === "1") { continue; }
+				var div = document.createElement("div");
+				div.className = "oko-no-dates-fallback";
+				div.dataset.okoFallback = "1";
+				div.style.cssText = "background:#fff5f5;border:1px solid #f0c0c0;"
+					+ "border-left:4px solid #c44;padding:12px 14px;"
+					+ "margin:8px 0 16px;border-radius:3px;";
+				div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
+					+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
+				span.parentNode.replaceChild(div, span);
+			}
+		}
+
 		function removeExplanation() {
-			var nodes = document.querySelectorAll(".oko-no-dates-explained");
+			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback");
 			for (var i = 0; i < nodes.length; i++) {
 				nodes[i].parentNode.removeChild(nodes[i]);
 			}
 		}
 
 		// Watch for Svelte (re)renders so we can re-apply if the placeholder
-		// reappears after a checkout update.
+		// reappears after a checkout update. Either an explanation kicks in
+		// (Delivery_Exceptions hit) or we surface the generic contact-shop
+		// fallback so the customer is never stranded on a bare "no dates."
 		var observer = new MutationObserver(function () {
-			if (lastExplanation) { applyExplanation(); }
+			if (lastExplanation) {
+				applyExplanation();
+			} else {
+				applyFallback();
+			}
 		});
+		function reapply() {
+			if (lastExplanation) {
+				applyExplanation();
+			} else {
+				applyFallback();
+			}
+		}
 		document.addEventListener("DOMContentLoaded", function () {
 			observer.observe(document.body, { childList: true, subtree: true });
+			// Catch placeholders that were already in the DOM before our
+			// observer started — MutationObserver only fires for changes,
+			// not for the initial state.
+			reapply();
 		});
 		if (document.readyState !== "loading") {
 			observer.observe(document.body, { childList: true, subtree: true });
+			reapply();
 		}
 	}());
 

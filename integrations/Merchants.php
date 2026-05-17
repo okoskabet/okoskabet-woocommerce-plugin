@@ -869,6 +869,7 @@ class Merchants extends Base {
 						<th scope="row"><label for="merchant-max-days"><?php esc_html_e( 'Standard display window (days)', O_TEXTDOMAIN ); ?></label></th>
 						<td>
 							<input type="number" id="merchant-max-days" name="merchant[maximum_days_in_future]" value="<?php echo esc_attr( $merchant['maximum_days_in_future'] ); ?>" min="1" max="60" />
+							<p class="oko-help"><?php esc_html_e( 'How far into the future delivery dates are fetched from Økoskabet, in days. IMPORTANT: this must be larger than the longest "earliest delivery in N days" rule any product routed to this merchant has under "Delivery exceptions" — otherwise the customer\'s date dropdown will look empty (Økoskabet returns no dates inside the window, your exception rule then removes everything else). Aim for at least 2x your longest exception. Range 1–60.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>

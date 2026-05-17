@@ -236,6 +236,14 @@ function custom_content_for_custom_shipping_checkout(): void
 		// can find and replace it. Don't translate it without also rebuilding
 		// the Svelte bundle to emit the same translated text.
 		'placeholderText' => 'Ingen tilgængelige datoer.',
+		// Shown to the customer when the placeholder is visible AND no
+		// Delivery_Exceptions explanation kicked in — typically means the
+		// merchant's display window doesn't reach far enough into the
+		// future for any of the product's delivery rules, so the API
+		// genuinely returned no dates. We can't recover automatically;
+		// the right action is for the customer to reach the shop owner.
+		'noDatesHeading' => __('No delivery dates available right now', O_TEXTDOMAIN),
+		'noDatesBody'    => __('We can\'t find a delivery date for the products in your cart at this time. Please contact the shop so we can help you complete the order — sometimes it\'s a temporary configuration issue we can resolve quickly.', O_TEXTDOMAIN),
 	), JSON_HEX_TAG | JSON_HEX_AMP);
 
 	// Enqueue the external checkout-helpers.js file. Both the overlay
