@@ -637,7 +637,11 @@ class Merchants extends Base {
 		$merchants    = $config['merchants'];
 		$default_id   = $config['default_merchant_id'];
 		$new_url      = add_query_arg(
-			array( 'page' => O_TEXTDOMAIN, 'oko_merchant_new' => '1' ),
+			array(
+				'page'                     => O_TEXTDOMAIN,
+				self::QUERY_SHOW_MERCHANTS => '1',
+				'oko_merchant_new'         => '1',
+			),
 			admin_url( 'admin.php' )
 		) . '#okoskabet-merchants';
 		$webhook_base = home_url( '/wp-json/wp/v2/okoskabet/webhook/' );
@@ -662,7 +666,11 @@ class Merchants extends Base {
 					<?php foreach ( $merchants as $m ) :
 						$is_default = $m['id'] === $default_id;
 						$edit_url   = add_query_arg(
-							array( 'page' => O_TEXTDOMAIN, 'oko_merchant_edit' => $m['id'] ),
+							array(
+								'page'                     => O_TEXTDOMAIN,
+								self::QUERY_SHOW_MERCHANTS => '1',
+								'oko_merchant_edit'        => $m['id'],
+							),
 							admin_url( 'admin.php' )
 						) . '#okoskabet-merchants';
 						$webhook_url   = $webhook_base . rawurlencode( $m['id'] );
@@ -740,7 +748,13 @@ class Merchants extends Base {
 	private function render_merchant_form( ?array $merchant, array $categories, array $tags ): void {
 		$is_new       = ( $merchant === null );
 		$merchant     = $merchant ?? self::default_merchant();
-		$back_url     = add_query_arg( array( 'page' => O_TEXTDOMAIN ), admin_url( 'admin.php' ) ) . '#okoskabet-merchants';
+		$back_url     = add_query_arg(
+			array(
+				'page'                     => O_TEXTDOMAIN,
+				self::QUERY_SHOW_MERCHANTS => '1',
+			),
+			admin_url( 'admin.php' )
+		) . '#okoskabet-merchants';
 		$webhook_url  = $is_new
 			? '—'
 			: home_url( '/wp-json/wp/v2/okoskabet/webhook/' . rawurlencode( $merchant['id'] ) );
@@ -1140,8 +1154,20 @@ class Merchants extends Base {
 	}
 
 	private function redirect_back( array $extra ): void {
+		// Always preserve the multi-merchant UI flag so save/delete/test
+		// handlers land the admin back on the merchants table rather than
+		// silently falling out to the single-merchant simple form. (Doing
+		// this unconditionally is safe: when count > 1 the flag is a no-op,
+		// and these handlers are only ever reached from forms inside the
+		// multi-merchant UI anyway.)
 		$url = add_query_arg(
-			array_merge( array( 'page' => O_TEXTDOMAIN ), $extra ),
+			array_merge(
+				array(
+					'page'                     => O_TEXTDOMAIN,
+					self::QUERY_SHOW_MERCHANTS => '1',
+				),
+				$extra
+			),
 			admin_url( 'admin.php' )
 		) . '#okoskabet-merchants';
 		wp_safe_redirect( $url );
