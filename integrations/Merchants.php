@@ -869,7 +869,7 @@ class Merchants extends Base {
 						<th scope="row"><label for="merchant-max-days"><?php esc_html_e( 'Standard display window (days)', O_TEXTDOMAIN ); ?></label></th>
 						<td>
 							<input type="number" id="merchant-max-days" name="merchant[maximum_days_in_future]" value="<?php echo esc_attr( $merchant['maximum_days_in_future'] ); ?>" min="1" max="60" />
-							<p class="oko-help"><?php esc_html_e( 'How far into the future delivery dates are fetched from Økoskabet, in days. IMPORTANT: this must be larger than the longest "earliest delivery in N days" rule any product routed to this merchant has under "Delivery exceptions" — otherwise the customer\'s date dropdown will look empty (Økoskabet returns no dates inside the window, your exception rule then removes everything else). Aim for at least 2x your longest exception. Range 1–60.', O_TEXTDOMAIN ); ?></p>
+							<p class="oko-help"><?php esc_html_e( 'How far into the future delivery dates are fetched from Økoskabet by default, in days. The plugin auto-extends this window (up to a hard cap of 365 days) when a product has a specific-date "Delivery exception" rule (only_on / from_until), so customers always see their applicable delivery date even if it falls outside the default window. For weekday-restriction rules (e.g. "only Mondays"), however, this default must be large enough to contain at least one matching weekday — otherwise the customer\'s dropdown will look empty. The default of 3 is fine for most setups; raise it to 7–14 if your products have weekday-restriction rules. Range 1–60.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>
