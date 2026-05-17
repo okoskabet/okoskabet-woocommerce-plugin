@@ -807,23 +807,23 @@ class Merchants extends Base {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><?php esc_html_e( 'Webhook URL', O_TEXTDOMAIN ); ?></th>
+						<td>
+							<span class="oko-webhook-url" id="oko-webhook-url-preview"><?php echo esc_html( $webhook_url ); ?></span>
+							<p class="oko-help"><?php esc_html_e( 'Configure this URL in Økoskabet\'s webhook settings for this merchant first — Økoskabet then gives you the webhook secret to paste below. Each merchant has its own URL so signatures can be verified against the correct secret.', O_TEXTDOMAIN ); ?></p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="merchant-webhook-secret"><?php esc_html_e( 'Webhook secret', O_TEXTDOMAIN ); ?></label></th>
 						<td>
 							<input type="password" id="merchant-webhook-secret" name="merchant[webhook_secret]" value="<?php echo esc_attr( $merchant['webhook_secret'] ); ?>" autocomplete="off" />
-							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s webhook configuration. Used to verify incoming webhooks for this merchant only.', O_TEXTDOMAIN ); ?></p>
+							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s webhook configuration (generated when you register the webhook URL above). Used to verify incoming webhooks for this merchant only.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Environment', O_TEXTDOMAIN ); ?></th>
 						<td>
 							<label><input type="checkbox" name="merchant[staging]" value="1" <?php checked( ! empty( $merchant['staging'] ) ); ?> /> <?php esc_html_e( 'Use staging API', O_TEXTDOMAIN ); ?></label>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><?php esc_html_e( 'Webhook URL', O_TEXTDOMAIN ); ?></th>
-						<td>
-							<span class="oko-webhook-url" id="oko-webhook-url-preview"><?php echo esc_html( $webhook_url ); ?></span>
-							<p class="oko-help"><?php esc_html_e( 'Configure this URL in Økoskabet\'s webhook settings for this merchant. Each merchant has its own URL so signatures can be verified against the correct secret.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>
