@@ -653,3 +653,70 @@ msgstr "pga. dette produkts kategori/tag"
 
 msgid "as the fallback default merchant"
 msgstr "som fallback til standard-merchanten"
+
+# Webhook reference docs (moved out of CMB form, below Save button)
+msgid "Webhook reference & response codes"
+msgstr "Webhook-reference & svar-koder"
+
+msgid "How to configure webhooks at Økoskabet"
+msgstr "Sådan konfigurerer du webhooks hos Økoskabet"
+
+msgid "Log in to Økoskabet's dashboard."
+msgstr "Log ind på Økoskabets dashboard."
+
+msgid "Navigate to webhook settings."
+msgstr "Gå til webhook-indstillingerne."
+
+msgid "For EACH merchant configured here, register a separate webhook in Økoskabet with its merchant-specific URL (shown next to each merchant in the table above) and the matching webhook secret you saved on the merchant record. Each merchant has its own signing secret — never share a secret across merchants."
+msgstr "For HVER merchant konfigureret her, registrér en separat webhook hos Økoskabet med dens merchant-specifikke URL (vist ved hver merchant i tabellen ovenfor) og det matchende webhook secret du har gemt på merchanten. Hver merchant har sin egen signing secret — del aldrig en secret på tværs af merchants."
+
+msgid "Register a webhook in Økoskabet pointing at <code>%s</code> with Method <code>POST</code>, Content-Type <code>application/json</code>, and the signing secret you set in the Webhook Secret field above."
+msgstr "Registrér en webhook hos Økoskabet der peger på <code>%s</code> med Method <code>POST</code>, Content-Type <code>application/json</code> og det signing secret du har sat i Webhook Secret-feltet ovenfor."
+
+msgid "Select the events you want Økoskabet to send — typically:"
+msgstr "Vælg de events du vil have Økoskabet til at sende — typisk:"
+
+msgid "Only events you have ticked under \"Capture events\" or \"Completion events\" trigger any action — the rest are accepted and ignored."
+msgstr "Kun events du har markeret under \"Capture-events\" eller \"Completion-events\" udløser en handling — resten accepteres og ignoreres."
+
+msgid "Expected payload format"
+msgstr "Forventet payload-format"
+
+msgid "The plugin maps Økoskabet's \"reservation_updated\" event into the internal events shown in the settings above (in_shed, order_delivered) by inspecting the \"changes\" payload."
+msgstr "Plugin'et oversætter Økoskabets \"reservation_updated\"-event til de interne events vist i indstillingerne ovenfor (in_shed, order_delivered) ved at inspicere \"changes\"-payloaden."
+
+msgid "Authentication"
+msgstr "Autentificering"
+
+msgid "Each webhook is verified by an HMAC-SHA256 signature of the raw request body, using the merchant's webhook secret. Økoskabet computes the signature on its side and sends it as the lowercase hex value of this header:"
+msgstr "Hver webhook verificeres med en HMAC-SHA256 signatur over selve request-body'en, ved brug af merchantens webhook secret. Økoskabet beregner signaturen på deres side og sender den som lowercase hex-værdi i denne header:"
+
+msgid "If the header is missing, malformed, or does not match, the request is rejected with HTTP 401. The <strong>API key</strong> field is NOT used to authenticate webhooks — it's only used for outbound API calls to Økoskabet."
+msgstr "Hvis headeren mangler, er ugyldig eller ikke matcher, afvises requesten med HTTP 401. <strong>API-nøgle</strong>-feltet bruges IKKE til at autentificere webhooks — den bruges kun til udgående API-kald til Økoskabet."
+
+msgid "Test a webhook locally with curl"
+msgstr "Test en webhook lokalt med curl"
+
+msgid "Response codes"
+msgstr "Svar-koder"
+
+msgid "webhook processed."
+msgstr "webhook behandlet."
+
+msgid "invalid or missing HMAC signature."
+msgstr "ugyldig eller manglende HMAC-signatur."
+
+msgid "webhook functionality is disabled in plugin settings, OR the order belongs to a different merchant than the one in the webhook URL."
+msgstr "webhook-funktionalitet er slået fra i plugin-indstillingerne, ELLER ordren tilhører en anden merchant end den i webhook-URL'en."
+
+msgid "the merchant ID in the URL is unknown, OR the order referenced by shipment_reference does not exist."
+msgstr "merchant-ID'et i URL'en er ukendt, ELLER ordren der refereres af shipment_reference findes ikke."
+
+msgid "the merchant has no webhook secret configured. Edit the merchant and paste a value."
+msgstr "merchanten har ingen webhook secret konfigureret. Rediger merchanten og indsæt en værdi."
+
+msgid "WooCommerce is not loaded."
+msgstr "WooCommerce er ikke indlæst."
+
+msgid "Success response example"
+msgstr "Eksempel på success-response"
