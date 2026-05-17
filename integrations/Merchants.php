@@ -599,6 +599,11 @@ class Merchants extends Base {
 			.oko-section-divider { margin:24px 0; border:0; border-top:1px dashed #c3c4c7; }
 			.oko-merchant-form .oko-multi { width:100%; max-width:520px; min-height:80px; }
 			.oko-webhook-url { font-family:monospace; background:#f6f7f7; padding:6px 10px; border-radius:3px; display:inline-block; }
+			.oko-secret-field { display:inline-flex; align-items:stretch; gap:6px; max-width:520px; width:100%; }
+			.oko-secret-field input { flex:1; min-width:0; }
+			.oko-secret-field .oko-toggle-secret { display:inline-flex; align-items:center; justify-content:center; padding:0 10px; }
+			.oko-secret-field .oko-toggle-secret .dashicons { font-size:18px; width:18px; height:18px; line-height:1; }
+			.oko-secret-hint { font-family:monospace; color:#555 !important; }
 		</style>
 		<?php
 	}
@@ -802,7 +807,24 @@ class Merchants extends Base {
 					<tr>
 						<th scope="row"><label for="merchant-api-key"><?php esc_html_e( 'API key', O_TEXTDOMAIN ); ?></label></th>
 						<td>
-							<input type="password" id="merchant-api-key" name="merchant[api_key]" value="<?php echo esc_attr( $merchant['api_key'] ); ?>" autocomplete="off" />
+							<span class="oko-secret-field">
+								<input type="password" id="merchant-api-key" name="merchant[api_key]" value="<?php echo esc_attr( $merchant['api_key'] ); ?>" autocomplete="off" />
+								<button type="button" class="button oko-toggle-secret" data-target="merchant-api-key" aria-label="<?php esc_attr_e( 'Show/hide API key', O_TEXTDOMAIN ); ?>" aria-pressed="false">
+									<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+								</button>
+							</span>
+							<?php if ( $merchant['api_key'] !== '' ) : ?>
+								<p class="oko-help oko-secret-hint">
+									<?php
+									echo esc_html( sprintf(
+										/* translators: 1 = first three characters of the stored key, 2 = total character length */
+										__( 'Currently configured: %1$s… (%2$d characters)', O_TEXTDOMAIN ),
+										substr( $merchant['api_key'], 0, 3 ),
+										strlen( $merchant['api_key'] )
+									) );
+									?>
+								</p>
+							<?php endif; ?>
 							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s backoffice. Used for all API calls (sheds, dates, shipment creation).', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
@@ -816,7 +838,24 @@ class Merchants extends Base {
 					<tr>
 						<th scope="row"><label for="merchant-webhook-secret"><?php esc_html_e( 'Webhook secret', O_TEXTDOMAIN ); ?></label></th>
 						<td>
-							<input type="password" id="merchant-webhook-secret" name="merchant[webhook_secret]" value="<?php echo esc_attr( $merchant['webhook_secret'] ); ?>" autocomplete="off" />
+							<span class="oko-secret-field">
+								<input type="password" id="merchant-webhook-secret" name="merchant[webhook_secret]" value="<?php echo esc_attr( $merchant['webhook_secret'] ); ?>" autocomplete="off" />
+								<button type="button" class="button oko-toggle-secret" data-target="merchant-webhook-secret" aria-label="<?php esc_attr_e( 'Show/hide webhook secret', O_TEXTDOMAIN ); ?>" aria-pressed="false">
+									<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+								</button>
+							</span>
+							<?php if ( $merchant['webhook_secret'] !== '' ) : ?>
+								<p class="oko-help oko-secret-hint">
+									<?php
+									echo esc_html( sprintf(
+										/* translators: 1 = first three characters of the stored secret, 2 = total character length */
+										__( 'Currently configured: %1$s… (%2$d characters)', O_TEXTDOMAIN ),
+										substr( $merchant['webhook_secret'], 0, 3 ),
+										strlen( $merchant['webhook_secret'] )
+									) );
+									?>
+								</p>
+							<?php endif; ?>
 							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s webhook configuration (generated when you register the webhook URL above). Used to verify incoming webhooks for this merchant only.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
@@ -939,17 +978,45 @@ class Merchants extends Base {
 			(function() {
 				var idField = document.getElementById('merchant-id');
 				var preview = document.getElementById('oko-webhook-url-preview');
-				if (!idField || !preview) { return; }
-				var baseUrl = <?php echo wp_json_encode( $webhook_base_url ); ?>;
-				var placeholder = <?php echo wp_json_encode( $webhook_url_placeholder ); ?>;
-				function update() {
-					// Mirror the sanitize_key() PHP rules so the preview
-					// matches what will actually be stored.
-					var slug = idField.value.toLowerCase().replace(/[^a-z0-9_\-]/g, '');
-					preview.textContent = baseUrl + (slug || placeholder);
+				if (idField && preview) {
+					var baseUrl = <?php echo wp_json_encode( $webhook_base_url ); ?>;
+					var placeholder = <?php echo wp_json_encode( $webhook_url_placeholder ); ?>;
+					var update = function() {
+						// Mirror the sanitize_key() PHP rules so the preview
+						// matches what will actually be stored.
+						var slug = idField.value.toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+						preview.textContent = baseUrl + (slug || placeholder);
+					};
+					idField.addEventListener('input', update);
+					update();
 				}
-				idField.addEventListener('input', update);
-				update();
+
+				// Eye toggle on secret fields (API key, webhook secret) —
+				// flips the input type between "password" and "text" so the
+				// admin can verify they've pasted the correct value without
+				// having to peek into the DB.
+				document.querySelectorAll('.oko-toggle-secret').forEach(function (btn) {
+					btn.addEventListener('click', function () {
+						var target = document.getElementById(btn.dataset.target);
+						if (!target) { return; }
+						var icon = btn.querySelector('.dashicons');
+						if (target.type === 'password') {
+							target.type = 'text';
+							btn.setAttribute('aria-pressed', 'true');
+							if (icon) {
+								icon.classList.remove('dashicons-visibility');
+								icon.classList.add('dashicons-hidden');
+							}
+						} else {
+							target.type = 'password';
+							btn.setAttribute('aria-pressed', 'false');
+							if (icon) {
+								icon.classList.remove('dashicons-hidden');
+								icon.classList.add('dashicons-visibility');
+							}
+						}
+					});
+				});
 			})();
 		</script>
 		<?php

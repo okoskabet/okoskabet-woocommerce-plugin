@@ -563,6 +563,67 @@ function hey_okoskabet_shipping_method_home_init(): void
 }
 add_action('woocommerce_shipping_init', 'hey_okoskabet_shipping_method_home_init');
 
+/**
+ * Filter shipping rates per package so a cart only ever sees Økoskabet
+ * methods that the cart's resolved merchant actually supports.
+ *
+ * Background: shipping methods (`hey_okoskabet_shipping_shed` and
+ * `hey_okoskabet_shipping_home`) are registered globally as soon as ANY
+ * configured merchant exposes them — see `o_check_configuration()`. That
+ * design works in single-merchant mode but in multi-merchant mode it
+ * surfaces methods the resolved merchant can't fulfil, leaving the
+ * customer with a "select delivery date" prompt and no available dates.
+ *
+ * This filter runs per shipping package (so it has cart context, unlike
+ * the global registration) and prunes Økoskabet methods whose underlying
+ * Økoskabet shipping method is not supported by the merchant the cart
+ * routes to. Non-Økoskabet rates are left untouched. The merchant
+ * configuration cache (`o_merchant_supports_method` uses a 5-minute
+ * transient) keeps this cheap.
+ */
+add_filter('woocommerce_package_rates', function (array $rates, array $package): array {
+    if (!class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
+        return $rates;
+    }
+
+    $product_ids = array();
+    if (!empty($package['contents']) && is_array($package['contents'])) {
+        foreach ($package['contents'] as $item) {
+            if (!empty($item['product_id'])) {
+                $product_ids[] = (int) $item['product_id'];
+            }
+        }
+    }
+
+    if (empty($product_ids)) {
+        return $rates;
+    }
+
+    $resolved    = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_products($product_ids);
+    $merchant_id = $resolved['merchant_id'] ?? '';
+    if ($merchant_id === '') {
+        return $rates;
+    }
+
+    $oko_method_map = array(
+        'hey_okoskabet_shipping_shed' => 'shed',
+        'hey_okoskabet_shipping_home' => 'home_delivery',
+    );
+
+    foreach ($rates as $rate_id => $rate) {
+        $method_id = isset($rate->method_id) ? (string) $rate->method_id : '';
+        if (!isset($oko_method_map[$method_id])) {
+            continue;
+        }
+        $oko_method = $oko_method_map[$method_id];
+        if (!o_merchant_supports_method($merchant_id, $oko_method)) {
+            unset($rates[$rate_id]);
+        }
+    }
+
+    return $rates;
+}, 10, 2);
+
 add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
 
 function custom_override_checkout_fields(array $fields): array
