@@ -407,3 +407,46 @@ msgstr "Næste: levering %d"
 
 msgid "You can also scroll down to see your order confirmation first."
 msgstr "Du kan også scrolle ned for at se din ordrebekræftelse først."
+
+# ----------------------------------------------------------------------
+# 1.4.0 — multi-merchant UX fixes
+# ----------------------------------------------------------------------
+
+# Split_Checkout cancel link
+msgid "Cancel split delivery and start over"
+msgstr "Annullér opdelt levering og start forfra"
+
+msgid "Cancel the split delivery and clear your cart? You'll be sent back to the shop and can start a fresh order."
+msgstr "Annullér den opdelte levering og tøm din kurv? Du sendes tilbage til shoppen og kan starte en ny ordre."
+
+# Merchant form — secret-field controls and hints
+msgid "Show/hide API key"
+msgstr "Vis/skjul API-nøgle"
+
+msgid "Show/hide webhook secret"
+msgstr "Vis/skjul webhook secret"
+
+msgid "Currently configured: %1$s… (%2$d characters)"
+msgstr "Konfigureret: %1$s… (%2$d tegn)"
+
+# Merchant form — webhook URL preview placeholder
+msgid "<your-identifier>"
+msgstr "<dit-id>"
+
+# Merchant form — webhook URL and secret help text (updated wording)
+msgid "Configure this URL in Økoskabet's webhook settings for this merchant first — Økoskabet then gives you the webhook secret to paste below. Each merchant has its own URL so signatures can be verified against the correct secret."
+msgstr "Konfigurer denne URL i Økoskabets webhook-indstillinger for denne merchant først — Økoskabet giver dig så webhook secret'en, du indsætter nedenfor. Hver merchant har sin egen URL så signaturer kan verificeres mod den korrekte secret."
+
+msgid "From Økoskabet's webhook configuration (generated when you register the webhook URL above). Used to verify incoming webhooks for this merchant only."
+msgstr "Fra Økoskabets webhook-konfiguration (genereres når du registrerer webhook URL'en ovenfor). Bruges til at verificere indkomne webhooks for kun denne merchant."
+
+# Merchant form — Standard display window help text
+msgid "How far into the future delivery dates are fetched from Økoskabet, in days. IMPORTANT: this must be larger than the longest \"earliest delivery in N days\" rule any product routed to this merchant has under \"Delivery exceptions\" — otherwise the customer's date dropdown will look empty (Økoskabet returns no dates inside the window, your exception rule then removes everything else). Aim for at least 2x your longest exception. Range 1–60."
+msgstr "Hvor langt ud i fremtiden leveringsdatoer hentes fra Økoskabet, i dage. VIGTIGT: denne værdi skal være større end den længste \"tidligst om N dage\"-regel som et produkt routet til denne merchant har under \"Leveringsundtagelser\" — ellers ser kundens dato-dropdown tom ud (Økoskabet returnerer ingen datoer inden for vinduet, og din undtagelses-regel fjerner så resten). Sigt efter mindst 2× din længste undtagelse. Område 1–60."
+
+# Customer-facing fallback when no delivery dates are available
+msgid "No delivery dates available right now"
+msgstr "Ingen leveringsdage tilgængelige lige nu"
+
+msgid "We can't find a delivery date for the products in your cart at this time. Please contact the shop so we can help you complete the order — sometimes it's a temporary configuration issue we can resolve quickly."
+msgstr "Vi kan ikke finde en leveringsdag for produkterne i din kurv lige nu. Kontakt venligst shoppen så vi kan hjælpe dig med at gennemføre ordren — nogle gange er det en midlertidig konfigurations-fejl vi kan løse hurtigt."
