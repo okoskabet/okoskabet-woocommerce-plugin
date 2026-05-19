@@ -13,9 +13,5 @@ return array(
     'okoskabet_woocommerce_plugin\\Cli\\' => array($baseDir . '/cli'),
     'okoskabet_woocommerce_plugin\\Backend\\' => array($baseDir . '/backend'),
     'okoskabet_woocommerce_plugin\\Ajax\\' => array($baseDir . '/ajax'),
-    'Symfony\\Polyfill\\Php80\\' => array($vendorDir . '/symfony/polyfill-php80'),
-    'Symfony\\Polyfill\\Php73\\' => array($vendorDir . '/symfony/polyfill-php73'),
-    'Symfony\\Polyfill\\Mbstring\\' => array($vendorDir . '/symfony/polyfill-mbstring'),
-    'Psr\\Container\\' => array($vendorDir . '/psr/container/src'),
     'Inpsyde\\' => array($vendorDir . '/inpsyde/wp-context/src'),
 );

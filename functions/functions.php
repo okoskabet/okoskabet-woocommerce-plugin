@@ -21,50 +21,137 @@ function o_get_settings(): array
 	return (array) apply_filters('o_get_settings', get_option(O_TEXTDOMAIN . '-settings', array()));
 }
 
-function o_check_configuration(string $value): bool
+/**
+ * Look up a single merchant's stored configuration. Falls back to the
+ * default merchant if `$id` is omitted; falls back to the legacy
+ * single-merchant settings shape if no merchants are configured yet
+ * (which can happen on the very first request after upgrade, before the
+ * admin_init migration has run).
+ *
+ * @param string|null $id
+ * @return array{api_key:string, webhook_secret:string, staging:bool, id:string, label:string, payment_gateway:string, capture_events:array, webhook_events:array, maximum_days_in_future:int, description_shipping_okoskabet:string, description_shipping_private:string}
+ */
+function o_get_merchant(?string $id = null): array
 {
-	$transient_key = O_TEXTDOMAIN . '_shipping_methods';
-	$shipping_methods = get_transient($transient_key);
+	if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchants')) {
+		$merchant = $id !== null
+			? \okoskabet_woocommerce_plugin\Integrations\Merchants::get($id)
+			: \okoskabet_woocommerce_plugin\Integrations\Merchants::get_default();
 
-	if ($shipping_methods === false) {
-		$settings = o_get_settings();
-
-		$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
-
-		if (!empty($settings['_api_key'])) {
-			$response = wp_remote_get($api_url . '/api/v1/configuration', array(
-				'timeout' => 10,
-				'headers' => array(
-					'Authorization' => $settings['_api_key'],
-				),
-			));
-
-			if (is_wp_error($response)) {
-				return false;
-			}
-
-			$http_code = wp_remote_retrieve_response_code($response);
-			$body = wp_remote_retrieve_body($response);
-
-			if ($http_code === 200 && !empty($body)) {
-				$oko_configuration = json_decode($body, true);
-
-				$shipping_methods = [];
-				if (!empty($oko_configuration['shipping_methods'])) {
-					foreach ($oko_configuration['shipping_methods'] as $method) {
-						$shipping_methods[$method['method_code']] = $method;
-					}
-				}
-
-				set_transient($transient_key, $shipping_methods, 5 * MINUTE_IN_SECONDS);
-			} else {
-				return false;
-			}
+		if ($merchant) {
+			return $merchant;
 		}
 	}
 
-	if (empty($shipping_methods[$value])) return false;
-	return true;
+	// Pre-migration fallback. Mirrors the historic single-merchant shape so
+	// callers always get a complete record.
+	$legacy = o_get_settings();
+	return array(
+		'id'                              => 'default',
+		'label'                           => __('Default merchant', O_TEXTDOMAIN),
+		'api_key'                         => (string) ($legacy['_api_key']                        ?? ''),
+		'webhook_secret'                  => (string) ($legacy['_webhook_secret']                 ?? ''),
+		'staging'                         => ! empty($legacy['_staging_api']),
+		'description_shipping_okoskabet'  => (string) ($legacy['_description_shipping_okoskabet'] ?? ''),
+		'description_shipping_private'    => (string) ($legacy['_description_shipping_private']   ?? ''),
+		'maximum_days_in_future'          => max(1, (int) ($legacy['_maximum_days_in_future']     ?? 3)),
+		'payment_gateway'                 => (string) ($legacy['_payment_gateway']                ?? 'auto'),
+		'capture_events'                  => (array)  ($legacy['_capture_events']                 ?? array('label_printed')),
+		'webhook_events'                  => (array)  ($legacy['_webhook_events']                 ?? array('order_delivered')),
+		'product_categories'              => array(),
+		'product_tags'                    => array(),
+		'priority'                        => 0,
+	);
+}
+
+/**
+ * Resolve the API base URL for a merchant record (staging vs prod).
+ */
+function o_merchant_api_url(array $merchant): string
+{
+	return ! empty($merchant['staging']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
+}
+
+/**
+ * Returns true if at least ONE configured merchant exposes a given
+ * shipping method (e.g. `shed`, `home_delivery`). Used by the shipping-
+ * methods registration to decide whether to add the method to
+ * WooCommerce's list at all.
+ *
+ * Each merchant's `/configuration` response is cached separately. The
+ * union across merchants is what matters: if any single merchant supports
+ * the method, customers in WooCommerce should see the method (and the
+ * specific merchant for any individual cart is resolved at checkout
+ * time via `Merchant_Router`).
+ */
+function o_check_configuration(string $value, ?string $merchant_id = null): bool
+{
+	// When called for a specific merchant, only that merchant's
+	// configuration is consulted. Used when validating per-cart
+	// availability after routing.
+	if ($merchant_id !== null) {
+		return o_merchant_supports_method($merchant_id, $value);
+	}
+
+	if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchants')
+		&& \okoskabet_woocommerce_plugin\Integrations\Merchants::has_any()) {
+
+		foreach (\okoskabet_woocommerce_plugin\Integrations\Merchants::get_all() as $merchant) {
+			if (o_merchant_supports_method($merchant['id'], $value)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Pre-migration fallback: legacy single-merchant path.
+	return o_merchant_supports_method('default', $value);
+}
+
+/**
+ * Internal — does THIS merchant's `/configuration` advertise the given
+ * shipping method? Cached per-merchant for 5 minutes.
+ */
+function o_merchant_supports_method(string $merchant_id, string $method_code): bool
+{
+	$transient_key = O_TEXTDOMAIN . '_shipping_methods_' . sanitize_key($merchant_id);
+	$shipping_methods = get_transient($transient_key);
+
+	if ($shipping_methods === false) {
+		$merchant = o_get_merchant($merchant_id);
+		if (empty($merchant['api_key'])) {
+			return false;
+		}
+
+		$response = wp_remote_get(o_merchant_api_url($merchant) . '/api/v1/configuration', array(
+			'timeout' => 10,
+			'headers' => array(
+				'Authorization' => $merchant['api_key'],
+			),
+		));
+
+		if (is_wp_error($response)) {
+			return false;
+		}
+
+		$http_code = wp_remote_retrieve_response_code($response);
+		$body      = wp_remote_retrieve_body($response);
+
+		if ($http_code !== 200 || empty($body)) {
+			return false;
+		}
+
+		$oko_configuration = json_decode($body, true);
+		$shipping_methods  = array();
+		if (! empty($oko_configuration['shipping_methods'])) {
+			foreach ($oko_configuration['shipping_methods'] as $method) {
+				$shipping_methods[$method['method_code']] = $method;
+			}
+		}
+		set_transient($transient_key, $shipping_methods, 5 * MINUTE_IN_SECONDS);
+	}
+
+	return ! empty($shipping_methods[$method_code]);
 }
 
 
@@ -85,9 +172,30 @@ add_action('woocommerce_review_order_after_shipping', 'custom_content_for_custom
 function custom_content_for_custom_shipping_checkout(): void
 {
 	$settings = o_get_settings();
-	if (empty($settings['_api_key'])) return;
-	$shed_description  = !empty($settings['_description_shipping_okoskabet']) ? $settings['_description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
-	$local_description = !empty($settings['_description_shipping_private'])   ? $settings['_description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
+
+	// Resolve which merchant the current cart routes to so the JS-rendered
+	// checkout UI shows the right descriptions and talks to the right
+	// /sheds and /home_delivery endpoints. The router has already applied
+	// the mixed-cart-falls-back-to-default policy at this point — every
+	// cart resolves to exactly one merchant.
+	$resolved = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')
+		? \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_cart()
+		: array('merchant_id' => '', 'merchant' => null, 'is_mixed' => false, 'fell_back_to_default' => false, 'merchant_ids' => array(), 'per_product' => array());
+
+	$merchant = $resolved['merchant'] ?? null;
+
+	// If we have no merchant we still want the legacy fallback so a fresh
+	// install (where the migration hasn't fired yet) doesn't break.
+	if (! $merchant) {
+		$merchant = o_get_merchant();
+	}
+
+	if (empty($merchant['api_key'])) {
+		return;
+	}
+
+	$shed_description  = ! empty($merchant['description_shipping_okoskabet']) ? $merchant['description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
+	$local_description = ! empty($merchant['description_shipping_private'])   ? $merchant['description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
 
 	$config = wp_json_encode(array(
 		'locale'        => get_locale(),
@@ -95,6 +203,12 @@ function custom_content_for_custom_shipping_checkout(): void
 		'descriptions'  => array(
 			'homeDelivery' => $local_description,
 			'shedDelivery' => $shed_description,
+		),
+		'merchant' => array(
+			'id'                   => (string) ($merchant['id']    ?? ''),
+			'label'                => (string) ($merchant['label'] ?? ''),
+			'is_mixed'             => (bool)   ($resolved['is_mixed']             ?? false),
+			'fell_back_to_default' => (bool)   ($resolved['fell_back_to_default'] ?? false),
 		),
 		'deliveryLocation' => array(
 			'dropdownEnabled' => !empty($settings['_delivery_location_dropdown']),
@@ -107,7 +221,10 @@ function custom_content_for_custom_shipping_checkout(): void
 			'hideWcOrderComments' => !empty($settings['_hide_wc_order_comments']),
 		),
 		'endpoints' => array(
+			// Endpoints accept `merchant_id` and/or `product_ids` so the
+			// JS can either rely on cart routing or pin a request.
 			'deliveryLocationOptions' => get_rest_url(null, 'wp/v2/okoskabet/delivery_location_options'),
+			'cartResolution'          => get_rest_url(null, 'wp/v2/okoskabet/cart_resolution'),
 		),
 	), JSON_HEX_TAG | JSON_HEX_AMP);
 
@@ -119,6 +236,14 @@ function custom_content_for_custom_shipping_checkout(): void
 		// can find and replace it. Don't translate it without also rebuilding
 		// the Svelte bundle to emit the same translated text.
 		'placeholderText' => 'Ingen tilgængelige datoer.',
+		// Shown to the customer when the placeholder is visible AND no
+		// Delivery_Exceptions explanation kicked in — typically means the
+		// merchant's display window doesn't reach far enough into the
+		// future for any of the product's delivery rules, so the API
+		// genuinely returned no dates. We can't recover automatically;
+		// the right action is for the customer to reach the shop owner.
+		'noDatesHeading' => __('No delivery dates available right now', O_TEXTDOMAIN),
+		'noDatesBody'    => __('We can\'t find a delivery date for the products in your cart at this time. Please contact the shop so we can help you complete the order — sometimes it\'s a temporary configuration issue we can resolve quickly.', O_TEXTDOMAIN),
 	), JSON_HEX_TAG | JSON_HEX_AMP);
 
 	// Enqueue the external checkout-helpers.js file. Both the overlay
@@ -446,6 +571,67 @@ function hey_okoskabet_shipping_method_home_init(): void
 }
 add_action('woocommerce_shipping_init', 'hey_okoskabet_shipping_method_home_init');
 
+/**
+ * Filter shipping rates per package so a cart only ever sees Økoskabet
+ * methods that the cart's resolved merchant actually supports.
+ *
+ * Background: shipping methods (`hey_okoskabet_shipping_shed` and
+ * `hey_okoskabet_shipping_home`) are registered globally as soon as ANY
+ * configured merchant exposes them — see `o_check_configuration()`. That
+ * design works in single-merchant mode but in multi-merchant mode it
+ * surfaces methods the resolved merchant can't fulfil, leaving the
+ * customer with a "select delivery date" prompt and no available dates.
+ *
+ * This filter runs per shipping package (so it has cart context, unlike
+ * the global registration) and prunes Økoskabet methods whose underlying
+ * Økoskabet shipping method is not supported by the merchant the cart
+ * routes to. Non-Økoskabet rates are left untouched. The merchant
+ * configuration cache (`o_merchant_supports_method` uses a 5-minute
+ * transient) keeps this cheap.
+ */
+add_filter('woocommerce_package_rates', function (array $rates, array $package): array {
+    if (!class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
+        return $rates;
+    }
+
+    $product_ids = array();
+    if (!empty($package['contents']) && is_array($package['contents'])) {
+        foreach ($package['contents'] as $item) {
+            if (!empty($item['product_id'])) {
+                $product_ids[] = (int) $item['product_id'];
+            }
+        }
+    }
+
+    if (empty($product_ids)) {
+        return $rates;
+    }
+
+    $resolved    = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_products($product_ids);
+    $merchant_id = $resolved['merchant_id'] ?? '';
+    if ($merchant_id === '') {
+        return $rates;
+    }
+
+    $oko_method_map = array(
+        'hey_okoskabet_shipping_shed' => 'shed',
+        'hey_okoskabet_shipping_home' => 'home_delivery',
+    );
+
+    foreach ($rates as $rate_id => $rate) {
+        $method_id = isset($rate->method_id) ? (string) $rate->method_id : '';
+        if (!isset($oko_method_map[$method_id])) {
+            continue;
+        }
+        $oko_method = $oko_method_map[$method_id];
+        if (!o_merchant_supports_method($merchant_id, $oko_method)) {
+            unset($rates[$rate_id]);
+        }
+    }
+
+    return $rates;
+}, 10, 2);
+
 add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
 
 function custom_override_checkout_fields(array $fields): array
@@ -525,13 +711,27 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 {
 	$order_number = $order->get_order_number();
 
-	$settings = o_get_settings();
-	$api_url = !empty($settings['_staging_api']) ? 'https://staging.okoskabet.dk' : 'https://okoskabet.dk';
+	// Resolve the merchant that should handle this order. We look at the
+	// order meta first (stamped at checkout_create_order time), falling
+	// back to a routing pass over the order's items. This keeps existing
+	// orders working after upgrade — they get resolved to the default
+	// merchant via Merchant_Router::resolve_for_order.
+	$merchant = null;
+	if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
+		$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_order($order);
+		$merchant = $resolved['merchant'] ?? null;
+	}
+	if (! $merchant) {
+		$merchant = o_get_merchant();
+	}
 
-	if (empty($settings['_api_key'])) {
-		error_log("okoskabet_woocommerce_plugin: API key not set");
+	if (empty($merchant['api_key'])) {
+		error_log("okoskabet_woocommerce_plugin: API key not set for order {$order_number}, merchant=" . ($merchant['id'] ?? '?'));
 		return;
 	}
+
+	$api_url = o_merchant_api_url($merchant);
+	$api_key = (string) $merchant['api_key'];
 
 	if ($new_status === 'cancelled') {
 		$url = $api_url . '/api/v1/shipments/' . $order_number;
@@ -541,7 +741,7 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			'timeout' => 15,
 			'headers' => array(
 				'Content-Type'  => 'application/json',
-				'Authorization' => $settings['_api_key'],
+				'Authorization' => $api_key,
 			),
 		));
 
@@ -651,7 +851,7 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			'timeout' => 15,
 			'headers' => array(
 				'Content-Type'  => 'application/json',
-				'Authorization' => $settings['_api_key'],
+				'Authorization' => $api_key,
 			),
 			'body' => wp_json_encode($data),
 		));
@@ -710,5 +910,59 @@ function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $d
 
 	if (in_array('hey_okoskabet_shipping_home', $shipping_methods, true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', '');
+	}
+}
+
+/**
+ * Stamp the resolved merchant ID on the order at the moment it's created.
+ *
+ * Doing this at create-time (rather than at status-changed time) means
+ * the order is permanently bound to the merchant the customer routed to
+ * at checkout, even if a later admin action changes the cart contents
+ * of a saved order or a product's category mapping moves underneath us.
+ *
+ * Cart vs order fallback: at the regular checkout, WC()->cart holds the
+ * canonical list of products. But for orders created programmatically —
+ * REST API, admin "Add order", subscription renewals — the cart is
+ * empty (or belongs to a different session) at hook-fire time. We fall
+ * back to the order's own line items so the stamp is correct for every
+ * code path that creates an order.
+ */
+add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_stamp_merchant_on_order', 20, 2);
+
+function okoskabet_woocommerce_plugin_stamp_merchant_on_order($order, $data): void
+{
+	if (! class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
+		return;
+	}
+
+	$product_ids = array();
+	if (function_exists('WC') && WC()->cart) {
+		foreach (WC()->cart->get_cart() as $cart_item) {
+			$pid = (int) ($cart_item['product_id'] ?? 0);
+			if ($pid > 0) {
+				$product_ids[] = $pid;
+			}
+		}
+	}
+
+	if (empty($product_ids) && $order instanceof \WC_Order) {
+		foreach ($order->get_items() as $item) {
+			if ($item instanceof \WC_Order_Item_Product) {
+				$pid = (int) $item->get_product_id();
+				if ($pid > 0) {
+					$product_ids[] = $pid;
+				}
+			}
+		}
+	}
+
+	$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_products($product_ids);
+	$mid      = $resolved['merchant_id'] ?? '';
+	if ($mid !== '') {
+		$order->update_meta_data(
+			\okoskabet_woocommerce_plugin\Integrations\Merchant_Router::ORDER_META_KEY,
+			sanitize_key($mid)
+		);
 	}
 }

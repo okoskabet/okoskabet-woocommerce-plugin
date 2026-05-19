@@ -70,11 +70,13 @@ class Split_Checkout extends Base {
 		// Tag the order with split-token meta when it's the active step.
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'tag_order_with_split_meta' ), 10, 2 );
 
-		// AJAX endpoints to start and resume a split.
+		// AJAX endpoints to start, resume, and cancel a split.
 		add_action( 'wp_ajax_oko_start_split',        array( $this, 'ajax_start_split' ) );
 		add_action( 'wp_ajax_nopriv_oko_start_split', array( $this, 'ajax_start_split' ) );
 		add_action( 'wp_ajax_oko_resume_split',        array( $this, 'ajax_resume_split' ) );
 		add_action( 'wp_ajax_nopriv_oko_resume_split', array( $this, 'ajax_resume_split' ) );
+		add_action( 'wp_ajax_oko_cancel_split',        array( $this, 'ajax_cancel_split' ) );
+		add_action( 'wp_ajax_nopriv_oko_cancel_split', array( $this, 'ajax_cancel_split' ) );
 
 		// Show "next delivery" banner ABOVE the order details on thank-you
 		// page. We hook woocommerce_before_thankyou which fires before WC's
@@ -563,6 +565,12 @@ class Split_Checkout extends Base {
 		$current = (int) ( $state['current_step'] ?? 0 );
 		$total   = (int) ( $state['total_steps'] ?? 0 );
 		if ( $current < 1 || $total < 2 ) { return; }
+
+		$nonce        = wp_create_nonce( $this->nonce_action() );
+		$ajax_url     = admin_url( 'admin-ajax.php' );
+		$cancel_label = __( 'Cancel split delivery and start over', O_TEXTDOMAIN );
+		$confirm_msg  = __( "Cancel the split delivery and clear your cart? You'll be sent back to the shop and can start a fresh order.", O_TEXTDOMAIN );
+
 		echo '<div class="oko-split-active-banner" style="background:#eaf5ea;border:1px solid #b3d8b3;border-left:4px solid #4a8;padding:14px;margin:0 0 24px;border-radius:4px;">';
 		echo '<strong>'
 			. esc_html( sprintf(
@@ -573,7 +581,46 @@ class Split_Checkout extends Base {
 			) )
 			. '</strong><br>';
 		echo esc_html__( 'After you complete this order, we\'ll guide you to the next delivery.', O_TEXTDOMAIN );
+		echo '<div style="margin-top:10px;font-size:0.9em;">';
+		echo '<a href="#" class="oko-split-cancel" style="color:#a44;text-decoration:underline;">'
+			. esc_html( $cancel_label )
+			. '</a>';
 		echo '</div>';
+		echo '</div>';
+
+		// Inline JS — kept small and dependency-free so it works even when
+		// the rest of the checkout JS hasn't loaded yet.
+		?>
+		<script>
+			(function () {
+				var links = document.querySelectorAll('.oko-split-cancel');
+				if (!links.length) { return; }
+				links.forEach(function (link) {
+					link.addEventListener('click', function (ev) {
+						ev.preventDefault();
+						if (!window.confirm(<?php echo wp_json_encode( $confirm_msg ); ?>)) { return; }
+						var formData = new FormData();
+						formData.append('action', 'oko_cancel_split');
+						formData.append('_wpnonce', <?php echo wp_json_encode( $nonce ); ?>);
+						fetch(<?php echo wp_json_encode( $ajax_url ); ?>, {
+							method: 'POST',
+							credentials: 'same-origin',
+							body: formData
+						}).then(function (r) {
+							return r.json().catch(function () { return null; });
+						}).then(function (data) {
+							var target = (data && data.data && data.data.redirect) || <?php echo wp_json_encode( wc_get_page_permalink( 'shop' ) ); ?>;
+							window.location.href = target;
+						}).catch(function () {
+							// Even on error, send the customer somewhere safe so
+							// they're not trapped on a stale checkout screen.
+							window.location.href = <?php echo wp_json_encode( wc_get_page_permalink( 'shop' ) ); ?>;
+						});
+					});
+				});
+			})();
+		</script>
+		<?php
 	}
 
 	// ---------------------------------------------------------------------
@@ -764,6 +811,32 @@ class Split_Checkout extends Base {
 	// ---------------------------------------------------------------------
 	// AJAX: resume to next step (called from thank-you banner button click)
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Abandon an active split-checkout flow.
+	 *
+	 * Without this, a customer who decides mid-flow that they don't want to
+	 * continue with the planned multi-delivery order has no way out — the
+	 * session-stored state lingers until the WC session itself expires
+	 * (typically 48 hours), and any subsequent visit to checkout keeps
+	 * surfacing the "you're ordering delivery N of N" banner.
+	 *
+	 * We just drop the state and empty the cart so the next page load is
+	 * a clean slate. The customer is redirected to the shop page.
+	 */
+	public function ajax_cancel_split(): void {
+		// Bootstrap session BEFORE nonce check — see ajax_start_split().
+		$this->ensure_wc_session();
+		check_ajax_referer( $this->nonce_action(), '_wpnonce' );
+
+		$this->clear_state();
+
+		if ( function_exists( 'WC' ) && WC()->cart ) {
+			WC()->cart->empty_cart( true );
+		}
+
+		wp_send_json_success( array( 'redirect' => wc_get_page_permalink( 'shop' ) ) );
+	}
 
 	public function ajax_resume_split(): void {
 		// Bootstrap session BEFORE nonce check — see ajax_start_split().
