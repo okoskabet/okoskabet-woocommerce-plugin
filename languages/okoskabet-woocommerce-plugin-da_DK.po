@@ -407,3 +407,329 @@ msgstr "Næste: levering %d"
 
 msgid "You can also scroll down to see your order confirmation first."
 msgstr "Du kan også scrolle ned for at se din ordrebekræftelse først."
+
+# ----------------------------------------------------------------------
+# 1.4.0 — multi-merchant UX fixes
+# ----------------------------------------------------------------------
+
+# Split_Checkout cancel link
+msgid "Cancel split delivery and start over"
+msgstr "Annullér opdelt levering og start forfra"
+
+msgid "Cancel the split delivery and clear your cart? You'll be sent back to the shop and can start a fresh order."
+msgstr "Annullér den opdelte levering og tøm din kurv? Du sendes tilbage til shoppen og kan starte en ny ordre."
+
+# Merchant form — secret-field controls and hints
+msgid "Show/hide API key"
+msgstr "Vis/skjul API-nøgle"
+
+msgid "Show/hide webhook secret"
+msgstr "Vis/skjul webhook secret"
+
+msgid "Currently configured: %1$s… (%2$d characters)"
+msgstr "Konfigureret: %1$s… (%2$d tegn)"
+
+# Merchant form — webhook URL preview placeholder
+msgid "<your-identifier>"
+msgstr "<dit-id>"
+
+# Merchant form — webhook URL and secret help text (updated wording)
+msgid "Configure this URL in Økoskabet's webhook settings for this merchant first — Økoskabet then gives you the webhook secret to paste below. Each merchant has its own URL so signatures can be verified against the correct secret."
+msgstr "Konfigurer denne URL i Økoskabets webhook-indstillinger for denne merchant først — Økoskabet giver dig så webhook secret'en, du indsætter nedenfor. Hver merchant har sin egen URL så signaturer kan verificeres mod den korrekte secret."
+
+msgid "From Økoskabet's webhook configuration (generated when you register the webhook URL above). Used to verify incoming webhooks for this merchant only."
+msgstr "Fra Økoskabets webhook-konfiguration (genereres når du registrerer webhook URL'en ovenfor). Bruges til at verificere indkomne webhooks for kun denne merchant."
+
+# Merchant form — Standard display window help text
+msgid "How far into the future delivery dates are fetched from Økoskabet by default, in days. The plugin auto-extends this window (up to a hard cap of 365 days) when a product has a specific-date \"Delivery exception\" rule (only_on / from_until), so customers always see their applicable delivery date even if it falls outside the default window. For weekday-restriction rules (e.g. \"only Mondays\"), however, this default must be large enough to contain at least one matching weekday — otherwise the customer's dropdown will look empty. The default of 3 is fine for most setups; raise it to 7–14 if your products have weekday-restriction rules. Range 1–60."
+msgstr "Hvor langt ud i fremtiden leveringsdatoer hentes fra Økoskabet som udgangspunkt, i dage. Plugin'et udvider automatisk vinduet (op til en hard cap på 365 dage) når et produkt har en specifik-dato \"Leveringsundtagelse\"-regel (only_on / from_until), så kunder altid ser deres relevante leveringsdag selvom den ligger udenfor standardvinduet. For ugedags-begrænsninger (fx \"kun mandage\") skal denne værdi dog være stor nok til at indeholde mindst én matchende ugedag — ellers ser kundens dropdown tom ud. Standardværdien 3 dage er fin til de fleste setups; hæv den til 7–14 hvis dine produkter har ugedags-begrænsninger. Område 1–60."
+
+# Customer-facing fallback when no delivery dates are available
+msgid "No delivery dates available right now"
+msgstr "Ingen leveringsdage tilgængelige lige nu"
+
+msgid "We can't find a delivery date for the products in your cart at this time. Please contact the shop so we can help you complete the order — sometimes it's a temporary configuration issue we can resolve quickly."
+msgstr "Vi kan ikke finde en leveringsdag for produkterne i din kurv lige nu. Kontakt venligst shoppen så vi kan hjælpe dig med at gennemføre ordren — nogle gange er det en midlertidig konfigurations-fejl vi kan løse hurtigt."
+
+# ----------------------------------------------------------------------
+# 1.4.0 — full Danish translation pass on multi-merchant UI
+# ----------------------------------------------------------------------
+
+# Merchants admin — top-level section + notices
+msgid "Add another Økoskabet merchant"
+msgstr "Tilføj endnu en Økoskabet-merchant"
+
+msgid "Økoskabet merchants"
+msgstr "Økoskabet-merchants"
+
+msgid "Configure one or more Økoskabet merchant accounts and decide which one fulfils each cart. The plugin reads cart contents at checkout and routes the order to the matching merchant — including its API credentials, webhook secret, delivery options and shipment submission endpoint."
+msgstr "Konfigurér én eller flere Økoskabet-merchant-konti, og bestem hvilken der håndterer hver kurv. Plugin'et læser kurvens indhold ved checkout og ruter ordren til den matchende merchant — inkl. dens API-credentials, webhook secret, leveringsmuligheder og endpoint til afsendelse af forsendelse."
+
+msgid "Merchant configuration saved."
+msgstr "Merchant-konfiguration gemt."
+
+msgid "Merchant deleted."
+msgstr "Merchant slettet."
+
+msgid "Connection test succeeded."
+msgstr "Forbindelsestest lykkedes."
+
+msgid "Connection test failed: %s"
+msgstr "Forbindelsestest fejlede: %s"
+
+# Merchants admin — default merchant section
+msgid "Default merchant"
+msgstr "Standard-merchant"
+
+msgid "Used for any cart that isn't handled cleanly by another merchant. Additional merchants ONLY handle carts where every item matches that merchant's product categories, tags or per-product override. The moment a cart contains items from more than one merchant — for any reason — the cart routes to the default merchant. Mixed carts are never blocked and never split across merchants."
+msgstr "Bruges til enhver kurv der ikke håndteres rent af en anden merchant. Yderligere merchants håndterer KUN kurve hvor hver vare matcher den pågældende merchants produktkategorier, tags eller per-produkt-override. I det øjeblik en kurv indeholder varer fra mere end én merchant — uanset årsag — ruteres kurven til standard-merchanten. Blandede kurve blokeres aldrig og opdeles aldrig på tværs af merchants."
+
+msgid "Heads up: changing the default merchant also changes which merchant's webhook secret backs the legacy webhook URL (…/okoskabet/webhook without a merchant ID). Any pre-existing Økoskabet webhook still pointing at the legacy URL will start failing HMAC verification unless you also update Økoskabet's webhook secret to match the new default merchant — or, better, switch the webhook to the per-merchant URL listed for each merchant below."
+msgstr "OBS: at skifte standard-merchant ændrer også hvilken merchants webhook secret der bagved bruges på legacy webhook-URL'en (…/okoskabet/webhook uden merchant-ID). Enhver eksisterende Økoskabet-webhook der stadig peger på legacy-URL'en vil begynde at fejle HMAC-verificering, medmindre du også opdaterer Økoskabets webhook secret så den matcher den nye standard-merchant — eller endnu bedre: skift webhook'en til den per-merchant URL der står ud for hver merchant nedenfor."
+
+msgid "Save default merchant"
+msgstr "Gem standard-merchant"
+
+# Merchants admin — table headers and labels
+msgid "Configured merchants"
+msgstr "Konfigurerede merchants"
+
+msgid "No merchants configured yet."
+msgstr "Ingen merchants konfigureret endnu."
+
+msgid "Merchant"
+msgstr "Merchant"
+
+msgid "Environment"
+msgstr "Miljø"
+
+msgid "Routes products with"
+msgstr "Ruter produkter med"
+
+msgid "Actions"
+msgstr "Handlinger"
+
+msgid "Staging"
+msgstr "Staging"
+
+msgid "Production"
+msgstr "Produktion"
+
+msgid "Categories:"
+msgstr "Kategorier:"
+
+msgid "Tags:"
+msgstr "Tags:"
+
+msgid "No category or tag rules — only routed to via default or per-product override."
+msgstr "Ingen kategori- eller tag-regler — ruteres kun til via standard eller per-produkt override."
+
+msgid "Edit"
+msgstr "Rediger"
+
+msgid "Test connection"
+msgstr "Test forbindelse"
+
+msgid "Delete"
+msgstr "Slet"
+
+msgid "Delete this merchant? Existing orders will keep working but new carts routed here will fall back to the default merchant."
+msgstr "Slet denne merchant? Eksisterende ordrer fortsætter med at virke, men nye kurve der ville være ruteret hertil, falder tilbage til standard-merchanten."
+
+msgid "Add merchant"
+msgstr "Tilføj merchant"
+
+# Merchants admin — Add/Edit form
+msgid "Edit merchant"
+msgstr "Rediger merchant"
+
+msgid "Display name"
+msgstr "Visningsnavn"
+
+msgid "A human-readable name shown only inside this admin. Customers never see it directly."
+msgstr "Et menneskeligt læseligt navn der kun vises herinde i admin. Kunderne ser det aldrig direkte."
+
+msgid "Identifier (slug)"
+msgstr "Identifikator (slug)"
+
+msgid "Lowercase letters, digits, dashes and underscores. Appears in the webhook URL — choose carefully because changing it later breaks any webhook URL already configured at Økoskabet."
+msgstr "Små bogstaver, cifre, bindestreger og underscores. Optræder i webhook URL'en — vælg omhyggeligt, da en senere ændring bryder en allerede konfigureret webhook URL hos Økoskabet."
+
+msgid "API key"
+msgstr "API-nøgle"
+
+msgid "From Økoskabet's backoffice. Used for all API calls (sheds, dates, shipment creation)."
+msgstr "Fra Økoskabets backoffice. Bruges til alle API-kald (skabe, datoer, oprettelse af forsendelser)."
+
+msgid "Webhook secret"
+msgstr "Webhook secret"
+
+msgid "Use staging API"
+msgstr "Brug staging API"
+
+msgid "Shed shipping description"
+msgstr "Beskrivelse: Levering til Økoskab"
+
+msgid "Home-delivery shipping description"
+msgstr "Beskrivelse: Hjemmelevering"
+
+msgid "Payment gateway"
+msgstr "Betalingsgateway"
+
+msgid "Route products in these categories"
+msgstr "Ruter produkter i disse kategorier"
+
+msgid "Any product in any of these categories is routed to this merchant (unless a more specific per-product override is set)."
+msgstr "Ethvert produkt i en af disse kategorier ruteres til denne merchant (medmindre en mere specifik per-produkt override er sat)."
+
+msgid "Route products with these tags"
+msgstr "Ruter produkter med disse tags"
+
+msgid "Priority"
+msgstr "Prioritet"
+
+msgid "When a product matches multiple merchants (e.g. via both category and tag), the HIGHEST priority wins. Default 10. Use 50+ for \"express\" merchants that should always take precedence."
+msgstr "Når et produkt matcher flere merchants (fx via både kategori og tag), vinder den HØJESTE prioritet. Standard er 10. Brug 50+ til \"express\"-merchants der altid skal have forrang."
+
+msgid "Save merchant"
+msgstr "Gem merchant"
+
+msgid "Cancel"
+msgstr "Annullér"
+
+# Merchants admin — error/notice strings
+msgid "Invalid merchant ID."
+msgstr "Ugyldigt merchant-ID."
+
+msgid "Unknown merchant"
+msgstr "Ukendt merchant"
+
+msgid "API key not configured"
+msgstr "API-nøgle ikke konfigureret"
+
+# Settings page — sections that are visible alongside the merchant UI
+msgid "Master switches that apply across all merchants."
+msgstr "Master-switches der gælder på tværs af alle merchants."
+
+msgid "Webhook and payment settings."
+msgstr "Webhook- og betalingsindstillinger."
+
+msgid "Enable or disable webhook functionality (applies to ALL merchants)."
+msgstr "Slå webhook-funktionalitet til eller fra (gælder ALLE merchants)."
+
+msgid "Enable or disable webhook functionality."
+msgstr "Slå webhook-funktionalitet til eller fra."
+
+msgid "Legacy Webhook URL"
+msgstr "Legacy webhook URL"
+
+msgid "Legacy URL — still works and routes to the default merchant. Each merchant has its own dedicated webhook URL listed under \"Økoskabet merchants\" below, which we recommend you configure at Økoskabet instead."
+msgstr "Legacy URL — virker stadig og ruteres til standard-merchanten. Hver merchant har sin egen dedikerede webhook URL angivet under \"Økoskabet-merchants\" nedenfor, som vi anbefaler du i stedet konfigurerer hos Økoskabet."
+
+msgid "Choose which events from Økoskabet should capture the payment."
+msgstr "Vælg hvilke events fra Økoskabet der skal udløse capture af betalingen."
+
+msgid "Choose which events from Økoskabet should mark the order as completed."
+msgstr "Vælg hvilke events fra Økoskabet der skal markere ordren som fuldført."
+
+# Product edit — Økoskabet routing metabox
+msgid "Økoskabet routing"
+msgstr "Økoskabet-routing"
+
+msgid "Use Økoskabet merchant"
+msgstr "Brug Økoskabet-merchant"
+
+msgid "Auto (use category/tag rules)"
+msgstr "Auto (brug kategori-/tag-regler)"
+
+msgid "Currently routed to %1$s %2$s."
+msgstr "Ruteres pt. til %1$s %2$s."
+
+msgid "because of this product's override"
+msgstr "pga. dette produkts override"
+
+msgid "because of this product's category/tag"
+msgstr "pga. dette produkts kategori/tag"
+
+msgid "as the fallback default merchant"
+msgstr "som fallback til standard-merchanten"
+
+# Webhook reference docs (moved out of CMB form, below Save button)
+msgid "Webhook reference & response codes"
+msgstr "Webhook-reference & svar-koder"
+
+msgid "How to configure webhooks at Økoskabet"
+msgstr "Sådan konfigurerer du webhooks hos Økoskabet"
+
+msgid "Log in to Økoskabet's dashboard."
+msgstr "Log ind på Økoskabets dashboard."
+
+msgid "Navigate to webhook settings."
+msgstr "Gå til webhook-indstillingerne."
+
+msgid "For EACH merchant configured here, register a separate webhook in Økoskabet with its merchant-specific URL (shown next to each merchant in the table above) and the matching webhook secret you saved on the merchant record. Each merchant has its own signing secret — never share a secret across merchants."
+msgstr "For HVER merchant konfigureret her, registrér en separat webhook hos Økoskabet med dens merchant-specifikke URL (vist ved hver merchant i tabellen ovenfor) og det matchende webhook secret du har gemt på merchanten. Hver merchant har sin egen signing secret — del aldrig en secret på tværs af merchants."
+
+msgid "Register a webhook in Økoskabet pointing at <code>%s</code> with Method <code>POST</code>, Content-Type <code>application/json</code>, and the signing secret you set in the Webhook Secret field above."
+msgstr "Registrér en webhook hos Økoskabet der peger på <code>%s</code> med Method <code>POST</code>, Content-Type <code>application/json</code> og det signing secret du har sat i Webhook Secret-feltet ovenfor."
+
+msgid "Select the events you want Økoskabet to send — typically:"
+msgstr "Vælg de events du vil have Økoskabet til at sende — typisk:"
+
+msgid "Only events you have ticked under \"Capture events\" or \"Completion events\" trigger any action — the rest are accepted and ignored."
+msgstr "Kun events du har markeret under \"Capture-events\" eller \"Completion-events\" udløser en handling — resten accepteres og ignoreres."
+
+msgid "Expected payload format"
+msgstr "Forventet payload-format"
+
+msgid "The plugin maps Økoskabet's \"reservation_updated\" event into the internal events shown in the settings above (in_shed, order_delivered) by inspecting the \"changes\" payload."
+msgstr "Plugin'et oversætter Økoskabets \"reservation_updated\"-event til de interne events vist i indstillingerne ovenfor (in_shed, order_delivered) ved at inspicere \"changes\"-payloaden."
+
+msgid "Authentication"
+msgstr "Autentificering"
+
+msgid "Each webhook is verified by an HMAC-SHA256 signature of the raw request body, using the merchant's webhook secret. Økoskabet computes the signature on its side and sends it as the lowercase hex value of this header:"
+msgstr "Hver webhook verificeres med en HMAC-SHA256 signatur over selve request-body'en, ved brug af merchantens webhook secret. Økoskabet beregner signaturen på deres side og sender den som lowercase hex-værdi i denne header:"
+
+msgid "If the header is missing, malformed, or does not match, the request is rejected with HTTP 401. The <strong>API key</strong> field is NOT used to authenticate webhooks — it's only used for outbound API calls to Økoskabet."
+msgstr "Hvis headeren mangler, er ugyldig eller ikke matcher, afvises requesten med HTTP 401. <strong>API-nøgle</strong>-feltet bruges IKKE til at autentificere webhooks — den bruges kun til udgående API-kald til Økoskabet."
+
+msgid "Test a webhook locally with curl"
+msgstr "Test en webhook lokalt med curl"
+
+msgid "Response codes"
+msgstr "Svar-koder"
+
+msgid "webhook processed."
+msgstr "webhook behandlet."
+
+msgid "invalid or missing HMAC signature."
+msgstr "ugyldig eller manglende HMAC-signatur."
+
+msgid "webhook functionality is disabled in plugin settings, OR the order belongs to a different merchant than the one in the webhook URL."
+msgstr "webhook-funktionalitet er slået fra i plugin-indstillingerne, ELLER ordren tilhører en anden merchant end den i webhook-URL'en."
+
+msgid "the merchant ID in the URL is unknown, OR the order referenced by shipment_reference does not exist."
+msgstr "merchant-ID'et i URL'en er ukendt, ELLER ordren der refereres af shipment_reference findes ikke."
+
+msgid "the merchant has no webhook secret configured. Edit the merchant and paste a value."
+msgstr "merchanten har ingen webhook secret konfigureret. Rediger merchanten og indsæt en værdi."
+
+msgid "WooCommerce is not loaded."
+msgstr "WooCommerce er ikke indlæst."
+
+msgid "Success response example"
+msgstr "Eksempel på success-response"
+
+# Pre-flight check messages (main plugin file)
+msgid "requires PHP %1$s or newer. You are running PHP %2$s. Ask your hosting provider to upgrade PHP, then re-activate the plugin."
+msgstr "kræver PHP %1$s eller nyere. Du kører PHP %2$s. Bed dit webhotel om at opgradere PHP, og aktivér derefter plugin'et igen."
+
+msgid "requires WordPress %1$s or newer. You are running WordPress %2$s. Update WordPress, then re-activate the plugin."
+msgstr "kræver WordPress %1$s eller nyere. Du kører WordPress %2$s. Opdater WordPress, og aktivér derefter plugin'et igen."
+
+msgid "requires the <a href=\"https://wordpress.org/plugins/woocommerce/\">WooCommerce</a> plugin to be installed and active. Install WooCommerce, then re-activate Økoskabet."
+msgstr "kræver at <a href=\"https://wordpress.org/plugins/woocommerce/\">WooCommerce</a>-plugin'et er installeret og aktivt. Installér WooCommerce, og aktivér derefter Økoskabet igen."
+
+msgid "requires WooCommerce %1$s or newer. You are running WooCommerce %2$s. Update WooCommerce, then re-activate Økoskabet."
+msgstr "kræver WooCommerce %1$s eller nyere. Du kører WooCommerce %2$s. Opdater WooCommerce, og aktivér derefter Økoskabet igen."

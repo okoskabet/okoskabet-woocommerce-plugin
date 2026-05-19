@@ -572,12 +572,16 @@ class Merchants extends Base {
 			<?php $this->render_global_settings( $config ); ?>
 
 			<?php
+			// Always render the merchants table as context so admins can
+			// see their existing merchants while creating/editing — the
+			// "where did my first merchant go?" surprise is otherwise
+			// genuinely disorienting in the create/edit flow.
+			$this->render_merchant_list( $config );
+
 			if ( $creating ) {
 				$this->render_merchant_form( null, $categories, $tags );
 			} elseif ( $editing_id !== '' && isset( $merchants[ $editing_id ] ) ) {
 				$this->render_merchant_form( $merchants[ $editing_id ], $categories, $tags );
-			} else {
-				$this->render_merchant_list( $config );
 			}
 			?>
 		</div>
@@ -595,6 +599,11 @@ class Merchants extends Base {
 			.oko-section-divider { margin:24px 0; border:0; border-top:1px dashed #c3c4c7; }
 			.oko-merchant-form .oko-multi { width:100%; max-width:520px; min-height:80px; }
 			.oko-webhook-url { font-family:monospace; background:#f6f7f7; padding:6px 10px; border-radius:3px; display:inline-block; }
+			.oko-secret-field { display:inline-flex; align-items:stretch; gap:6px; max-width:520px; width:100%; }
+			.oko-secret-field input { flex:1; min-width:0; }
+			.oko-secret-field .oko-toggle-secret { display:inline-flex; align-items:center; justify-content:center; padding:0 10px; }
+			.oko-secret-field .oko-toggle-secret .dashicons { font-size:18px; width:18px; height:18px; line-height:1; }
+			.oko-secret-hint { font-family:monospace; color:#555 !important; }
 		</style>
 		<?php
 	}
@@ -637,7 +646,11 @@ class Merchants extends Base {
 		$merchants    = $config['merchants'];
 		$default_id   = $config['default_merchant_id'];
 		$new_url      = add_query_arg(
-			array( 'page' => O_TEXTDOMAIN, 'oko_merchant_new' => '1' ),
+			array(
+				'page'                     => O_TEXTDOMAIN,
+				self::QUERY_SHOW_MERCHANTS => '1',
+				'oko_merchant_new'         => '1',
+			),
 			admin_url( 'admin.php' )
 		) . '#okoskabet-merchants';
 		$webhook_base = home_url( '/wp-json/wp/v2/okoskabet/webhook/' );
@@ -662,7 +675,11 @@ class Merchants extends Base {
 					<?php foreach ( $merchants as $m ) :
 						$is_default = $m['id'] === $default_id;
 						$edit_url   = add_query_arg(
-							array( 'page' => O_TEXTDOMAIN, 'oko_merchant_edit' => $m['id'] ),
+							array(
+								'page'                     => O_TEXTDOMAIN,
+								self::QUERY_SHOW_MERCHANTS => '1',
+								'oko_merchant_edit'        => $m['id'],
+							),
 							admin_url( 'admin.php' )
 						) . '#okoskabet-merchants';
 						$webhook_url   = $webhook_base . rawurlencode( $m['id'] );
@@ -740,10 +757,24 @@ class Merchants extends Base {
 	private function render_merchant_form( ?array $merchant, array $categories, array $tags ): void {
 		$is_new       = ( $merchant === null );
 		$merchant     = $merchant ?? self::default_merchant();
-		$back_url     = add_query_arg( array( 'page' => O_TEXTDOMAIN ), admin_url( 'admin.php' ) ) . '#okoskabet-merchants';
-		$webhook_url  = $is_new
-			? '—'
-			: home_url( '/wp-json/wp/v2/okoskabet/webhook/' . rawurlencode( $merchant['id'] ) );
+		$back_url     = add_query_arg(
+			array(
+				'page'                     => O_TEXTDOMAIN,
+				self::QUERY_SHOW_MERCHANTS => '1',
+			),
+			admin_url( 'admin.php' )
+		) . '#okoskabet-merchants';
+		// Render the webhook URL preview from the merchant's current slug,
+		// or fall back to a placeholder when the slug is still empty (i.e.
+		// a brand-new "Add merchant" form). A small inline JS below the
+		// form keeps this in sync with whatever the admin types in the
+		// Identifier field so they can copy the URL into Økoskabet's
+		// webhook settings without having to save the merchant first.
+		$webhook_base_url       = home_url( '/wp-json/wp/v2/okoskabet/webhook/' );
+		$webhook_url_placeholder = __( '<your-identifier>', O_TEXTDOMAIN );
+		$webhook_url            = $merchant['id'] !== ''
+			? $webhook_base_url . rawurlencode( $merchant['id'] )
+			: $webhook_base_url . $webhook_url_placeholder;
 
 		?>
 		<div class="oko-merchant-form">
@@ -776,15 +807,56 @@ class Merchants extends Base {
 					<tr>
 						<th scope="row"><label for="merchant-api-key"><?php esc_html_e( 'API key', O_TEXTDOMAIN ); ?></label></th>
 						<td>
-							<input type="password" id="merchant-api-key" name="merchant[api_key]" value="<?php echo esc_attr( $merchant['api_key'] ); ?>" autocomplete="off" />
+							<span class="oko-secret-field">
+								<input type="password" id="merchant-api-key" name="merchant[api_key]" value="<?php echo esc_attr( $merchant['api_key'] ); ?>" autocomplete="off" />
+								<button type="button" class="button oko-toggle-secret" data-target="merchant-api-key" aria-label="<?php esc_attr_e( 'Show/hide API key', O_TEXTDOMAIN ); ?>" aria-pressed="false">
+									<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+								</button>
+							</span>
+							<?php if ( $merchant['api_key'] !== '' ) : ?>
+								<p class="oko-help oko-secret-hint">
+									<?php
+									echo esc_html( sprintf(
+										/* translators: 1 = first three characters of the stored key, 2 = total character length */
+										__( 'Currently configured: %1$s… (%2$d characters)', O_TEXTDOMAIN ),
+										substr( $merchant['api_key'], 0, 3 ),
+										strlen( $merchant['api_key'] )
+									) );
+									?>
+								</p>
+							<?php endif; ?>
 							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s backoffice. Used for all API calls (sheds, dates, shipment creation).', O_TEXTDOMAIN ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Webhook URL', O_TEXTDOMAIN ); ?></th>
+						<td>
+							<span class="oko-webhook-url" id="oko-webhook-url-preview"><?php echo esc_html( $webhook_url ); ?></span>
+							<p class="oko-help"><?php esc_html_e( 'Configure this URL in Økoskabet\'s webhook settings for this merchant first — Økoskabet then gives you the webhook secret to paste below. Each merchant has its own URL so signatures can be verified against the correct secret.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>
 						<th scope="row"><label for="merchant-webhook-secret"><?php esc_html_e( 'Webhook secret', O_TEXTDOMAIN ); ?></label></th>
 						<td>
-							<input type="password" id="merchant-webhook-secret" name="merchant[webhook_secret]" value="<?php echo esc_attr( $merchant['webhook_secret'] ); ?>" autocomplete="off" />
-							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s webhook configuration. Used to verify incoming webhooks for this merchant only.', O_TEXTDOMAIN ); ?></p>
+							<span class="oko-secret-field">
+								<input type="password" id="merchant-webhook-secret" name="merchant[webhook_secret]" value="<?php echo esc_attr( $merchant['webhook_secret'] ); ?>" autocomplete="off" />
+								<button type="button" class="button oko-toggle-secret" data-target="merchant-webhook-secret" aria-label="<?php esc_attr_e( 'Show/hide webhook secret', O_TEXTDOMAIN ); ?>" aria-pressed="false">
+									<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+								</button>
+							</span>
+							<?php if ( $merchant['webhook_secret'] !== '' ) : ?>
+								<p class="oko-help oko-secret-hint">
+									<?php
+									echo esc_html( sprintf(
+										/* translators: 1 = first three characters of the stored secret, 2 = total character length */
+										__( 'Currently configured: %1$s… (%2$d characters)', O_TEXTDOMAIN ),
+										substr( $merchant['webhook_secret'], 0, 3 ),
+										strlen( $merchant['webhook_secret'] )
+									) );
+									?>
+								</p>
+							<?php endif; ?>
+							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s webhook configuration (generated when you register the webhook URL above). Used to verify incoming webhooks for this merchant only.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -794,16 +866,10 @@ class Merchants extends Base {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Webhook URL', O_TEXTDOMAIN ); ?></th>
-						<td>
-							<span class="oko-webhook-url"><?php echo esc_html( $webhook_url ); ?></span>
-							<p class="oko-help"><?php esc_html_e( 'Configure this URL in Økoskabet\'s webhook settings for this merchant. Each merchant has its own URL so signatures can be verified against the correct secret.', O_TEXTDOMAIN ); ?></p>
-						</td>
-					</tr>
-					<tr>
 						<th scope="row"><label for="merchant-max-days"><?php esc_html_e( 'Standard display window (days)', O_TEXTDOMAIN ); ?></label></th>
 						<td>
 							<input type="number" id="merchant-max-days" name="merchant[maximum_days_in_future]" value="<?php echo esc_attr( $merchant['maximum_days_in_future'] ); ?>" min="1" max="60" />
+							<p class="oko-help"><?php esc_html_e( 'How far into the future delivery dates are fetched from Økoskabet by default, in days. The plugin auto-extends this window (up to a hard cap of 365 days) when a product has a specific-date "Delivery exception" rule (only_on / from_until), so customers always see their applicable delivery date even if it falls outside the default window. For weekday-restriction rules (e.g. "only Mondays"), however, this default must be large enough to contain at least one matching weekday — otherwise the customer\'s dropdown will look empty. The default of 3 is fine for most setups; raise it to 7–14 if your products have weekday-restriction rules. Range 1–60.', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -909,6 +975,51 @@ class Merchants extends Base {
 				</p>
 			</form>
 		</div>
+		<script>
+			(function() {
+				var idField = document.getElementById('merchant-id');
+				var preview = document.getElementById('oko-webhook-url-preview');
+				if (idField && preview) {
+					var baseUrl = <?php echo wp_json_encode( $webhook_base_url ); ?>;
+					var placeholder = <?php echo wp_json_encode( $webhook_url_placeholder ); ?>;
+					var update = function() {
+						// Mirror the sanitize_key() PHP rules so the preview
+						// matches what will actually be stored.
+						var slug = idField.value.toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+						preview.textContent = baseUrl + (slug || placeholder);
+					};
+					idField.addEventListener('input', update);
+					update();
+				}
+
+				// Eye toggle on secret fields (API key, webhook secret) —
+				// flips the input type between "password" and "text" so the
+				// admin can verify they've pasted the correct value without
+				// having to peek into the DB.
+				document.querySelectorAll('.oko-toggle-secret').forEach(function (btn) {
+					btn.addEventListener('click', function () {
+						var target = document.getElementById(btn.dataset.target);
+						if (!target) { return; }
+						var icon = btn.querySelector('.dashicons');
+						if (target.type === 'password') {
+							target.type = 'text';
+							btn.setAttribute('aria-pressed', 'true');
+							if (icon) {
+								icon.classList.remove('dashicons-visibility');
+								icon.classList.add('dashicons-hidden');
+							}
+						} else {
+							target.type = 'password';
+							btn.setAttribute('aria-pressed', 'false');
+							if (icon) {
+								icon.classList.remove('dashicons-hidden');
+								icon.classList.add('dashicons-visibility');
+							}
+						}
+					});
+				});
+			})();
+		</script>
 		<?php
 	}
 
@@ -1140,8 +1251,20 @@ class Merchants extends Base {
 	}
 
 	private function redirect_back( array $extra ): void {
+		// Always preserve the multi-merchant UI flag so save/delete/test
+		// handlers land the admin back on the merchants table rather than
+		// silently falling out to the single-merchant simple form. (Doing
+		// this unconditionally is safe: when count > 1 the flag is a no-op,
+		// and these handlers are only ever reached from forms inside the
+		// multi-merchant UI anyway.)
 		$url = add_query_arg(
-			array_merge( array( 'page' => O_TEXTDOMAIN ), $extra ),
+			array_merge(
+				array(
+					'page'                     => O_TEXTDOMAIN,
+					self::QUERY_SHOW_MERCHANTS => '1',
+				),
+				$extra
+			),
 			admin_url( 'admin.php' )
 		) . '#okoskabet-merchants';
 		wp_safe_redirect( $url );
