@@ -2,6 +2,37 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.4.2 - 2026-05-20
+
+= Show the fulfilling merchant on the admin order page =
+
+The "Økoskabet" panel on the WooCommerce admin order screen now shows
+which merchant fulfilled the order, right next to the existing shed
+ID / delivery date / delivery location lines:
+
+> Økoskabet merchant: Express Copenhagen (express-cph)
+
+The label is the human-readable merchant name and the parenthesised
+slug is the stored merchant ID — the same value used in
+`_okoskabet_merchant_id` order-meta, per-merchant webhook URLs and
+the merchants table. Showing both at once makes it possible to triage
+webhook failures against Økoskabet's dashboard without bouncing
+through Tools → Order meta.
+
+The merchant is resolved via `Merchant_Router::resolve_for_order()`,
+which prefers the stamp written at `woocommerce_checkout_create_order`
+time over a fresh re-resolution from line items — matching the source
+of truth used by webhook routing. Pre-1.4.0 orders without a stamp
+fall back to line-item resolution and display whatever merchant they'd
+route to today.
+
+### Files modified
+
+- `functions/functions.php` —
+  `my_custom_checkout_field_display_admin_order_meta` queries the
+  router and prints the resolved merchant before the existing
+  Økoskabet meta lines.
+
 ## 1.4.1 - 2026-05-20
 
 = Per-merchant shipping-zone restriction =

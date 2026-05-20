@@ -679,7 +679,34 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 	$delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 	$delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
 	$delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+
+	// Resolve the merchant that fulfilled the order. `resolve_for_order`
+	// prefers the stored stamp written at checkout, and only falls back
+	// to line-item resolution if the stamp is missing — which lines up
+	// with the source of truth used by webhook routing and the
+	// admin's mental model of "which Økoskabet account got this order".
+	$merchant_id    = '';
+	$merchant_label = '';
+	if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')
+		&& $order instanceof \WC_Order) {
+		$resolved       = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_order($order);
+		$merchant_id    = (string) ($resolved['merchant_id'] ?? '');
+		$merchant_label = (string) ($resolved['merchant']['label'] ?? '');
+	}
+
 	echo '<pre>';
+	if ($merchant_id !== '') {
+		// Show the label (what humans recognise) plus the slug in code
+		// formatting (what webhook URLs and order meta carry). Useful
+		// when triaging webhook failures against Økoskabet's dashboard.
+		$line = esc_html__('Økoskabet merchant', O_TEXTDOMAIN) . ': ';
+		if ($merchant_label !== '' && $merchant_label !== $merchant_id) {
+			$line .= esc_html($merchant_label) . ' (' . esc_html($merchant_id) . ')';
+		} else {
+			$line .= esc_html($merchant_id);
+		}
+		echo $line . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+	}
 	if (!empty($order_done)) {
 		echo 'Økoskabet Done' . ': ' . esc_html($order_done) . "\n";
 	}
