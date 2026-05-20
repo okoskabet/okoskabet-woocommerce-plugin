@@ -119,4 +119,75 @@ class MerchantRouterTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertSame( '', Merchant_Router::sanitize_id( '' ) );
 		$this->assertSame( 'good-id_2', Merchant_Router::sanitize_id( 'Good-ID_2' ) );
 	}
+
+	/**
+	 * @test
+	 */
+	public function empty_shipping_zones_list_means_no_zone_restriction() {
+		$this->assertTrue( Merchant_Router::merchant_matches_zone( array( 'shipping_zones' => array() ), 7 ) );
+		$this->assertTrue( Merchant_Router::merchant_matches_zone( array(), 0 ) );
+	}
+
+	/**
+	 * @test
+	 */
+	public function non_empty_shipping_zones_list_only_matches_listed_zones() {
+		$merchant = array( 'shipping_zones' => array( 2, 5 ) );
+		$this->assertTrue( Merchant_Router::merchant_matches_zone( $merchant, 2 ) );
+		$this->assertTrue( Merchant_Router::merchant_matches_zone( $merchant, 5 ) );
+		$this->assertFalse( Merchant_Router::merchant_matches_zone( $merchant, 1 ) );
+		$this->assertFalse( Merchant_Router::merchant_matches_zone( $merchant, 0 ) );
+	}
+
+	/**
+	 * @test
+	 */
+	public function zone_filter_falls_back_to_default_when_resolved_merchant_does_not_cover_zone() {
+		// Restrict the secondary merchant to zone 99 only.
+		Merchants::save_config( array(
+			'version'             => 1,
+			'default_merchant_id' => 'default',
+			'merchants'           => array(
+				'default' => array( 'id' => 'default', 'label' => 'Default' ),
+				'second'  => array(
+					'id'             => 'second',
+					'label'          => 'Second',
+					'shipping_zones' => array( 99 ),
+				),
+			),
+		) );
+
+		// Cart with only a 'second'-routed product, shipping to zone 1 → falls back.
+		$resolved = Merchant_Router::resolve_for_products( array( $this->product_a ), 1 );
+		$this->assertSame( 'default', $resolved['merchant_id'] );
+		$this->assertArrayHasKey( $this->product_a, $resolved['zone_filtered_out'] );
+
+		// Same cart shipping to zone 99 → secondary handles it.
+		$resolved = Merchant_Router::resolve_for_products( array( $this->product_a ), 99 );
+		$this->assertSame( 'second', $resolved['merchant_id'] );
+		$this->assertSame( array(), $resolved['zone_filtered_out'] );
+	}
+
+	/**
+	 * @test
+	 */
+	public function null_zone_disables_filtering_and_keeps_pre_zone_behaviour() {
+		Merchants::save_config( array(
+			'version'             => 1,
+			'default_merchant_id' => 'default',
+			'merchants'           => array(
+				'default' => array( 'id' => 'default', 'label' => 'Default' ),
+				'second'  => array(
+					'id'             => 'second',
+					'label'          => 'Second',
+					'shipping_zones' => array( 99 ),
+				),
+			),
+		) );
+
+		// No zone passed → restriction ignored → secondary still wins.
+		$resolved = Merchant_Router::resolve_for_products( array( $this->product_a ) );
+		$this->assertSame( 'second', $resolved['merchant_id'] );
+		$this->assertSame( array(), $resolved['zone_filtered_out'] );
+	}
 }

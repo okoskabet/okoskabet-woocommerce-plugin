@@ -81,6 +81,20 @@ class MerchantsTest extends \Codeception\TestCase\WPTestCase {
 	/**
 	 * @test
 	 */
+	public function it_normalises_shipping_zones_keeping_zero_and_dropping_negatives() {
+		$normalised = Merchants::normalise_merchant( 'm', array(
+			'id'             => 'm',
+			'shipping_zones' => array( '3', 0, 5, -1, 'x', '5', null ),
+		) );
+
+		// 0 is a legitimate WC zone (Rest of the World) and must be kept.
+		// Negative, non-numeric and duplicate values are dropped.
+		$this->assertSame( array( 3, 0, 5 ), $normalised['shipping_zones'] );
+	}
+
+	/**
+	 * @test
+	 */
 	public function it_falls_back_to_the_first_merchant_when_stored_default_id_is_stale() {
 		update_option( Merchants::OPTION_KEY, array(
 			'version'             => 1,

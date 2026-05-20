@@ -2,6 +2,87 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.4.1 - 2026-05-20
+
+= Per-merchant shipping-zone restriction =
+
+Each merchant can now declare a list of WooCommerce shipping zones it
+operates in (e.g. an "Express" merchant that only covers Copenhagen).
+Carts shipping outside a merchant's declared zones fall back to the
+default merchant — combined with the existing mixed-cart rule this
+means a customer outside the Express zone gets the same standard
+delivery they would have had pre-1.4.0.
+
+### How it works
+
+1. **Per-merchant configuration.** The merchant edit form (in the
+   multi-merchant UI) has a new "Restrict to shipping zones" multi-
+   select listing every WooCommerce shipping zone, including the
+   special "Rest of the World" pseudo-zone (id 0). Empty selection =
+   unrestricted (the pre-1.4.1 behaviour). The default merchant's
+   field is disabled — by design, it's the cart-wide catch-all and
+   must handle every zone.
+2. **Zone-aware routing.** `Merchant_Router::resolve_for_products()`
+   takes a new optional `?int $shipping_zone_id` argument. Products
+   whose natural merchant has a non-empty `shipping_zones` list that
+   doesn't include this zone get downgraded to routing to the default
+   merchant. Passing `null` skips zone filtering entirely, preserving
+   the pre-1.4.1 behaviour for callers without a destination (which is
+   what `resolve_for_products` does when called with no second argument).
+3. **Live zip-code updates at checkout.** WC's checkout JS fires
+   `update_order_review` AJAX on every zip-code change, which updates
+   the WC customer session and then fires the `updated_checkout`
+   jQuery event. The plugin's Svelte component re-hits `/sheds` and
+   `/home_delivery` from that event with the freshly-typed zip as a
+   query parameter, and the REST endpoint computes the matching zone
+   from the explicit zip plus the session's country/state — so a zip-
+   code change immediately re-routes the cart to the correct merchant
+   for the new destination.
+4. **Order stamping uses the order's own destination.**
+   `okoskabet_woocommerce_plugin_stamp_merchant_on_order` derives the
+   zone from `$order->get_shipping_*()` rather than `WC()->customer`,
+   so programmatic order creation (REST API, admin "Add order",
+   subscription renewals) still stamps the correct merchant when zone
+   restrictions are in play.
+
+### Files modified
+
+- `integrations/Merchants.php` — `shipping_zones` field on every
+  merchant record, sanitised by `sanitize_zone_list` (keeps 0,
+  drops negatives and non-numerics). New `available_shipping_zones()`
+  helper returns `[id => name]` for the admin UI. The default
+  merchant's `shipping_zones` is force-cleared on save as a belt-
+  and-braces against the disabled field being bypassed.
+- `integrations/Merchant_Router.php` — `shipping_zone_id_for_destination`
+  (public, takes country/state/postcode triple),
+  `current_shipping_zone_id` (reads `WC()->customer`),
+  `shipping_zone_id_for_order` (reads `$order`),
+  `merchant_matches_zone` (public; empty list = always matches).
+  `resolve_for_products` takes an optional zone, threads it through
+  the per-product loop, and reports a new `zone_filtered_out` map for
+  the frontend.
+- `rest/OkoRest.php` — `resolve_request_zone()` helper builds the
+  destination from the live `zip` query param + `WC()->customer`
+  country/state. `resolve_request_merchant()` passes the zone through
+  to `Merchant_Router::resolve_for_products()`. `cart_resolution`
+  accepts an optional `zip` parameter and returns the resolved zone
+  plus `zone_filtered_out` so the frontend can explain what happened.
+- `functions/functions.php` — order stamping derives zone via
+  `Merchant_Router::shipping_zone_id_for_order($order)`.
+
+### Tests added
+
+- `tests/wpunit/integrations/MerchantsTest.php` — `shipping_zones`
+  normalisation (keeps 0 as a legitimate WC zone, drops negatives /
+  non-numerics, dedupes).
+- `tests/wpunit/integrations/MerchantRouterTest.php` —
+  `merchant_matches_zone` for empty / matching / non-matching zones,
+  the full `resolve_for_products` zone-filter fallback path (cart
+  with only a zone-restricted merchant's product, shipping outside
+  its zones → falls back to default and records the downgrade in
+  `zone_filtered_out`), and that passing `null` for the zone disables
+  filtering entirely.
+
 ## 1.4.0 - 2026-05-15
 
 = Multi-merchant support =
@@ -40,6 +121,9 @@ order from cart contents — end to end.
    merchant only handles orders where the customer is shopping wholly
    within that merchant's product range. Everything else is delivered
    by the default merchant, exactly as before.
+
+   (1.4.1 adds an additional shipping-zone filter on top of these
+   rules — see the 1.4.1 entry above.)
 
 3. **End-to-end binding.** Once a cart resolves to a merchant, every
    downstream call uses that merchant's credentials and configuration:

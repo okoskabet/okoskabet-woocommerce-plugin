@@ -112,7 +112,9 @@ class OkoRest extends Base
 
 		// Read-only summary used by the checkout JS to show "your cart
 		// is being routed to merchant X" and reveal conflicts before
-		// the customer submits.
+		// the customer submits. Accepts an optional `zip` so the
+		// frontend can preview which merchant a cart will route to
+		// after a zip-code change, before WC's session has caught up.
 		\register_rest_route(
 			'wp/v2',
 			'okoskabet/cart_resolution',
@@ -122,6 +124,7 @@ class OkoRest extends Base
 				'callback'            => array($this, 'get_cart_resolution'),
 				'args'                => array(
 					'product_ids' => array('required' => false),
+					'zip'         => array('required' => false),
 				),
 			)
 		);
@@ -172,7 +175,8 @@ class OkoRest extends Base
 	 * Precedence:
 	 *   1. Explicit `merchant_id` parameter — useful for admin tools, but
 	 *      always validated against the merchant registry.
-	 *   2. Routing from `product_ids` (cart contents).
+	 *   2. Routing from `product_ids` (cart contents), zone-filtered by
+	 *      the customer's live shipping destination.
 	 *   3. Default merchant.
 	 *
 	 * @return array|null Merchant record, or null if nothing is configured.
@@ -188,13 +192,54 @@ class OkoRest extends Base
 
 		$product_ids = self::parse_product_ids($request->get_param('product_ids'));
 		if (! empty($product_ids)) {
-			$resolved = Merchant_Router::resolve_for_products($product_ids);
+			$zone_id  = self::resolve_request_zone($request);
+			$resolved = Merchant_Router::resolve_for_products($product_ids, $zone_id);
 			if (! empty($resolved['merchant'])) {
 				return $resolved['merchant'];
 			}
 		}
 
 		return Merchants::get_default();
+	}
+
+	/**
+	 * Resolve the WooCommerce shipping zone the request is shipping into.
+	 *
+	 * The customer's postcode is the only field that meaningfully changes
+	 * during a single checkout session, and WC's checkout JS sends it as
+	 * an explicit `zip` query parameter — that input is the freshest
+	 * source we have (one step ahead of the session cache, which only
+	 * updates after WC's `update_order_review` AJAX commits).
+	 *
+	 * Country and state are read from the WC customer session because
+	 * the JS doesn't forward them as parameters. This is fine in
+	 * practice: country/state change much less often than zip, and the
+	 * session is reliably populated by `update_order_review` before our
+	 * `updated_checkout`-triggered REST calls fire.
+	 *
+	 * Returns null if WC's zones API isn't loaded, no country is set
+	 * (haven't reached the checkout form yet), or no rule matches —
+	 * which the router interprets as "skip zone filtering".
+	 */
+	private static function resolve_request_zone(\WP_REST_Request $request): ?int {
+		$zip = $request->get_param('zip');
+		$zip = is_string($zip) ? trim($zip) : '';
+
+		$country = '';
+		$state   = '';
+		if (function_exists('WC') && WC()->customer) {
+			$country = (string) WC()->customer->get_shipping_country();
+			$state   = (string) WC()->customer->get_shipping_state();
+			if ($zip === '') {
+				$zip = (string) WC()->customer->get_shipping_postcode();
+			}
+		}
+
+		if ($country === '') {
+			return null;
+		}
+
+		return Merchant_Router::shipping_zone_id_for_destination($country, $state, $zip);
 	}
 
 	/**
@@ -491,7 +536,8 @@ class OkoRest extends Base
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
 		$product_ids = self::parse_product_ids($request->get_param('product_ids'));
-		$resolved    = Merchant_Router::resolve_for_products($product_ids);
+		$zone_id     = self::resolve_request_zone($request);
+		$resolved    = Merchant_Router::resolve_for_products($product_ids, $zone_id);
 
 		$payload = array(
 			'merchant_id'          => $resolved['merchant_id'],
@@ -499,6 +545,8 @@ class OkoRest extends Base
 			'is_mixed'             => (bool) ($resolved['is_mixed'] ?? false),
 			'fell_back_to_default' => (bool) ($resolved['fell_back_to_default'] ?? false),
 			'merchant_ids'         => $resolved['merchant_ids'] ?? array(),
+			'zone_filtered_out'    => $resolved['zone_filtered_out'] ?? array(),
+			'shipping_zone_id'     => $zone_id,
 		);
 
 		return new \WP_REST_Response($payload, 200);

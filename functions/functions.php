@@ -957,7 +957,17 @@ function okoskabet_woocommerce_plugin_stamp_merchant_on_order($order, $data): vo
 		}
 	}
 
-	$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_products($product_ids);
+	// Derive the shipping zone the order is shipping into so a
+	// zone-restricted merchant (e.g. an "Express" merchant that only
+	// covers Copenhagen) only stays as the stamped merchant when the
+	// destination actually falls inside its zones. The order is the
+	// authoritative source here — the WC()->cart customer session is
+	// unreliable for programmatic order creation.
+	$zone_id = ($order instanceof \WC_Order)
+		? \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::shipping_zone_id_for_order($order)
+		: \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::current_shipping_zone_id();
+
+	$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_products($product_ids, $zone_id);
 	$mid      = $resolved['merchant_id'] ?? '';
 	if ($mid !== '') {
 		$order->update_meta_data(

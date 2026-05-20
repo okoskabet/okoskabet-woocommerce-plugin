@@ -32,14 +32,34 @@ use okoskabet_woocommerce_plugin\Engine\Base;
  *
  *   3. Default merchant.
  *
+ * Shipping-zone restriction (cart-level):
+ *
+ *   A merchant can declare a list of WooCommerce shipping zones it
+ *   operates in (e.g. an "Express" merchant that only serves Copenhagen).
+ *   The product-level resolution above is zone-agnostic, but at the
+ *   cart level we filter:
+ *
+ *     - If the resolved merchant's `shipping_zones` is empty, no
+ *       restriction applies — the merchant remains the candidate.
+ *     - If `shipping_zones` is non-empty and the cart's shipping
+ *       destination falls within one of the listed zones, the merchant
+ *       remains the candidate.
+ *     - Otherwise the product is treated as routing to the default
+ *       merchant instead. Combined with the mixed-cart rule below,
+ *       this means a cart with restricted-merchant items shipping
+ *       outside that merchant's zones falls back to the default.
+ *
+ *   The default merchant itself is exempt from zone filtering — it's
+ *   the catch-all and must handle every cart by definition.
+ *
  * Cart-level decision:
  *
  *   Non-default merchants only handle "clean" carts where EVERY item
- *   resolves to the same merchant. The moment a cart contains items
- *   from two or more different merchants — for any reason — the entire
- *   cart falls back to the default merchant. Mixed carts are never
- *   blocked and never split across merchants; the default merchant
- *   handles them.
+ *   resolves to the same merchant (after the zone filter above). The
+ *   moment a cart contains items from two or more different merchants —
+ *   for any reason — the entire cart falls back to the default
+ *   merchant. Mixed carts are never blocked and never split across
+ *   merchants; the default merchant handles them.
  *
  *   This keeps the customer experience simple (one cart = one order =
  *   one fulfilment partner) and makes additional merchants an opt-in
@@ -122,39 +142,71 @@ class Merchant_Router extends Base {
 	}
 
 	/**
-	 * Resolve the merchant for a whole cart, given the product IDs in it.
+	 * Resolve the merchant for a whole cart, given the product IDs in it
+	 * and (optionally) the WooCommerce shipping zone it's shipping into.
 	 *
 	 * The rule: every product must resolve to the SAME merchant for that
 	 * merchant to win. Otherwise the cart falls back to the default
 	 * merchant. Empty carts also fall back to the default — there's no
 	 * cart-specific routing signal to act on.
 	 *
-	 * @param int[] $product_ids
+	 * If `$shipping_zone_id` is non-null, merchants with a non-empty
+	 * `shipping_zones` list that does NOT include this zone are filtered
+	 * out: products that resolved to such a merchant are downgraded to
+	 * routing to the default merchant instead. Pass `null` to disable
+	 * zone filtering entirely (the pre-zone behaviour).
+	 *
+	 * @param int[]    $product_ids
+	 * @param int|null $shipping_zone_id  Current cart's WC shipping zone ID, or null to skip zone filtering.
 	 * @return array{
 	 *   merchant_id: string,                 // the merchant that will handle this cart
 	 *   merchant: ?array,                    // full merchant record, or null pre-migration
-	 *   per_product: array<int,string>,      // per-product routing decision (informational)
-	 *   merchant_ids: array<int,string>,     // unique list of merchants the products would have matched individually
+	 *   per_product: array<int,string>,      // per-product routing decision after zone filtering (informational)
+	 *   merchant_ids: array<int,string>,     // unique list of merchants the products were routed to
 	 *   is_mixed: bool,                      // true if the cart had items from >1 merchant
 	 *   fell_back_to_default: bool,          // true if `is_mixed` AND we therefore routed to default
-	 *   missing_default: bool                // true if no default merchant is configured (very early in setup)
+	 *   missing_default: bool,               // true if no default merchant is configured (very early in setup)
+	 *   zone_filtered_out: array<int,string> // products whose natural merchant was filtered out by zone, mapped to that merchant's id (informational)
 	 * }
 	 */
-	public static function resolve_for_products( array $product_ids ): array {
+	public static function resolve_for_products( array $product_ids, ?int $shipping_zone_id = null ): array {
 		$product_ids = self::sanitize_product_id_list( $product_ids );
 
-		$per_product = array();
+		$default            = Merchants::get_default();
+		$default_id         = is_array( $default ) ? (string) ( $default['id'] ?? '' ) : '';
+		$per_product        = array();
+		$zone_filtered_out  = array();
+
 		foreach ( $product_ids as $pid ) {
 			$res = self::resolve_for_product( $pid );
-			if ( $res['merchant_id'] === '' ) {
+			$mid = (string) $res['merchant_id'];
+			if ( $mid === '' ) {
 				continue;
 			}
-			$per_product[ $pid ] = $res['merchant_id'];
+
+			$merchant = $res['merchant'];
+
+			// Zone filter — only when the caller has told us which zone
+			// the cart is shipping to AND the resolved merchant isn't the
+			// default (the default always handles everything by definition).
+			if (
+				$shipping_zone_id !== null
+				&& is_array( $merchant )
+				&& $mid !== $default_id
+				&& ! self::merchant_matches_zone( $merchant, $shipping_zone_id )
+			) {
+				$zone_filtered_out[ $pid ] = $mid;
+				$mid = $default_id;
+			}
+
+			if ( $mid === '' ) {
+				continue;
+			}
+			$per_product[ $pid ] = $mid;
 		}
 
 		$merchant_ids = array_values( array_unique( array_values( $per_product ) ) );
 		$is_mixed     = count( $merchant_ids ) > 1;
-		$default      = Merchants::get_default();
 
 		// Decision:
 		//   - empty cart / per_product never populated → default merchant
@@ -180,6 +232,7 @@ class Merchant_Router extends Base {
 			'is_mixed'             => $is_mixed,
 			'fell_back_to_default' => $is_mixed,
 			'missing_default'      => ( $default === null ),
+			'zone_filtered_out'    => $zone_filtered_out,
 		);
 	}
 
@@ -189,6 +242,12 @@ class Merchant_Router extends Base {
 	 * Strategy:
 	 *   1. Order meta `_okoskabet_merchant_id` if present and valid.
 	 *   2. Resolve from the order's line items.
+	 *
+	 * Zone-aware: when falling back to line-item resolution we read the
+	 * order's shipping destination and pass it through to the router so
+	 * a re-resolved merchant respects the zone restriction. (Stored
+	 * merchant stamps from order creation are honoured as-is — we never
+	 * re-route an existing order behind the admin's back.)
 	 *
 	 * @param \WC_Order $order
 	 * @return array{merchant_id:string, merchant:?array}
@@ -211,7 +270,7 @@ class Merchant_Router extends Base {
 				}
 			}
 		}
-		$resolved = self::resolve_for_products( $product_ids );
+		$resolved = self::resolve_for_products( $product_ids, self::shipping_zone_id_for_order( $order ) );
 
 		return array(
 			'merchant_id' => $resolved['merchant_id'],
@@ -234,7 +293,94 @@ class Merchant_Router extends Base {
 				}
 			}
 		}
-		return self::resolve_for_products( $product_ids );
+		return self::resolve_for_products( $product_ids, self::current_shipping_zone_id() );
+	}
+
+	/**
+	 * Look up the WooCommerce shipping zone the current customer's session
+	 * is shipping to. Returns `null` if WC's zone API isn't available, if
+	 * there's no destination yet (e.g. early in the checkout flow before
+	 * the customer entered an address), or if WC couldn't match a zone.
+	 *
+	 * Note: returning null means "skip zone filtering" — restricted
+	 * merchants stay candidates. This is intentional: filtering aggressively
+	 * before we know the destination would hide express merchants from
+	 * customers who haven't started typing their address yet.
+	 */
+	public static function current_shipping_zone_id(): ?int {
+		if ( ! function_exists( 'WC' ) || ! class_exists( '\\WC_Shipping_Zones' ) ) {
+			return null;
+		}
+		$customer = WC()->customer ?? null;
+		if ( ! $customer ) {
+			return null;
+		}
+
+		$country  = (string) $customer->get_shipping_country();
+		$state    = (string) $customer->get_shipping_state();
+		$postcode = (string) $customer->get_shipping_postcode();
+
+		if ( $country === '' ) {
+			return null;
+		}
+
+		return self::shipping_zone_id_for_destination( $country, $state, $postcode );
+	}
+
+	/**
+	 * Look up the shipping zone for an existing order, using its stored
+	 * shipping destination. Falls back to billing country/state/postcode
+	 * if no shipping address is set (e.g. virtual orders, but Økoskabet
+	 * orders are always physical so this is mostly defensive).
+	 */
+	public static function shipping_zone_id_for_order( \WC_Order $order ): ?int {
+		$country  = (string) $order->get_shipping_country();
+		if ( $country === '' ) {
+			$country = (string) $order->get_billing_country();
+		}
+		$state    = (string) ( $order->get_shipping_state() ?: $order->get_billing_state() );
+		$postcode = (string) ( $order->get_shipping_postcode() ?: $order->get_billing_postcode() );
+
+		if ( $country === '' ) {
+			return null;
+		}
+
+		return self::shipping_zone_id_for_destination( $country, $state, $postcode );
+	}
+
+	/**
+	 * Convert a country/state/postcode triple into a WC shipping zone id.
+	 * Returns null if the WC zones API isn't loaded (no WooCommerce) or
+	 * the country is empty (no destination to match).
+	 *
+	 * Zone 0 is the legitimate "Rest of the World" pseudo-zone — we
+	 * return it as an integer like any other zone, never as null.
+	 *
+	 * Public so callsites that already have a live destination (e.g.
+	 * the REST endpoints, which receive `zip` straight off the checkout
+	 * form) can build the triple themselves and avoid relying on
+	 * `WC()->customer`'s session-cached values, which may lag the live
+	 * input by one AJAX round-trip.
+	 */
+	public static function shipping_zone_id_for_destination( string $country, string $state, string $postcode ): ?int {
+		if ( ! class_exists( '\\WC_Shipping_Zones' ) ) {
+			return null;
+		}
+		if ( $country === '' ) {
+			return null;
+		}
+		$package = array(
+			'destination' => array(
+				'country'  => $country,
+				'state'    => $state,
+				'postcode' => $postcode,
+			),
+		);
+		$zone = \WC_Shipping_Zones::get_zone_matching_package( $package );
+		if ( ! $zone ) {
+			return null;
+		}
+		return (int) $zone->get_id();
 	}
 
 	// =========================================================================
@@ -273,6 +419,22 @@ class Merchant_Router extends Base {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Does this merchant cover the given shipping zone? Empty
+	 * `shipping_zones` means "no restriction" (always true).
+	 *
+	 * Public so callers like the admin UI can answer "would this
+	 * merchant currently match for zone X?" without going through the
+	 * full resolver.
+	 */
+	public static function merchant_matches_zone( array $merchant, int $zone_id ): bool {
+		$zones = array_map( 'intval', (array) ( $merchant['shipping_zones'] ?? array() ) );
+		if ( empty( $zones ) ) {
+			return true;
+		}
+		return in_array( $zone_id, $zones, true );
 	}
 
 	/**

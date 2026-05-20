@@ -145,6 +145,14 @@ class Merchants extends Base {
 	/**
 	 * Shape of one merchant record (after normalisation).
 	 *
+	 * `shipping_zones` is an array of WooCommerce shipping-zone IDs the
+	 * merchant operates in. An empty list means "no zone restriction" —
+	 * the merchant can fulfil carts shipping anywhere. A non-empty list
+	 * restricts the merchant to carts whose shipping destination matches
+	 * one of the listed zones; carts outside those zones fall back to
+	 * the default merchant. Zone 0 is WooCommerce's "Rest of the World"
+	 * (Locations not covered by your other zones).
+	 *
 	 * @return array
 	 */
 	public static function default_merchant(): array {
@@ -162,6 +170,7 @@ class Merchants extends Base {
 			'webhook_events'                  => array( 'order_delivered' ),
 			'product_categories'              => array(),
 			'product_tags'                    => array(),
+			'shipping_zones'                  => array(),
 			'priority'                        => 10,
 			'created_at'                      => '',
 		);
@@ -278,6 +287,7 @@ class Merchants extends Base {
 		$base['webhook_events']                 = self::sanitize_event_list( (array) ( $merchant['webhook_events']            ?? array() ) );
 		$base['product_categories']             = self::sanitize_id_list( (array) ( $merchant['product_categories']           ?? array() ) );
 		$base['product_tags']                   = self::sanitize_id_list( (array) ( $merchant['product_tags']                 ?? array() ) );
+		$base['shipping_zones']                 = self::sanitize_zone_list( (array) ( $merchant['shipping_zones']             ?? array() ) );
 		$base['priority']                       = (int) ( $merchant['priority']                                                ?? 10 );
 		$base['created_at']                     = sanitize_text_field( (string) ( $merchant['created_at']                     ?? '' ) );
 		if ( $base['created_at'] === '' ) {
@@ -309,6 +319,27 @@ class Merchants extends Base {
 			if ( $n > 0 ) {
 				$out[] = $n;
 			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Like `sanitize_id_list` but also allows 0 — WooCommerce uses zone
+	 * id 0 for the "Rest of the World" (locations not covered by your
+	 * other zones) pseudo-zone, and a merchant may legitimately want to
+	 * declare itself the operator there.
+	 */
+	private static function sanitize_zone_list( array $list ): array {
+		$out = array();
+		foreach ( $list as $v ) {
+			if ( ! is_numeric( $v ) ) {
+				continue;
+			}
+			$n = (int) $v;
+			if ( $n < 0 ) {
+				continue;
+			}
+			$out[] = $n;
 		}
 		return array_values( array_unique( $out ) );
 	}
@@ -498,6 +529,34 @@ class Merchants extends Base {
 	// Admin UI
 	// =========================================================================
 
+	/**
+	 * Look up every configured WooCommerce shipping zone, including the
+	 * "Rest of the World" (id 0) pseudo-zone. Returned as `[id => name]`
+	 * for easy iteration in the admin UI. Empty array if WC's zones API
+	 * isn't loaded (e.g. WC not active or not yet booted).
+	 *
+	 * @return array<int,string>
+	 */
+	public static function available_shipping_zones(): array {
+		if ( ! class_exists( '\\WC_Shipping_Zones' ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( \WC_Shipping_Zones::get_zones() as $zone ) {
+			$id        = (int) ( $zone['id'] ?? 0 );
+			$name      = (string) ( $zone['zone_name'] ?? '' );
+			$out[ $id ] = $name !== '' ? $name : sprintf( __( 'Zone #%d', O_TEXTDOMAIN ), $id );
+		}
+		// WC keeps zone id 0 as the "Rest of the World" catch-all — not
+		// returned by get_zones(), so we add it ourselves.
+		$rest = \WC_Shipping_Zones::get_zone( 0 );
+		if ( $rest ) {
+			$name = (string) $rest->get_zone_name();
+			$out[ 0 ] = $name !== '' ? $name : __( 'Locations not covered by your other zones', O_TEXTDOMAIN );
+		}
+		return $out;
+	}
+
 	public function render_section(): void {
 		if ( ! current_user_can( self::CAPABILITY ) ) {
 			return;
@@ -661,6 +720,7 @@ class Merchants extends Base {
 		<?php if ( empty( $merchants ) ) : ?>
 			<p><em><?php esc_html_e( 'No merchants configured yet.', O_TEXTDOMAIN ); ?></em></p>
 		<?php else : ?>
+			<?php $zone_options = self::available_shipping_zones(); ?>
 			<table class="oko-merchants-table">
 				<thead>
 					<tr>
@@ -668,6 +728,7 @@ class Merchants extends Base {
 						<th><?php esc_html_e( 'Environment', O_TEXTDOMAIN ); ?></th>
 						<th><?php esc_html_e( 'Webhook URL', O_TEXTDOMAIN ); ?></th>
 						<th><?php esc_html_e( 'Routes products with', O_TEXTDOMAIN ); ?></th>
+						<th><?php esc_html_e( 'Shipping zones', O_TEXTDOMAIN ); ?></th>
 						<th class="col-actions"><?php esc_html_e( 'Actions', O_TEXTDOMAIN ); ?></th>
 					</tr>
 				</thead>
@@ -685,6 +746,13 @@ class Merchants extends Base {
 						$webhook_url   = $webhook_base . rawurlencode( $m['id'] );
 						$cat_names = $this->term_names( $m['product_categories'], 'product_cat' );
 						$tag_names = $this->term_names( $m['product_tags'], 'product_tag' );
+						$zone_names = array();
+						foreach ( (array) ( $m['shipping_zones'] ?? array() ) as $zid ) {
+							$zid = (int) $zid;
+							if ( isset( $zone_options[ $zid ] ) ) {
+								$zone_names[] = $zone_options[ $zid ];
+							}
+						}
 						?>
 						<tr class="<?php echo $is_default ? 'is-default' : ''; ?>">
 							<td>
@@ -711,6 +779,15 @@ class Merchants extends Base {
 								<?php endif; ?>
 								<?php if ( empty( $cat_names ) && empty( $tag_names ) ) : ?>
 									<em><?php esc_html_e( 'No category or tag rules — only routed to via default or per-product override.', O_TEXTDOMAIN ); ?></em>
+								<?php endif; ?>
+							</td>
+							<td>
+								<?php if ( $is_default ) : ?>
+									<em><?php esc_html_e( 'All zones (catch-all)', O_TEXTDOMAIN ); ?></em>
+								<?php elseif ( ! empty( $zone_names ) ) : ?>
+									<?php echo esc_html( implode( ', ', $zone_names ) ); ?>
+								<?php else : ?>
+									<em><?php esc_html_e( 'All zones', O_TEXTDOMAIN ); ?></em>
 								<?php endif; ?>
 							</td>
 							<td>
@@ -961,6 +1038,37 @@ class Merchants extends Base {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><?php esc_html_e( 'Restrict to shipping zones', O_TEXTDOMAIN ); ?></th>
+						<td>
+							<?php
+							$zone_options    = self::available_shipping_zones();
+							$selected_zones  = array_map( 'strval', (array) $merchant['shipping_zones'] );
+							$is_default      = isset( $merchant['id'] ) && $merchant['id'] === self::DEFAULT_MERCHANT_ID;
+							?>
+							<?php if ( empty( $zone_options ) ) : ?>
+								<em><?php esc_html_e( 'No WooCommerce shipping zones found. Set up shipping zones under WooCommerce → Settings → Shipping first.', O_TEXTDOMAIN ); ?></em>
+							<?php else : ?>
+								<select name="merchant[shipping_zones][]" multiple class="oko-multi"<?php echo $is_default ? ' disabled' : ''; ?>>
+									<?php foreach ( $zone_options as $zid => $zname ) :
+										$zid_str = (string) (int) $zid; ?>
+										<option value="<?php echo esc_attr( $zid_str ); ?>" <?php selected( in_array( $zid_str, $selected_zones, true ) ); ?>>
+											<?php echo esc_html( $zname ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+								<p class="oko-help">
+									<?php
+									if ( $is_default ) {
+										esc_html_e( 'The default merchant must handle every cart by definition, so this field is disabled — the default merchant always operates in every shipping zone.', O_TEXTDOMAIN );
+									} else {
+										esc_html_e( 'Leave empty to let this merchant handle carts shipping anywhere. Pick one or more zones to restrict it (e.g. an Express merchant that only covers Copenhagen). Carts shipping outside the selected zones fall back to the default merchant.', O_TEXTDOMAIN );
+									}
+									?>
+								</p>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="merchant-priority"><?php esc_html_e( 'Priority', O_TEXTDOMAIN ); ?></label></th>
 						<td>
 							<input type="number" id="merchant-priority" name="merchant[priority]" value="<?php echo esc_attr( $merchant['priority'] ); ?>" min="0" max="100" />
@@ -1074,6 +1182,11 @@ class Merchants extends Base {
 		// already configured upstream.
 		if ( $is_default ) {
 			$raw['id'] = $config['default_merchant_id'];
+			// The default merchant is the cart-wide catch-all by design.
+			// Belt-and-braces: even if the form somehow submits zone IDs
+			// for it (the field is disabled in the UI), clear them on save
+			// so the default merchant always handles every zone.
+			$raw['shipping_zones'] = array();
 		}
 
 		// Translate single staging checkbox into bool.
