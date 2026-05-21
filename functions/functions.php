@@ -679,6 +679,7 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 	$delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 	$delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
 	$delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+	$delivery_location_source = $order->get_meta('_billing_okoskabet_delivery_location_source', true);
 
 	// Resolve the merchant that fulfilled the order. `resolve_for_order`
 	// prefers the stored stamp written at checkout, and only falls back
@@ -720,7 +721,13 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 		echo esc_html__('Økoskabet Delivery location', O_TEXTDOMAIN) . ': ' . esc_html($delivery_location) . "\n";
 	}
 	if (!empty($delivery_note)) {
-		echo esc_html__('Note to driver', O_TEXTDOMAIN) . ': ' . esc_html($delivery_note);
+		echo esc_html__('Note to driver', O_TEXTDOMAIN) . ': ' . esc_html($delivery_note) . "\n";
+	}
+	if (!empty($delivery_location_source)) {
+		// Tells us per-order which checkout path produced the location:
+		// dropdown / andet_text / default_fallback. Useful for triaging
+		// the rate at which the JS UI fails to render in the wild.
+		echo esc_html__('Location source', O_TEXTDOMAIN) . ': ' . esc_html($delivery_location_source);
 	}
 	echo '</pre>';
 }
@@ -841,7 +848,13 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 				'phone' => $order->get_billing_phone(),
 				'email' => $order->get_billing_email(),
 			],
-			'notes' => (string) $order->get_customer_note(),
+			// Shed deliveries: send empty notes. WooCommerce's customer_note
+			// field is a free-text bucket the customer fills with anything
+			// (subscription requests, city names, gift messages, etc.) and
+			// none of that is actionable for the driver placing the order in
+			// the shed. The reservation itself plus shed_id carries all the
+			// logistics info needed.
+			'notes' => '',
 			'delivery_date' => $order_delivery_date,
 			'reservation' => [
 				'shed_id' => $order_shed,
@@ -868,9 +881,13 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 				'location' => !empty($logistics_note) ? $logistics_note : null,
 			]),
 			// Send the logistics note (dropdown selection + free-text) as the API
-			// notes field so it appears in Økoskabet's Notes column. Falls back to
-			// the standard WooCommerce customer note when no logistics note is set.
-			'notes' => !empty($logistics_note) ? $logistics_note : (string) $order->get_customer_note(),
+			// notes field so it appears in Økoskabet's Notes column. Do NOT fall
+			// back to the standard WooCommerce customer note — that field
+			// contaminates the logistics export with city names, subscription
+			// requests, and other unrelated text the driver can't act on.
+			// Only the explicit dropdown choice or the Andet free-text belongs
+			// here. An empty string is preferable to noise.
+			'notes' => $logistics_note,
 			'delivery_date' => $order_delivery_date,
 		];
 
@@ -938,6 +955,67 @@ function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $d
 	if (in_array('hey_okoskabet_shipping_home', $shipping_methods, true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', '');
 	}
+}
+
+/**
+ * Stamp the delivery-location source and apply a default when neither
+ * the dropdown nor the Andet free-text was set on a home-delivery order.
+ *
+ * Source values feed the admin metabox and the post-save diagnostic
+ * log; the default ensures the driver always has a usable instruction
+ * even when our checkout JS never rendered (page cache, blocks-checkout,
+ * mobile timing, etc.). Runs pre-save — `get_id()` would be 0 here, so
+ * logging lives in the post-save companion below.
+ */
+add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_default_delivery_location', 25, 2);
+
+function okoskabet_woocommerce_plugin_default_delivery_location($order, $data): void
+{
+	if (! in_array('hey_okoskabet_shipping_home', (array) ($data['shipping_method'] ?? array()), true)) {
+		return;
+	}
+
+	$location = trim((string) $order->get_meta('_billing_okoskabet_delivery_location', true));
+	$note     = trim((string) $order->get_meta('_billing_okoskabet_delivery_note', true));
+
+	if ($location !== '') {
+		$source = 'dropdown';
+	} elseif ($note !== '') {
+		$source = 'andet_text';
+	} else {
+		$source = 'default_fallback';
+		$order->update_meta_data('_billing_okoskabet_delivery_location', 'In front of the front door');
+	}
+
+	$order->update_meta_data('_billing_okoskabet_delivery_location_source', $source);
+}
+
+/**
+ * Log default_fallback events post-save, so order_id is non-zero and
+ * correlatable with the Økoskabet backend. UA + postcode + login state
+ * is enough to spot patterns (mobile Safari, guest-only, postcode
+ * cluster) without dumping PII.
+ */
+add_action('woocommerce_checkout_order_processed', 'okoskabet_woocommerce_plugin_log_default_fallback', 10, 1);
+
+function okoskabet_woocommerce_plugin_log_default_fallback(int $order_id): void
+{
+	$order = wc_get_order($order_id);
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+	if ($order->get_meta('_billing_okoskabet_delivery_location_source', true) !== 'default_fallback') {
+		return;
+	}
+
+	$ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr((string) $_SERVER['HTTP_USER_AGENT'], 0, 200) : '';
+	error_log(sprintf(
+		'okoskabet_woocommerce_plugin: delivery_location default_fallback order_id=%d postcode=%s user=%s ua=%s',
+		$order_id,
+		$order->get_shipping_postcode(),
+		is_user_logged_in() ? 'member' : 'guest',
+		$ua
+	));
 }
 
 /**
