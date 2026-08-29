@@ -109,17 +109,42 @@ function o_check_configuration(string $value, ?string $merchant_id = null): bool
 }
 
 /**
+ * The transient key the merchant's /configuration answer is cached under.
+ *
+ * One definition, because a reader and a writer that disagree about this
+ * string produce a cache that can never be cleared — which is exactly the
+ * bug this replaced.
+ */
+function o_shipping_methods_transient_key(string $merchant_id): string
+{
+	return O_TEXTDOMAIN . '_shipping_methods_' . sanitize_key($merchant_id);
+}
+
+/**
  * Internal — does THIS merchant's `/configuration` advertise the given
  * shipping method? Cached per-merchant for 5 minutes.
  */
 function o_merchant_supports_method(string $merchant_id, string $method_code): bool
 {
-	$transient_key = O_TEXTDOMAIN . '_shipping_methods_' . sanitize_key($merchant_id);
+	// Answered once per request per merchant. Registration asks this for every
+	// Økoskabet method, so without the static a page load repeats the same
+	// lookup — and, when the API is unreachable, the same 10-second timeout —
+	// once per method.
+	static $asked = array();
+
+	$transient_key = o_shipping_methods_transient_key($merchant_id);
+
+	if (array_key_exists($merchant_id, $asked)) {
+		$shipping_methods = $asked[$merchant_id];
+		return is_array($shipping_methods) && ! empty($shipping_methods[$method_code]);
+	}
+
 	$shipping_methods = get_transient($transient_key);
 
 	if ($shipping_methods === false) {
 		$merchant = o_get_merchant($merchant_id);
 		if (empty($merchant['api_key'])) {
+			$asked[$merchant_id] = false;
 			return false;
 		}
 
@@ -131,6 +156,7 @@ function o_merchant_supports_method(string $merchant_id, string $method_code): b
 		));
 
 		if (is_wp_error($response)) {
+			$asked[$merchant_id] = false;
 			return false;
 		}
 
@@ -138,6 +164,7 @@ function o_merchant_supports_method(string $merchant_id, string $method_code): b
 		$body      = wp_remote_retrieve_body($response);
 
 		if ($http_code !== 200 || empty($body)) {
+			$asked[$merchant_id] = false;
 			return false;
 		}
 
@@ -150,6 +177,8 @@ function o_merchant_supports_method(string $merchant_id, string $method_code): b
 		}
 		set_transient($transient_key, $shipping_methods, 5 * MINUTE_IN_SECONDS);
 	}
+
+	$asked[$merchant_id] = $shipping_methods;
 
 	return ! empty($shipping_methods[$method_code]);
 }
@@ -225,6 +254,8 @@ function custom_content_for_custom_shipping_checkout(): void
 			// JS can either rely on cart routing or pin a request.
 			'deliveryLocationOptions' => get_rest_url(null, 'wp/v2/okoskabet/delivery_location_options'),
 			'cartResolution'          => get_rest_url(null, 'wp/v2/okoskabet/cart_resolution'),
+			// Store-pickup locations plus the days each one collects on.
+			'storePickup'             => get_rest_url(null, 'wp/v2/okoskabet/store_pickup'),
 		),
 	), JSON_HEX_TAG | JSON_HEX_AMP);
 
@@ -259,10 +290,24 @@ function custom_content_for_custom_shipping_checkout(): void
 		O_VERSION,
 		true
 	);
+	// Strings for the store-pickup UI. Opening hours are deliberately not
+	// fetched from the API — Økoskabet holds the collection *days*, and what
+	// time the shop is open is the shop's own business. A merchant writes it
+	// in the shipping method's Description field, which WooCommerce already
+	// renders under the method at checkout.
+	$pickup_strings = wp_json_encode(array(
+		'place'    => __('Pickup location', O_TEXTDOMAIN),
+		'date'     => __('Pickup date', O_TEXTDOMAIN),
+		'choose'   => __('— choose —', O_TEXTDOMAIN),
+		'noPlaces' => __('No pickup locations have been set up. Please contact the shop.', O_TEXTDOMAIN),
+		'noDates'  => __('No pickup dates are available right now. Please contact the shop.', O_TEXTDOMAIN),
+	), JSON_HEX_TAG | JSON_HEX_AMP);
+
 	wp_add_inline_script(
 		'okoskabet-checkout-helpers',
 		'window._okoskabet_checkout = ' . $config . ';' . "\n"
-		. 'window._okoskabet_overlay_strings = ' . $overlay_strings . ';',
+		. 'window._okoskabet_overlay_strings = ' . $overlay_strings . ';' . "\n"
+		. 'window._okoskabet_pickup_strings = ' . $pickup_strings . ';',
 		'before'
 	);
 	wp_enqueue_script('okoskabet-checkout-helpers');
@@ -286,6 +331,9 @@ function custom_content_for_custom_shipping_checkout(): void
 	// the visible UI dynamically. We hide only the labels and inputs, not the
 	// wrapper, so our injected UI inside the wrapper remains visible.
 	echo '<style>
+		/* The pickup-location field is written by the checkout JS, never typed
+		   into, so the raw WooCommerce input must not be shown. */
+		#billing_okoskabet_pickup_location_id_field { display: none !important; }
 		.okoskabet-delivery-location > label,
 		.okoskabet-delivery-location > .woocommerce-input-wrapper > input,
 		.okoskabet-delivery-note > label,
@@ -303,6 +351,209 @@ function hey_register_okoskabet_shipping_shed_method(array $methods): array
 	if (empty(o_check_configuration('shed'))) return $methods;
 	$methods['hey_okoskabet_shipping_shed'] = 'WC_Hey_Okoskabet_Shipping_Method_Shed';
 	return $methods;
+}
+
+/**
+ * The instance-settings fields shared by every Økoskabet shipping method:
+ * a free-form fee ladder plus the VAT-mode toggle, followed by the legacy
+ * single-tier fields that still act as a fallback when the ladder is empty.
+ *
+ * @param string $default_title
+ * @param string $default_cost  Fallback price when no ladder is configured.
+ *                              Methods that ship something use '49'; store
+ *                              pickup ships nothing and passes '0'. Method title default.
+ * @return array<string,array>
+ */
+function oko_shipping_instance_fields(string $default_title, string $default_cost = '49'): array
+{
+	return array(
+		'title' => array(
+			'title'       => esc_html__('Method Title', O_TEXTDOMAIN),
+			'type'        => 'text',
+			'description' => esc_html__('Enter the method title', O_TEXTDOMAIN),
+			'default'     => $default_title,
+			'desc_tip'    => true,
+		),
+		'description' => array(
+			'title'       => esc_html__('Description', O_TEXTDOMAIN),
+			'type'        => 'textarea',
+			'description' => esc_html__('Enter the Description', O_TEXTDOMAIN),
+			'default'     => '',
+			'desc_tip'    => true,
+		),
+		'tiers' => array(
+			'title'       => esc_html__('Fee ladder', O_TEXTDOMAIN),
+			'type'        => 'textarea',
+			'description' => esc_html__('One tier per line as "from amount = price". The highest tier whose "from" is not above the cart subtotal wins; price 0 means free. Example: 0 = 99 / 500 = 69 / 1000 = 49 / 2000 = 0. Leave empty to use the single-tier fields below.', O_TEXTDOMAIN),
+			'default'     => '',
+			'desc_tip'    => false,
+		),
+		'amounts_include_tax' => array(
+			'title'       => esc_html__('VAT', O_TEXTDOMAIN),
+			'type'        => 'checkbox',
+			'label'       => esc_html__('Ladder thresholds and prices are incl. VAT (what the customer sees and pays)', O_TEXTDOMAIN),
+			'default'     => 'yes',
+		),
+		'cost' => array(
+			'title'       => esc_html__('Shipping price (fallback)', O_TEXTDOMAIN),
+			'type'        => 'number',
+			'description' => esc_html__('Used only when the fee ladder above is empty.', O_TEXTDOMAIN),
+			// Methods that actually ship something default to a real price;
+			// store pickup ships nothing and passes '0'.
+			'default'     => $default_cost,
+			'desc_tip'    => true,
+		),
+		'costDiscountLimit' => array(
+			'title'       => esc_html__('Discounted shipping order minimum (fallback)', O_TEXTDOMAIN),
+			'type'        => 'number',
+			'default'     => '0',
+			'desc_tip'    => true,
+		),
+		'costDiscount' => array(
+			'title'       => esc_html__('Discounted shipping price (fallback)', O_TEXTDOMAIN),
+			'type'        => 'number',
+			'default'     => '0',
+			'desc_tip'    => true,
+		),
+		'costFreeLimit' => array(
+			'title'       => esc_html__('Free shipping order minimum (fallback)', O_TEXTDOMAIN),
+			'type'        => 'number',
+			'default'     => '0',
+			'desc_tip'    => true,
+		),
+	);
+}
+
+/**
+ * Parse a fee ladder from the textarea. Each non-empty line is
+ * "from_subtotal = price" (the separator may be '=', ':', ',' or whitespace).
+ * Returns tiers sorted ascending by their "from" threshold.
+ *
+ * @return array<int,array{from:float,cost:float}>
+ */
+function oko_parse_shipping_tiers(string $raw): array
+{
+	$tiers = array();
+	$lines = preg_split('/\r\n|\r|\n/', $raw);
+	if ($lines === false) {
+		return $tiers;
+	}
+	foreach ($lines as $line) {
+		$line = trim($line);
+		if ($line === '') {
+			continue;
+		}
+		// Separators: '=', ':' or whitespace. NOT comma — in Danish that's the
+		// decimal mark (e.g. "49,50"), which we normalise below.
+		$parts = preg_split('/[\s=:]+/', $line);
+		if ($parts === false || count($parts) < 2 || $parts[0] === '' || $parts[1] === '') {
+			continue;
+		}
+		$from = str_replace(',', '.', $parts[0]);
+		$cost = str_replace(',', '.', $parts[1]);
+		// Both halves must actually be numbers. Casting blindly would turn a
+		// typo into `from 0 = free`, quietly giving every order free shipping.
+		if (!is_numeric($from) || !is_numeric($cost)) {
+			continue;
+		}
+		$tiers[] = array(
+			'from' => (float) $from,
+			'cost' => (float) $cost,
+		);
+	}
+	usort($tiers, static function ($a, $b) {
+		return $a['from'] <=> $b['from'];
+	});
+	return $tiers;
+}
+
+/**
+ * Pick the fee for a subtotal: the cost of the highest tier whose "from" is
+ * not above the subtotal. Falls back to the lowest tier when the subtotal is
+ * below every threshold, so a rate is always produced.
+ */
+function oko_ladder_cost_for_subtotal(array $tiers, float $subtotal): ?float
+{
+	if (empty($tiers)) {
+		return null;
+	}
+	$cost = $tiers[0]['cost'];
+	foreach ($tiers as $tier) {
+		if ($subtotal >= $tier['from']) {
+			$cost = $tier['cost'];
+		}
+	}
+	return $cost;
+}
+
+/** The combined shipping tax ratio (e.g. 0.25), or 0 when shipping isn't taxed. */
+function oko_shipping_tax_ratio(): float
+{
+	if (!function_exists('wc_tax_enabled') || !wc_tax_enabled()) {
+		return 0.0;
+	}
+	$total = 0.0;
+	foreach (WC_Tax::get_shipping_tax_rates() as $rate) {
+		$total += (float) $rate['rate'];
+	}
+	return $total / 100.0;
+}
+
+/**
+ * Apply the N-tier fee ladder for a method, if one is configured. Returns
+ * true when it handled the rate (caller should stop), false when no ladder is
+ * set so the caller falls back to the legacy single-tier logic.
+ */
+function oko_add_ladder_shipping_rate(WC_Shipping_Method $method, array $package): bool
+{
+	$tiers = oko_parse_shipping_tiers((string) $method->get_option('tiers'));
+	if (empty($tiers)) {
+		return false; // not configured → legacy path.
+	}
+
+	$title      = rtrim((string) $method->get_option('title'), ': ');
+	$free_label = $title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')';
+
+	// A free-shipping coupon always wins.
+	foreach (WC()->cart->get_applied_coupons() as $code) {
+		$coupon = new WC_Coupon($code);
+		if ($coupon->get_free_shipping()) {
+			$method->add_rate(array('id' => $method->id, 'label' => $free_label, 'cost' => 0));
+			return true;
+		}
+	}
+
+	$include_tax = wc_string_to_bool($method->get_option('amounts_include_tax', 'yes'));
+
+	// Subtotal both ex- and incl-VAT, so thresholds can compare against whichever
+	// the merchant entered.
+	$ex = 0.0;
+	$incl = 0.0;
+	foreach ($package['contents'] as $values) {
+		$line = (float) $values['line_total'];
+		$ex  += $line;
+		$incl += $line + (float) ($values['line_tax'] ?? 0);
+	}
+
+	$cost = oko_ladder_cost_for_subtotal($tiers, $include_tax ? $incl : $ex);
+
+	if ($cost === null || $cost <= 0) {
+		$method->add_rate(array('id' => $method->id, 'label' => $free_label, 'cost' => 0));
+		return true;
+	}
+
+	// When the amount is entered incl. VAT, hand WooCommerce the ex-VAT cost so
+	// it adds tax back to exactly the figure the merchant typed.
+	$rate_cost = $cost;
+	if ($include_tax) {
+		$ratio = oko_shipping_tax_ratio();
+		if ($ratio > 0) {
+			$rate_cost = $cost / (1 + $ratio);
+		}
+	}
+
+	$method->add_rate(array('id' => $method->id, 'label' => $title, 'cost' => $rate_cost));
+	return true;
 }
 
 function hey_okoskabet_shipping_method_shed_init(): void
@@ -328,50 +579,7 @@ function hey_okoskabet_shipping_method_shed_init(): void
 					'instance-settings',
 					'instance-settings-modal',
 				);
-				$this->instance_form_fields = array(
-					'title' => array(
-						'title'       => esc_html__('Method Title', O_TEXTDOMAIN),
-						'type'        => 'text',
-						'description' => esc_html__('Enter the method title', O_TEXTDOMAIN),
-						'default'     => $this->method_title,
-						'desc_tip'    => true,
-					),
-					'description' => array(
-						'title'       => esc_html__('Description', O_TEXTDOMAIN),
-						'type'        => 'textarea',
-						'description' => esc_html__('Enter the Description', O_TEXTDOMAIN),
-						'default'     => '',
-						'desc_tip'    => true
-					),
-					'cost' => array(
-						'title'       => esc_html__('Shipping price', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the default shipping price', O_TEXTDOMAIN),
-						'default'     => '49',
-						'desc_tip'    => true
-					),
-					'costDiscountLimit' => array(
-						'title'       => esc_html__('Discounted shipping order minimum', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the discounted shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => '0',
-						'desc_tip'    => true
-					),
-					'costDiscount' => array(
-						'title'       => esc_html__('Discounted shipping price', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the discounted price', O_TEXTDOMAIN),
-						'default'     => '0',
-						'desc_tip'    => true
-					),
-					'costFreeLimit' => array(
-						'title'       => esc_html__('Free shipping order minimum', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the free shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => '0',
-						'desc_tip'    => true
-					),
-				);
+				$this->instance_form_fields = oko_shipping_instance_fields($this->method_title);
 
 				$this->cost_value          = $this->get_option('cost');
 				$this->cost_discount       = $this->get_option('costDiscount');
@@ -386,6 +594,12 @@ function hey_okoskabet_shipping_method_shed_init(): void
 			 */
 			public function calculate_shipping($package = array()): void
 			{
+				// Prefer the configurable N-tier fee ladder; fall back to the
+				// legacy single-tier fields below when no ladder is configured.
+				if (oko_add_ladder_shipping_rate($this, $package)) {
+					return;
+				}
+
 				$total = 0;
 				foreach ($package['contents'] as $values) {
 					$total += $values['line_total'];
@@ -465,50 +679,7 @@ function hey_okoskabet_shipping_method_home_init(): void
 					'instance-settings',
 					'instance-settings-modal',
 				);
-				$this->instance_form_fields = array(
-					'title' => array(
-						'title'       => esc_html__('Method Title', O_TEXTDOMAIN),
-						'type'        => 'text',
-						'description' => esc_html__('Enter the method title', O_TEXTDOMAIN),
-						'default'     => $this->method_title,
-						'desc_tip'    => true,
-					),
-					'description' => array(
-						'title'       => esc_html__('Description', O_TEXTDOMAIN),
-						'type'        => 'textarea',
-						'description' => esc_html__('Enter the Description', O_TEXTDOMAIN),
-						'default'     => '',
-						'desc_tip'    => true
-					),
-					'cost' => array(
-						'title'       => esc_html__('Shipping price', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the default shipping price', O_TEXTDOMAIN),
-						'default'     => '49',
-						'desc_tip'    => true
-					),
-					'costDiscountLimit' => array(
-						'title'       => esc_html__('Discounted shipping order minimum', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the discounted shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => '0',
-						'desc_tip'    => true
-					),
-					'costDiscount' => array(
-						'title'       => esc_html__('Discounted shipping price', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the discounted price', O_TEXTDOMAIN),
-						'default'     => '0',
-						'desc_tip'    => true
-					),
-					'costFreeLimit' => array(
-						'title'       => esc_html__('Free shipping order minimum', O_TEXTDOMAIN),
-						'type'        => 'number',
-						'description' => esc_html__('Add the free shipping total order minimum', O_TEXTDOMAIN),
-						'default'     => '0',
-						'desc_tip'    => true
-					),
-				);
+				$this->instance_form_fields = oko_shipping_instance_fields($this->method_title);
 
 				$this->cost_value          = $this->get_option('cost');
 				$this->cost_discount       = $this->get_option('costDiscount');
@@ -523,6 +694,12 @@ function hey_okoskabet_shipping_method_home_init(): void
 			 */
 			public function calculate_shipping($package = array()): void
 			{
+				// Prefer the configurable N-tier fee ladder; fall back to the
+				// legacy single-tier fields below when no ladder is configured.
+				if (oko_add_ladder_shipping_rate($this, $package)) {
+					return;
+				}
+
 				$total = 0;
 				foreach ($package['contents'] as $values) {
 					$total += $values['line_total'];
@@ -571,6 +748,75 @@ function hey_okoskabet_shipping_method_home_init(): void
 }
 add_action('woocommerce_shipping_init', 'hey_okoskabet_shipping_method_home_init');
 
+add_filter('woocommerce_shipping_methods', 'hey_register_okoskabet_shipping_store_pickup_method');
+function hey_register_okoskabet_shipping_store_pickup_method(array $methods): array
+{
+	if (empty(o_check_configuration('store_pickup'))) return $methods;
+	$methods['hey_okoskabet_shipping_store_pickup'] = 'WC_Hey_Okoskabet_Shipping_Method_Store_Pickup';
+	return $methods;
+}
+
+/**
+ * Butiksafhentning — the customer collects from the shop itself.
+ *
+ * Free by default: the shop keeps the goods, so there is nothing to ship.
+ * The fee-ladder fields are still offered because a merchant may want to
+ * charge for a collection, and an empty ladder falls through to the legacy
+ * single-tier cost, which defaults to 0.
+ */
+function hey_okoskabet_shipping_method_store_pickup_init(): void
+{
+	if (empty(o_check_configuration('store_pickup'))) return;
+
+	if (!class_exists('WC_Hey_Okoskabet_Shipping_Method_Store_Pickup')) {
+		class WC_Hey_Okoskabet_Shipping_Method_Store_Pickup extends WC_Shipping_Method
+		{
+			protected string $cost_value = '0';
+
+			public function __construct($instance_id = 0)
+			{
+				$this->id                 = 'hey_okoskabet_shipping_store_pickup';
+				$this->instance_id        = absint($instance_id);
+				$this->method_title       = __('Store pickup', O_TEXTDOMAIN);
+				$this->method_description = __('The customer collects the order in your shop', O_TEXTDOMAIN);
+				$this->supports           = array(
+					'shipping-zones',
+					'instance-settings',
+					'instance-settings-modal',
+				);
+				$this->instance_form_fields = oko_shipping_instance_fields($this->method_title, '0');
+
+				$this->cost_value = (string) $this->get_option('cost', '0');
+				$this->title      = rtrim((string) $this->get_option('title'), ': ');
+				if ($this->title === '') {
+					$this->title = $this->method_title;
+				}
+				add_action('woocommerce_update_options_shipping_' . $this->id, array($this, 'process_admin_options'));
+			}
+
+			/**
+			 * @param array $package (default: array())
+			 */
+			public function calculate_shipping($package = array()): void
+			{
+				// A configured ladder wins, so a merchant who wants to charge
+				// for collection can. Otherwise collection is free.
+				if (oko_add_ladder_shipping_rate($this, $package)) {
+					return;
+				}
+
+				$cost = (float) $this->cost_value;
+				$this->add_rate(array(
+					'id'    => $this->id,
+					'label' => $cost > 0 ? $this->title : $this->title . ' (' . esc_html__('Free', O_TEXTDOMAIN) . ')',
+					'cost'  => $cost,
+				));
+			}
+		}
+	}
+}
+add_action('woocommerce_shipping_init', 'hey_okoskabet_shipping_method_store_pickup_init');
+
 /**
  * Filter shipping rates per package so a cart only ever sees Økoskabet
  * methods that the cart's resolved merchant actually supports.
@@ -614,8 +860,9 @@ add_filter('woocommerce_package_rates', function (array $rates, array $package):
     }
 
     $oko_method_map = array(
-        'hey_okoskabet_shipping_shed' => 'shed',
-        'hey_okoskabet_shipping_home' => 'home_delivery',
+        'hey_okoskabet_shipping_shed'         => 'shed',
+        'hey_okoskabet_shipping_home'         => 'home_delivery',
+        'hey_okoskabet_shipping_store_pickup' => 'store_pickup',
     );
 
     foreach ($rates as $rate_id => $rate) {
@@ -631,6 +878,59 @@ add_filter('woocommerce_package_rates', function (array $rates, array $package):
 
     return $rates;
 }, 10, 2);
+
+
+/* =========================================================================
+ * Packaging-fee helpers
+ * =========================================================================
+ *
+ * The fee itself lives in Integrations\Packaging_Fee; these two helpers sit
+ * here beside the shipping ladder they share numbers with.
+ */
+
+/**
+ * Normalise a saved term selection into the full set of term ids that should
+ * match, descendants included.
+ *
+ * Picking "Frost" and getting nothing when the products actually sit in
+ * "Frost > Fisk" is the kind of surprise a merchant discovers from a customer
+ * complaint, so a chosen category always brings its children along.
+ *
+ * @param mixed  $saved
+ * @param string $taxonomy
+ * @return array<int,int>
+ */
+function oko_packaging_fee_term_ids($saved, string $taxonomy): array
+{
+	$ids = array();
+	foreach ((array) $saved as $id) {
+		$id = (int) $id;
+		if ($id <= 0) {
+			continue;
+		}
+		$ids[$id] = $id;
+		$children = get_term_children($id, $taxonomy);
+		if (is_array($children)) {
+			foreach ($children as $child) {
+				$ids[(int) $child] = (int) $child;
+			}
+		}
+	}
+	return array_values($ids);
+}
+
+/** The combined tax ratio (e.g. 0.25) for a fee tax class, or 0 when untaxed. */
+function oko_fee_tax_ratio(string $tax_class): float
+{
+	if (!function_exists('wc_tax_enabled') || !wc_tax_enabled()) {
+		return 0.0;
+	}
+	$total = 0.0;
+	foreach (WC_Tax::get_rates($tax_class) as $rate) {
+		$total += (float) $rate['rate'];
+	}
+	return $total / 100.0;
+}
 
 add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
 
@@ -650,6 +950,14 @@ function custom_override_checkout_fields(array $fields): array
 		'required'    => false,
 		'class'       => array('okoskabet-delivery-date form-row-wide'),
 		'clear'       => true
+	);
+
+	$fields['billing']['billing_okoskabet_pickup_location_id'] = array(
+		'label'       => __('Pickup location', O_TEXTDOMAIN),
+		'placeholder' => '',
+		'required'    => false,
+		'class'       => array('okoskabet-pickup-location-id form-row-wide'),
+		'clear'       => true,
 	);
 
 	$fields['billing']['billing_okoskabet_delivery_location'] = array(
@@ -679,6 +987,7 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 	$delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 	$delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
 	$delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+	$pickup_location_id = $order->get_meta('_billing_okoskabet_pickup_location_id', true);
 
 	// Resolve the merchant that fulfilled the order. `resolve_for_order`
 	// prefers the stored stamp written at checkout, and only falls back
@@ -715,6 +1024,9 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 	}
 	if (!empty($delivery_date)) {
 		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date) . "\n";
+	}
+	if (!empty($pickup_location_id)) {
+		echo esc_html__('Økoskabet pickup location', O_TEXTDOMAIN) . ': ' . esc_html($pickup_location_id) . "\n";
 	}
 	if (!empty($delivery_location)) {
 		echo esc_html__('Økoskabet Delivery location', O_TEXTDOMAIN) . ': ' . esc_html($delivery_location) . "\n";
@@ -817,10 +1129,16 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			return;
 		}
 
-		$is_shed_delivery = false;
+		$is_shed_delivery  = false;
+		$is_store_pickup   = false;
 		foreach ($order->get_shipping_methods() as $shipping_method) {
-			if ($shipping_method->get_method_id() === 'hey_okoskabet_shipping_shed') {
+			$method_id = $shipping_method->get_method_id();
+			if ($method_id === 'hey_okoskabet_shipping_shed') {
 				$is_shed_delivery = true;
+				break;
+			}
+			if ($method_id === 'hey_okoskabet_shipping_store_pickup') {
+				$is_store_pickup = true;
 				break;
 			}
 		}
@@ -829,50 +1147,70 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			$order_shed = '';
 		}
 
+		// A store pickup has no delivery target at all — the shop keeps the
+		// goods until the customer collects them — so it carries neither a
+		// shed reservation nor a delivery address. What it does carry is the
+		// place to collect from, chosen at checkout from the merchant's own
+		// pickup locations.
+		$order_pickup_location_id = $is_store_pickup
+			? $order->get_meta('_billing_okoskabet_pickup_location_id', true)
+			: '';
+
 		$url = $api_url . '/api/v1/shipments/';
 
-		$data = !empty($order_shed) ? [
-			'locale' => get_locale(),
-			'allow_invalid' => true,
+		// One shipment, three shapes. Everything every shipment carries is
+		// built once; each type then adds only what makes it that type —
+		// so a new key (like order_number) is added in one place, not three.
+		$data = [
+			'locale'             => get_locale(),
+			'allow_invalid'      => true,
 			'shipment_reference' => (string) $order_number,
-			'customer' => [
+			// The shop's own order id, so a support conversation has something
+			// the merchant recognises. Økoskabet keeps two: the bare number
+			// people search on, and the reference as the shop prints it (which
+			// a numbering plugin may prefix, "#1042" and such). Write-only at
+			// Økoskabet's end; shipment_reference (our stable key) is untouched.
+			'webshop_order_number'    => (string) $order->get_id(),
+			'webshop_order_reference' => (string) $order->get_order_number(),
+			'customer'           => [
 				'first_name' => $order->get_billing_first_name(),
-				'last_name' => $order->get_billing_last_name(),
-				'phone' => $order->get_billing_phone(),
-				'email' => $order->get_billing_email(),
+				'last_name'  => $order->get_billing_last_name(),
+				'phone'      => $order->get_billing_phone(),
+				'email'      => $order->get_billing_email(),
 			],
-			'notes' => (string) $order->get_customer_note(),
-			'delivery_date' => $order_delivery_date,
-			'reservation' => [
-				'shed_id' => $order_shed,
+			'notes'              => (string) $order->get_customer_note(),
+			'delivery_date'      => $order_delivery_date,
+		];
+
+		if ($is_store_pickup) {
+			// A collection has no delivery target at all — the shop keeps the
+			// goods — so it names the place to collect from instead.
+			$data['shipment_type']      = 'store_pickup';
+			$data['pickup_location_id'] = $order_pickup_location_id !== '' ? (int) $order_pickup_location_id : null;
+		} elseif (!empty($order_shed)) {
+			$data['reservation'] = [
+				'shed_id'           => $order_shed,
 				'max_duration_days' => 1,
-			]
-		] : [
-			'locale' => get_locale(),
-			'allow_invalid' => true,
-			'shipment_reference' => (string) $order_number,
-			'customer' => [
-				'first_name' => $order->get_billing_first_name(),
-				'last_name' => $order->get_billing_last_name(),
-				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
-				'phone' => $order->get_billing_phone(),
-				'email' => $order->get_billing_email(),
-			],
-			'home_delivery' => array_filter([
-				'recipient_name' => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
-				'address_1' => $order->get_shipping_address_1(),
-				'address_2' => $order->get_shipping_address_2(),
-				'city' => $order->get_shipping_city(),
-				'postal_code' => $order->get_shipping_postcode(),
+			];
+		} else {
+			$recipient_name = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
+			$data['customer']['recipient_name'] = $recipient_name;
+			$data['home_delivery'] = array_filter([
+				'recipient_name' => $recipient_name,
+				'address_1'      => $order->get_shipping_address_1(),
+				'address_2'      => $order->get_shipping_address_2(),
+				'city'           => $order->get_shipping_city(),
+				'postal_code'    => $order->get_shipping_postcode(),
 				// Combined English location + free-text note, or null if empty.
-				'location' => !empty($logistics_note) ? $logistics_note : null,
-			]),
+				'location'       => !empty($logistics_note) ? $logistics_note : null,
+			]);
 			// Send the logistics note (dropdown selection + free-text) as the API
 			// notes field so it appears in Økoskabet's Notes column. Falls back to
 			// the standard WooCommerce customer note when no logistics note is set.
-			'notes' => !empty($logistics_note) ? $logistics_note : (string) $order->get_customer_note(),
-			'delivery_date' => $order_delivery_date,
-		];
+			if (!empty($logistics_note)) {
+				$data['notes'] = $logistics_note;
+			}
+		}
 
 		$response = wp_remote_post($url, array(
 			'timeout' => 15,
@@ -899,7 +1237,9 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 
 		$customer_note = $order->get_customer_note() ?: '';
 		$oko_order_note = 'ØKOSKABET ' . $order_delivery_date;
-		if (empty($order_shed)) {
+		if ($is_store_pickup) {
+			$oko_order_note .= ' ' . __('Store pickup', O_TEXTDOMAIN);
+		} elseif (empty($order_shed)) {
 			$oko_order_note .= ' Hjemmelevering';
 		} else {
 			$oko_order_note .= ' ' . $order_shed;
@@ -925,6 +1265,13 @@ function okoskabet_woocommerce_plugin_after_checkout_validation(array $fields): 
 	if ($shipping_method === 'hey_okoskabet_shipping_home') {
 		if (empty($fields['billing_okoskabet_delivery_date'])) {
 			wc_add_notice(__("Please select a Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
+		}
+	}
+	// A collection needs somewhere to collect from and a day to do it on.
+	// Without both, the shipment would be created pointing nowhere.
+	if ($shipping_method === 'hey_okoskabet_shipping_store_pickup') {
+		if (empty($fields['billing_okoskabet_pickup_location_id']) || empty($fields['billing_okoskabet_delivery_date'])) {
+			wc_add_notice(__("Please select a pickup location and a pickup date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
 	}
 }

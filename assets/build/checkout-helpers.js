@@ -2,13 +2,17 @@
  * Økoskabet WooCommerce Plugin — checkout helpers
  *
  * This file replaces the inline JavaScript that previously lived in
- * functions/functions.php. It contains two independent IIFE modules:
+ * functions/functions.php. It contains three independent IIFE modules:
  *
  *   1. Delivery exceptions overlay
  *      Watches the home_delivery / sheds REST responses for an
  *      `exceptions_explanation` payload and replaces Svelte's
  *      "Ingen tilgængelige datoer" placeholder with a per-product
  *      explanation when the cart's products have conflicting rules.
+ *
+ *   3. Store pickup UI
+ *      Renders the pickup location and pickup date the customer collects
+ *      on, when Butiksafhentning is the selected shipping method.
  *
  *   2. Delivery location dropdown / note UI
  *      Renders a per-stop dropdown ("By the front door", "By the stairs",
@@ -18,6 +22,7 @@
  * Configuration is provided by PHP via three globals:
  *   - window._okoskabet_checkout           (config object)
  *   - window._okoskabet_overlay_strings    (translatable strings)
+ *   - window._okoskabet_pickup_strings     (store-pickup strings)
  *
  * Both globals are emitted by wp_add_inline_script() in PHP so this
  * file remains static and cacheable.
@@ -424,6 +429,260 @@
 			jQuery(document).ready(function () {
 				fetchAndRender();
 			});
+		} else {
+			document.addEventListener("DOMContentLoaded", fetchAndRender);
+		}
+	}());
+
+	// =========================================================================
+	// Module 3: store pickup (Butiksafhentning)
+	// =========================================================================
+	//
+	// A store pickup goes nowhere: the shop keeps the goods until the customer
+	// collects them. So this method needs neither an address nor a shed — it
+	// needs the place to collect from and the day to collect on. Both are
+	// rendered here, into the same order-review table the other Økoskabet UI
+	// uses, and written into hidden billing fields that PHP reads when it
+	// creates the shipment.
+	//
+	// The dates come from the plugin's own REST proxy, which has already run
+	// them through the merchant's per-product cutoff rules — so a collection
+	// obeys the same cutoffs a delivery does.
+
+	(function () {
+		var PICKUP_METHOD    = "hey_okoskabet_shipping_store_pickup";
+		var FIELD_LOCATION   = "billing_okoskabet_pickup_location_id";
+		var FIELD_DATE       = "billing_okoskabet_delivery_date";
+		var WRAPPER_ID       = "okoskabet_pickup_wrapper";
+		var SELECT_PLACE_ID  = "okoskabet_pickup_place";
+		var SELECT_DATE_ID   = "okoskabet_pickup_date";
+		var locationsCache   = null;
+		var locationsCacheKey = null;
+		var inFlight         = false;
+		var chosenLocationId = "";
+
+		function strings() {
+			var s = window._okoskabet_pickup_strings || {};
+			return {
+				place:    s.place    || "Afhentningssted",
+				date:     s.date     || "Afhentningsdato",
+				choose:   s.choose   || "\u2014 v\u00e6lg \u2014",
+				noPlaces: s.noPlaces || "Ingen afhentningssteder er sat op. Kontakt butikken.",
+				noDates:  s.noDates  || "Ingen afhentningsdatoer er ledige lige nu. Kontakt butikken."
+			};
+		}
+
+		function selectedMethod() {
+			var checked = document.querySelector("input[name='shipping_method[0]']:checked");
+			if (checked) { return checked.value; }
+			// A zone with a single method renders a hidden input rather than a radio.
+			var only = document.querySelector("input[name='shipping_method[0]']");
+			return only ? only.value : "";
+		}
+
+		function isStorePickup() { return selectedMethod() === PICKUP_METHOD; }
+
+		function removeUI() {
+			var rows = document.querySelectorAll("tr." + WRAPPER_ID);
+			Array.prototype.forEach.call(rows, function (r) {
+				if (r.parentNode) { r.parentNode.removeChild(r); }
+			});
+		}
+
+		function syncHiddenFields() {
+			var lf = document.getElementById(FIELD_LOCATION);
+			var df = document.getElementById(FIELD_DATE);
+			var ls = document.getElementById(SELECT_PLACE_ID);
+			var ds = document.getElementById(SELECT_DATE_ID);
+			// With one shop there is no dropdown to read, so the id is held
+			// here instead.
+			if (lf) { lf.value = ls ? (ls.value || "") : chosenLocationId; }
+			if (df && ds) { df.value = ds.value || ""; }
+		}
+
+		function formatDate(iso) {
+			var loc = (window._okoskabet_checkout || {}).locale || "da-DK";
+			loc = String(loc).replace("_", "-");
+			try {
+				// Same shape as assets/src/format-date.ts — parse as UTC and
+				// format in UTC, so pickup dates read identically to the shed
+				// and home-delivery dates the Svelte checkout renders.
+				var out = new Date(iso).toLocaleDateString(loc, {
+					weekday: "long", day: "numeric", month: "long", year: "numeric",
+					timeZone: "UTC"
+				});
+				return out.charAt(0).toUpperCase() + out.slice(1);
+			} catch (e) { return iso; }
+		}
+
+		function addressLine(loc) {
+			var a = loc && loc.address ? loc.address : {};
+			var parts = [];
+			if (a.address)     { parts.push(a.address); }
+			if (a.postal_code) { parts.push(a.postal_code); }
+			if (a.city)        { parts.push(a.city); }
+			return parts.join(", ");
+		}
+
+		function row(labelText, contentNode) {
+			var tr = document.createElement("tr");
+			tr.className = WRAPPER_ID;
+			var th = document.createElement("th");
+			th.textContent = labelText;
+			var td = document.createElement("td");
+			td.appendChild(contentNode);
+			tr.appendChild(th);
+			tr.appendChild(td);
+			return tr;
+		}
+
+		function buildUI(locations) {
+			removeUI();
+			if (!isStorePickup()) { return; }
+			var t = strings();
+
+			// Two <tr> rows, appended next to the shipping row. A <tbody>
+			// inserted as a sibling of a <tr> is invalid nesting and renders
+			// as an anonymous nested table, misaligned with the totals.
+			var wrapper = document.createDocumentFragment();
+
+			if (!locations || !locations.length) {
+				var warn = document.createElement("div");
+				warn.className = "okoskabet-pickup-empty";
+				warn.textContent = t.noPlaces;
+				wrapper.appendChild(row(t.place, warn));
+				place(wrapper);
+				syncHiddenFields();
+				return;
+			}
+
+			// Where to collect. With one shop there is nothing to choose, so
+			// the address is stated rather than offered as a menu of one.
+			var placeSel = null;
+			if (locations.length === 1) {
+				chosenLocationId = String(locations[0].id);
+				var only = document.createElement("div");
+				only.className = "okoskabet-pickup-place";
+				var addrOnly = addressLine(locations[0]);
+				only.textContent = addrOnly
+					? (locations[0].name + " \u2014 " + addrOnly)
+					: locations[0].name;
+				wrapper.appendChild(row(t.place, only));
+			} else {
+				placeSel = document.createElement("select");
+				placeSel.id = SELECT_PLACE_ID;
+				placeSel.style.width = "100%";
+				locations.forEach(function (loc) {
+					var o = document.createElement("option");
+					o.value = String(loc.id);
+					var addr = addressLine(loc);
+					o.textContent = addr ? (loc.name + " \u2014 " + addr) : loc.name;
+					placeSel.appendChild(o);
+				});
+				chosenLocationId = String(locations[0].id);
+				wrapper.appendChild(row(t.place, placeSel));
+			}
+
+			// When to collect, for whichever location is selected.
+			var dateSel = document.createElement("select");
+			dateSel.id = SELECT_DATE_ID;
+			dateSel.style.width = "100%";
+			wrapper.appendChild(row(t.date, dateSel));
+
+			function fillDates() {
+				var wanted = placeSel ? placeSel.value : chosenLocationId;
+				chosenLocationId = wanted;
+				var chosen = null;
+				for (var i = 0; i < locations.length; i++) {
+					if (String(locations[i].id) === wanted) { chosen = locations[i]; break; }
+				}
+				var dates = (chosen && chosen.delivery_dates) ? chosen.delivery_dates : [];
+				dateSel.innerHTML = "";
+				if (!dates.length) {
+					var o = document.createElement("option");
+					o.value = "";
+					o.textContent = t.noDates;
+					dateSel.appendChild(o);
+				} else {
+					dates.forEach(function (d) {
+						var o = document.createElement("option");
+						o.value = d;
+						o.textContent = formatDate(d);
+						dateSel.appendChild(o);
+					});
+				}
+				syncHiddenFields();
+			}
+
+			if (placeSel) { placeSel.addEventListener("change", fillDates); }
+			dateSel.addEventListener("change", syncHiddenFields);
+
+			place(wrapper);
+			fillDates();
+		}
+
+		// Drop the rows into the order review table, next to the shipping row
+		// so they read as part of the delivery choice.
+		function place(wrapper) {
+			var shippingRow = document.querySelector(".woocommerce-shipping-totals");
+			if (shippingRow && shippingRow.parentNode) {
+				if (shippingRow.nextSibling) {
+					shippingRow.parentNode.insertBefore(wrapper, shippingRow.nextSibling);
+				} else {
+					shippingRow.parentNode.appendChild(wrapper);
+				}
+				return;
+			}
+			var review = document.getElementById("order_review");
+			if (review) { review.appendChild(wrapper); }
+		}
+
+		function endpoint() {
+			var c = window._okoskabet_checkout || {};
+			return (c.endpoints && c.endpoints.storePickup) || "";
+		}
+
+		function cartKey() {
+			var ids = document.getElementById("okoskabet-cart-product-ids");
+			return ids ? ids.value : "";
+		}
+
+		function fetchAndRender() {
+			if (!isStorePickup()) { removeUI(); return; }
+			var key = cartKey();
+			if (locationsCache !== null && locationsCacheKey === key) {
+				buildUI(locationsCache);
+				return;
+			}
+			var ep = endpoint();
+			if (!ep || inFlight) { return; }
+			var url = ep + (ep.indexOf("?") === -1 ? "?" : "&")
+				+ "product_ids=" + encodeURIComponent(key);
+			inFlight = true;
+			locationsCacheKey = key;
+			fetch(url, { credentials: "same-origin" })
+				.then(function (r) { return r.json(); })
+				.then(function (d) {
+					var results = d && d.results ? d.results : {};
+					locationsCache = results.pickup_locations || [];
+					inFlight = false;
+					buildUI(locationsCache);
+				})
+				.catch(function () {
+					inFlight = false;
+					locationsCache = [];
+					buildUI([]);
+				});
+		}
+
+		document.addEventListener("change", function (e) {
+			if (e.target && e.target.name === "shipping_method[0]") { fetchAndRender(); }
+		});
+		if (window.jQuery) {
+			// The cache is keyed on the cart, so this only refetches when the
+			// cart actually changed — not on every address or coupon edit.
+			jQuery(document.body).on("updated_checkout", fetchAndRender);
+			jQuery(document).ready(fetchAndRender);
 		} else {
 			document.addEventListener("DOMContentLoaded", fetchAndRender);
 		}

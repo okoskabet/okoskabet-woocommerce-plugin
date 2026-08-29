@@ -733,3 +733,294 @@ msgstr "kræver at <a href=\"https://wordpress.org/plugins/woocommerce/\">WooCom
 
 msgid "requires WooCommerce %1$s or newer. You are running WooCommerce %2$s. Update WooCommerce, then re-activate Økoskabet."
 msgstr "kræver WooCommerce %1$s eller nyere. Du kører WooCommerce %2$s. Opdater WooCommerce, og aktivér derefter Økoskabet igen."
+
+# ----------------------------------------------------------------------
+# Delivery days display + upgrade notice (1.4.2)
+# ----------------------------------------------------------------------
+
+msgid "Delivery days shown in checkout"
+msgstr "Leveringsdage vist i checkout"
+
+msgid "Choose how many delivery days the customer sees. Leave the number at 0 to keep the existing behaviour (the merchant's \"maximum days in future\" setting)."
+msgstr "Vælg hvor mange leveringsdage kunden ser. Lad tallet stå på 0 for at bevare den nuværende opførsel (merchantens \"maksimalt antal dage frem\"-indstilling)."
+
+msgid "Number of delivery days"
+msgstr "Antal leveringsdage"
+
+msgid "Number of calendar days ahead"
+msgstr "Antal kalenderdage frem"
+
+msgid "Value"
+msgstr "Værdi"
+
+msgid "Show a special number of delivery days for products in this section"
+msgstr "Vis et særligt antal leveringsdage for produkter i denne sektion"
+
+msgid "Uses the same mode (number of days / calendar days) as the global setting. When a cart mixes limits, the smallest wins."
+msgstr "Bruger samme tilstand (antal dage / kalenderdage) som den globale indstilling. Når en kurv blander grænser, vinder den mindste."
+
+msgid "The delivery-day logic has been updated. Please review your delivery-day setup so dates show correctly in checkout — settings now need to match in BOTH the Økoskabet plugin and the Økoskabet back office."
+msgstr "Logikken for leveringsdage er blevet opdateret. Gennemgå venligst din opsætning af leveringsdage, så datoer vises korrekt i checkout — indstillingerne skal nu stemme overens i BÅDE Økoskabet-pluginet og Økoskabets backoffice."
+
+msgid "Open delivery settings"
+msgstr "Åbn leveringsindstillinger"
+
+msgid "Got it, dismiss"
+msgstr "Forstået, luk"
+
+# ----------------------------------------------------------------------
+# WooCommerce Access token relabel (1.4.2)
+# ----------------------------------------------------------------------
+
+msgid "The merchant's Access token from Økoskabet's back office (under WooCommerce settings). Used for all API calls."
+msgstr "Merchantens Access token fra Økoskabets back office (under WooCommerce-indstillinger). Bruges til alle API-kald."
+
+msgid "The merchant's Access token from Økoskabet's back office (under WooCommerce settings). Used for all API calls (sheds, dates, shipment creation)."
+msgstr "Merchantens Access token fra Økoskabets back office (under WooCommerce-indstillinger). Bruges til alle API-kald (skabe, datoer, shipment-oprettelse)."
+
+msgid "Show/hide access token"
+msgstr "Vis/skjul access token"
+
+msgid "Enable: Earlier cutoff rules"
+msgstr "Aktivér: Regler for tidligere cutoff"
+
+msgid "Each rule closes ordering for the chosen categories and/or tags a number of days before delivery, at a set time — so e.g. fresh produce and dairy can each have their own deadline. If several rules apply to the cart, the earliest deadline wins."
+msgstr "Hver regel lukker for bestilling af de valgte kategorier og/eller tags et antal dage før levering, på et fast tidspunkt — så f.eks. frisk frugt & grønt og mejeri kan have hver sin frist. Gælder flere regler for kurven, vinder den tidligste frist."
+
+msgid "Add cutoff rule"
+msgstr "Tilføj cutoff-regel"
+
+msgid "Days before delivery"
+msgstr "Dage før levering"
+
+msgid "Cutoff time"
+msgstr "Cutoff-tidspunkt"
+
+msgid "e.g. Fresh produce"
+msgstr "f.eks. Frisk frugt & grønt"
+
+msgid "Store pickup"
+msgstr "Butiksafhentning"
+
+msgid "The customer collects the order in your shop"
+msgstr "Kunden henter ordren i din butik"
+
+msgid "Pickup location"
+msgstr "Afhentningssted"
+
+msgid "Pickup date"
+msgstr "Afhentningsdato"
+
+msgid "— choose —"
+msgstr "— vælg —"
+
+msgid "No pickup locations have been set up. Please contact the shop."
+msgstr "Der er ikke sat nogen afhentningssteder op. Kontakt venligst butikken."
+
+msgid "No pickup dates are available right now. Please contact the shop."
+msgstr "Der er ingen ledige afhentningsdatoer lige nu. Kontakt venligst butikken."
+
+# ----------------------------------------------------------------------
+# Packaging fee (1.4.6)
+# ----------------------------------------------------------------------
+
+msgid "Packaging fee"
+msgstr "Emballagegebyr"
+
+msgid ""
+"An extra fee added to the order at checkout, for packaging, cool packs, "
+"boxes and the like. It is a cart fee, not shipping — so a free-shipping "
+"coupon does not remove it, and it is charged once per order."
+msgstr ""
+"Et ekstra gebyr, der lægges på ordren i checkout — til emballage, køleelementer, "
+"kasser og lignende. Det er et kurvgebyr, ikke fragt, så en rabatkode med gratis "
+"fragt fjerner det ikke, og det opkræves én gang pr. ordre."
+
+msgid "Add a packaging fee"
+msgstr "Tilføj emballagegebyr"
+
+msgid ""
+"Turn the fee on. With this off nothing is added and the settings below are "
+"ignored."
+msgstr ""
+"Tænd for gebyret. Er dette slået fra, lægges der intet på, og indstillingerne "
+"nedenfor bruges ikke."
+
+msgid "Fee text at checkout"
+msgstr "Tekst i checkout"
+
+msgid "What the customer sees on the line, e.g. \"Packaging\"."
+msgstr "Det kunden ser på linjen, fx \"Emballage\"."
+
+msgid "Packaging"
+msgstr "Emballage"
+
+msgid "Fee amount"
+msgstr "Gebyrets størrelse"
+
+msgid ""
+"The fee on every order. Leave the ladder below empty to use this fixed "
+"amount."
+msgstr ""
+"Gebyret på alle ordrer. Lad trappen nedenfor stå tom for at bruge dette faste "
+"beløb."
+
+msgid "Fee ladder (optional)"
+msgstr "Gebyrtrappe (valgfri)"
+
+msgid ""
+"Same format as the shipping fee ladder: one tier per line as \"from amount = "
+"fee\". The highest tier whose \"from\" is not above the cart subtotal wins, "
+"and 0 means no fee. Example: 0 = 28 / 500 = 15 / 1000 = 0 charges 28 kr on "
+"small orders and nothing from 1000 kr up. Leave empty to use the fixed "
+"amount above."
+msgstr ""
+"Samme format som fragttrappen: ét trin pr. linje som \"fra beløb = gebyr\". "
+"Det højeste trin, hvis \"fra\" ikke er over kurvens subtotal, vinder, og 0 "
+"betyder intet gebyr. Eksempel: 0 = 28 / 500 = 15 / 1000 = 0 giver 28 kr på "
+"små ordrer og intet fra 1000 kr og op. Lad feltet stå tomt for at bruge det "
+"faste beløb ovenfor."
+
+msgid "Amounts are excl. VAT"
+msgstr "Beløb er ekskl. moms"
+
+msgid ""
+"Leave this off if you typed the amount the customer should actually pay "
+"(incl. VAT) — the normal case. Tick it to have VAT added on top of the "
+"amount instead."
+msgstr ""
+"Lad denne stå slået fra, hvis du har skrevet det beløb, kunden faktisk skal "
+"betale (inkl. moms) — det normale. Sæt flueben for i stedet at lægge moms oven "
+"i beløbet."
+
+msgid "Not taxed"
+msgstr "Ingen moms"
+
+msgid "Standard rate"
+msgstr "Standardsats"
+
+msgid "VAT class"
+msgstr "Momsklasse"
+
+msgid ""
+"Which VAT rate the fee is charged at. Use the same class as the goods it "
+"packs."
+msgstr ""
+"Hvilken momssats gebyret opkræves med. Brug samme klasse som de varer, der "
+"pakkes."
+
+msgid "Only on these delivery methods"
+msgstr "Kun på disse leveringsmetoder"
+
+msgid ""
+"Tick the methods that should carry the fee — for example skip it on store "
+"pickup. Leave every box empty to charge the fee on all orders, including "
+"non-Økoskabet shipping methods."
+msgstr ""
+"Sæt flueben ved de metoder, gebyret skal gælde for — fx for at undlade det ved "
+"butiksafhentning. Lad alle felter stå tomme for at lægge gebyret på alle "
+"ordrer, også fragtmetoder der ikke kommer fra Økoskabet."
+
+msgid "Home delivery"
+msgstr "Hjemmelevering"
+
+msgid "Only when the cart contains these categories"
+msgstr "Kun når kurven indeholder disse kategorier"
+
+msgid ""
+"Leave empty to charge the fee on every order. Tick categories to charge it "
+"only when the cart holds at least one product from them — for example a "
+"frozen category that needs an insulated box. Sub-categories count too."
+msgstr ""
+"Lad feltet stå tomt for at opkræve gebyret på alle ordrer. Sæt flueben ved "
+"kategorier for kun at opkræve det, når kurven indeholder mindst én vare "
+"derfra — fx en frost-kategori, der kræver en flamingokasse. Underkategorier "
+"tæller med."
+
+msgid "…or these tags"
+msgstr "…eller disse tags"
+
+msgid ""
+"Works alongside the categories above: one match in either list is enough for "
+"the fee to apply."
+msgstr ""
+"Virker sammen med kategorierne ovenfor: ét match i én af listerne er nok til, "
+"at gebyret opkræves."
+
+# ----------------------------------------------------------------------
+# Packaging fee rules + coupon (1.4.6)
+# ----------------------------------------------------------------------
+
+msgid ""
+"An extra fee added to the order at checkout, for packaging, cool packs, "
+"boxes and the like. It is a cart fee, not shipping — a free-shipping coupon "
+"does not remove it, and it is charged once per order."
+msgstr ""
+"Et ekstra gebyr, der lægges på ordren i checkout — til emballage, "
+"køleelementer, kasser og lignende. Det er et kurvgebyr, ikke fragt, så en "
+"rabatkode med gratis fragt fjerner det ikke, og det opkræves én gang pr. ordre."
+
+msgid ""
+"The rules are read from the top down and the FIRST one that fits the cart "
+"wins — only ever one fee. Put your specific rules first and leave a rule "
+"with nothing selected at the bottom as the catch-all."
+msgstr ""
+"Reglerne læses oppefra og ned, og den FØRSTE der passer til kurven vinder — "
+"der opkræves altid kun ét gebyr. Sæt dine specifikke regler øverst, og lad en "
+"regel uden noget valgt stå nederst som opsamling."
+
+msgid "Packaging fee saved."
+msgstr "Emballagegebyr gemt."
+
+msgid "Save packaging fee"
+msgstr "Gem emballagegebyr"
+
+msgid "Add fee rule"
+msgstr "Tilføj gebyrregel"
+
+msgid ""
+"Leave \"excl. VAT\" off if you typed the amount the customer should actually "
+"pay — the normal case. These two settings apply to every rule below."
+msgstr ""
+"Lad \"ekskl. moms\" stå slået fra, hvis du har skrevet det beløb, kunden "
+"faktisk skal betale — det normale. De to indstillinger gælder for alle regler "
+"nedenfor."
+
+msgid "e.g. Packaging (frozen)"
+msgstr "fx Emballage (frost)"
+
+msgid "Amount"
+msgstr "Beløb"
+
+msgid "Move up"
+msgstr "Flyt op"
+
+msgid "Move down"
+msgstr "Flyt ned"
+
+msgid "Sub-categories count too. Leave empty for any product."
+msgstr "Underkategorier tæller med. Lad feltet stå tomt for alle varer."
+
+msgid "One match in either list is enough."
+msgstr "Ét match i én af listerne er nok."
+
+msgid "Delivery methods"
+msgstr "Leveringsmetoder"
+
+msgid "Leave empty for any delivery method."
+msgstr "Lad feltet stå tomt for alle leveringsmetoder."
+
+msgid ""
+"Same format as the shipping fee ladder: one tier per line as \"from amount = "
+"fee\". The highest tier at or below the cart subtotal wins, and 0 means no "
+"fee. Leave empty to use the fixed amount above."
+msgstr ""
+"Samme format som fragttrappen: ét trin pr. linje som \"fra beløb = gebyr\". "
+"Det højeste trin på eller under kurvens subtotal vinder, og 0 betyder intet "
+"gebyr. Lad feltet stå tomt for at bruge det faste beløb ovenfor."
+
+msgid "Free packaging"
+msgstr "Gratis emballage"
+
+msgid "Waive Økoskabet's packaging fee for orders using this coupon."
+msgstr "Fjern Økoskabets emballagegebyr på ordrer med denne rabatkode."

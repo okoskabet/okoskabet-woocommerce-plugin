@@ -207,6 +207,17 @@ class Merchants extends Base {
 		$normalised = self::merge_with_defaults( $config );
 		update_option( self::OPTION_KEY, $normalised );
 		self::$config_cache = $normalised;
+
+		// Credentials or the staging flag may have just changed, which means
+		// the cached /configuration answer (shipping methods, cached for five
+		// minutes per merchant) can now be wrong — and a stale entry hides the
+		// shipping methods at checkout until it expires. Drop it for every
+		// merchant, plus the legacy single-merchant key.
+		$ids = array_keys( (array) ( $normalised['merchants'] ?? array() ) );
+		$ids[] = 'default';
+		foreach ( array_unique( $ids ) as $id ) {
+			delete_transient( \o_shipping_methods_transient_key( (string) $id ) );
+		}
 	}
 
 	/**
@@ -499,14 +510,19 @@ class Merchants extends Base {
 		}
 
 		foreach ( self::$legacy_option_to_merchant as $opt_key => $merchant_key ) {
+			// An unchecked CMB2 checkbox is ABSENT from the saved option, not
+			// present-and-false. Skipping absent keys would therefore make
+			// "staging off" impossible to save: the merchant would keep
+			// pointing at staging while holding a production API key, and
+			// every call would come back 401 with no shipping methods.
+			if ( $merchant_key === 'staging' ) {
+				$existing[ $merchant_key ] = ! empty( $option[ $opt_key ] );
+				continue;
+			}
 			if ( ! array_key_exists( $opt_key, $option ) ) {
 				continue;
 			}
-			$value = $option[ $opt_key ];
-			if ( $merchant_key === 'staging' ) {
-				$value = ! empty( $value );
-			}
-			$existing[ $merchant_key ] = $value;
+			$existing[ $merchant_key ] = $option[ $opt_key ];
 		}
 
 		$normalised = self::normalise_merchant( $id, $existing );
@@ -902,7 +918,7 @@ class Merchants extends Base {
 									?>
 								</p>
 							<?php endif; ?>
-							<p class="oko-help"><?php esc_html_e( 'From Økoskabet\'s backoffice. Used for all API calls (sheds, dates, shipment creation).', O_TEXTDOMAIN ); ?></p>
+							<p class="oko-help"><?php esc_html_e( 'The merchant\'s API key from Økoskabet\'s back office, under "API & Webhooks" (NOT the WooCommerce "Access token"). Used for all API calls (sheds, dates, shipment creation).', O_TEXTDOMAIN ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -1275,8 +1291,10 @@ class Merchants extends Base {
 		}
 
 		// Bust the per-merchant shipping-methods cache so the next page
-		// load sees the freshly-tested configuration.
-		delete_transient( 'okoskabet_shipping_methods_' . $merchant['id'] );
+		// load sees the freshly-tested configuration. The key must match the
+		// one o_merchant_supports_method() writes, which is prefixed with
+		// O_TEXTDOMAIN and run through sanitize_key().
+		delete_transient( \o_shipping_methods_transient_key( (string) $merchant['id'] ) );
 
 		$this->redirect_back( array( 'oko_merchants_tested' => 'ok' ) );
 	}

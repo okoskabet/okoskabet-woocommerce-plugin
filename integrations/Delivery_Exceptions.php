@@ -49,6 +49,35 @@ class Delivery_Exceptions extends Base {
 	const CAPABILITY = 'manage_woocommerce';
 
 	/**
+	 * Identifies the one-time upgrade notice that tells merchants to review
+	 * their delivery-day setup after the rules engine changed. Bump this only
+	 * if a future change warrants showing the notice again. Stored (when
+	 * dismissed) in the option below.
+	 */
+	const UPGRADE_NOTICE_KEY    = 'delivery-days-v1';
+	const UPGRADE_NOTICE_OPTION = 'okoskabet_delivery_notice_dismissed';
+
+	/**
+	 * The exception families that carry a per-section display-limit override,
+	 * mapped to the rule `type` collect_applicable_rules() emits for each. This
+	 * is the single source of truth for the section list — config defaults,
+	 * merge, save, and limit-resolution all derive from it.
+	 */
+	const LIMIT_SECTIONS = array(
+		'weekdays'   => 'weekday_set',
+		'only_on'    => 'only_on',
+		'from_until' => 'from_until',
+	);
+
+	/**
+	 * A week of head-room added past any rule-referenced date when sizing the
+	 * API query window, so a date on the window boundary isn't cut off by the
+	 * API's lead-time/cutoff offset (and the first matching weekday after a
+	 * "from" date is fetched).
+	 */
+	const QUERY_WINDOW_BUFFER_DAYS = 7;
+
+	/**
 	 * Initialize.
 	 */
 	public function initialize() {
@@ -65,6 +94,72 @@ class Delivery_Exceptions extends Base {
 		// Hook into the date-filter pipeline that already exists in OkoRest.
 		// Filter signature: ($dates, $product_ids).
 		add_filter( 'okoskabet_filtered_delivery_dates', array( $this, 'filter_dates_for_cart' ), 10, 2 );
+
+		// One-time upgrade notice: after the delivery-rules change, remind
+		// merchants to double-check their delivery-day setup in BOTH the
+		// plugin and the Økoskabet back office. Only wire up the hooks while the
+		// notice is still pending, so a dismissed notice costs nothing on every
+		// later admin page load.
+		if ( is_admin() && get_option( self::UPGRADE_NOTICE_OPTION ) !== self::UPGRADE_NOTICE_KEY ) {
+			add_action( 'admin_notices', array( $this, 'maybe_render_upgrade_notice' ) );
+			add_action( 'admin_init', array( $this, 'maybe_dismiss_upgrade_notice' ) );
+		}
+	}
+
+	/**
+	 * Render the "review your delivery-day setup" notice, unless it has been
+	 * dismissed. Dismissible and persists across page loads (the dismiss link
+	 * stores a flag server-side; the native is-dismissible X only hides it for
+	 * the current view).
+	 */
+	public function maybe_render_upgrade_notice(): void {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return;
+		}
+		if ( get_option( self::UPGRADE_NOTICE_OPTION ) === self::UPGRADE_NOTICE_KEY ) {
+			return;
+		}
+
+		$settings_url = admin_url( 'admin.php?page=' . O_TEXTDOMAIN . '#okoskabet-delivery-exceptions' );
+		$dismiss_url  = wp_nonce_url(
+			add_query_arg( 'okoskabet_dismiss_delivery_notice', '1' ),
+			'okoskabet_dismiss_delivery_notice'
+		);
+		?>
+		<div class="notice notice-warning">
+			<p>
+				<strong><?php echo esc_html( O_NAME ); ?>:</strong>
+				<?php esc_html_e( 'The delivery-day logic has been updated. Please review your delivery-day setup so dates show correctly in checkout — settings now need to match in BOTH the Økoskabet plugin and the Økoskabet back office.', O_TEXTDOMAIN ); ?>
+			</p>
+			<p>
+				<a href="<?php echo esc_url( $settings_url ); ?>" class="button button-primary">
+					<?php esc_html_e( 'Open delivery settings', O_TEXTDOMAIN ); ?>
+				</a>
+				<a href="<?php echo esc_url( $dismiss_url ); ?>" class="button">
+					<?php esc_html_e( 'Got it, dismiss', O_TEXTDOMAIN ); ?>
+				</a>
+			</p>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Persist dismissal of the upgrade notice when the merchant clicks the
+	 * dismiss link, then redirect to a clean URL.
+	 */
+	public function maybe_dismiss_upgrade_notice(): void {
+		if ( empty( $_GET['okoskabet_dismiss_delivery_notice'] ) ) {
+			return;
+		}
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return;
+		}
+		check_admin_referer( 'okoskabet_dismiss_delivery_notice' );
+
+		update_option( self::UPGRADE_NOTICE_OPTION, self::UPGRADE_NOTICE_KEY );
+
+		wp_safe_redirect( remove_query_arg( array( 'okoskabet_dismiss_delivery_notice', '_wpnonce' ) ) );
+		exit;
 	}
 
 	// =========================================================================
@@ -83,6 +178,24 @@ class Delivery_Exceptions extends Base {
 			'only_on_enabled'    => false,
 			'from_until_enabled' => false,
 
+			// How many delivery days to show in checkout.
+			//   display_mode  'window' = within N calendar days, 'count' = first N dates.
+			//   display_value 0 = not configured (legacy: no display trimming;
+			//                 the API query window still uses the merchant's
+			//                 maximum_days_in_future).
+			'display_mode'  => 'window',
+			'display_value' => 0,
+
+			// Per-section "special" overrides of the display value. mode is
+			// 'global' (use display_value) or 'special' (use *_limit_value).
+			// When several apply to one cart, the smallest value wins.
+			'weekdays_limit_mode'    => 'global',
+			'weekdays_limit_value'   => 0,
+			'only_on_limit_mode'     => 'global',
+			'only_on_limit_value'    => 0,
+			'from_until_limit_mode'  => 'global',
+			'from_until_limit_value' => 0,
+
 			// Weekdays family: 7 entries (0=Sun…6=Sat in PHP date('w')).
 			// Each entry has its own enabled flag and lists of cat/tag IDs.
 			'weekdays' => array(
@@ -100,6 +213,17 @@ class Delivery_Exceptions extends Base {
 
 			// from_until: list of {label, from, until, enabled, categories, tags}.
 			'from_until' => array(),
+
+			// Per-rule cutoff. Each rule closes ordering for products carrying a
+			// chosen category and/or tag a set number of days before delivery, at
+			// a set time of day. Rules are independent, so (say) fresh produce and
+			// dairy can each have their own days/time. A cart's delivery date is
+			// dropped when ANY applicable rule's cutoff moment has passed. Cutoff
+			// is enforced here because the API doesn't expose the merchant's cutoff
+			// yet; if it starts to, prefer that source (see backend PR #1412).
+			'cutoff_enabled' => false,
+			// list of { label:string, days:int, time:string, enabled:bool, categories:int[], tags:int[] }
+			'cutoff_rules'   => array(),
 		);
 	}
 
@@ -107,11 +231,18 @@ class Delivery_Exceptions extends Base {
 	 * Load configuration with sane defaults.
 	 */
 	public static function get_config(): array {
+		// Read once per request: the date filter runs for every shed and every
+		// pickup location, and each call would otherwise rebuild the whole
+		// default config and re-merge it. Cleared by purge_rules_cache().
+		if ( self::$config_cache !== null ) {
+			return self::$config_cache;
+		}
 		$stored = get_option( self::OPTION_KEY, array() );
 		if ( ! is_array( $stored ) ) {
 			$stored = array();
 		}
-		return self::merge_with_defaults( $stored );
+		self::$config_cache = self::merge_with_defaults( $stored );
+		return self::$config_cache;
 	}
 
 	/**
@@ -124,6 +255,24 @@ class Delivery_Exceptions extends Base {
 		foreach ( array( 'weekdays_enabled', 'only_on_enabled', 'from_until_enabled' ) as $k ) {
 			if ( isset( $stored[ $k ] ) ) {
 				$defaults[ $k ] = (bool) $stored[ $k ];
+			}
+		}
+
+		// Display settings.
+		if ( isset( $stored['display_mode'] ) ) {
+			$defaults['display_mode'] = ( $stored['display_mode'] === 'count' ) ? 'count' : 'window';
+		}
+		if ( isset( $stored['display_value'] ) ) {
+			$defaults['display_value'] = max( 0, (int) $stored['display_value'] );
+		}
+		foreach ( array_keys( self::LIMIT_SECTIONS ) as $section ) {
+			$mode_key  = $section . '_limit_mode';
+			$value_key = $section . '_limit_value';
+			if ( isset( $stored[ $mode_key ] ) ) {
+				$defaults[ $mode_key ] = ( $stored[ $mode_key ] === 'special' ) ? 'special' : 'global';
+			}
+			if ( isset( $stored[ $value_key ] ) ) {
+				$defaults[ $value_key ] = max( 0, (int) $stored[ $value_key ] );
 			}
 		}
 
@@ -175,6 +324,52 @@ class Delivery_Exceptions extends Base {
 			}
 		}
 
+		// Per-rule cutoff.
+		if ( isset( $stored['cutoff_enabled'] ) ) {
+			$defaults['cutoff_enabled'] = (bool) $stored['cutoff_enabled'];
+		}
+		if ( isset( $stored['cutoff_rules'] ) && is_array( $stored['cutoff_rules'] ) ) {
+			$defaults['cutoff_rules'] = array();
+			foreach ( $stored['cutoff_rules'] as $item ) {
+				if ( ! is_array( $item ) ) {
+					continue;
+				}
+				$cats = array_map( 'intval', (array) ( $item['categories'] ?? array() ) );
+				$tags = array_map( 'intval', (array) ( $item['tags'] ?? array() ) );
+				if ( empty( $cats ) && empty( $tags ) ) {
+					continue; // a rule with no target does nothing.
+				}
+				$defaults['cutoff_rules'][] = array(
+					'label'      => sanitize_text_field( (string) ( $item['label'] ?? '' ) ),
+					'days'       => max( 0, (int) ( $item['days'] ?? 1 ) ),
+					'time'       => preg_match( '/^\d{1,2}:\d{2}$/', (string) ( $item['time'] ?? '' ) ) ? (string) $item['time'] : '09:00',
+					'enabled'    => (bool) ( $item['enabled'] ?? true ),
+					'categories' => $cats,
+					'tags'       => $tags,
+				);
+			}
+		} elseif ( isset( $stored['cutoff_tags'] ) && is_array( $stored['cutoff_tags'] ) ) {
+			// Legacy migration: the old model was a global lead + time plus a list
+			// of per-tag offsets. Fold each into a self-contained rule so saved
+			// settings keep working after the upgrade.
+			$legacy_lead = max( 0, (int) ( $stored['cutoff_lead_days'] ?? 1 ) );
+			$legacy_time = preg_match( '/^\d{1,2}:\d{2}$/', (string) ( $stored['cutoff_time'] ?? '' ) ) ? (string) $stored['cutoff_time'] : '09:00';
+			$defaults['cutoff_rules'] = array();
+			foreach ( $stored['cutoff_tags'] as $item ) {
+				if ( ! is_array( $item ) || empty( $item['tag'] ) ) {
+					continue;
+				}
+				$defaults['cutoff_rules'][] = array(
+					'label'      => '',
+					'days'       => $legacy_lead + max( 0, (int) ( $item['offset_days'] ?? 0 ) ),
+					'time'       => $legacy_time,
+					'enabled'    => (bool) ( $item['enabled'] ?? true ),
+					'categories' => array(),
+					'tags'       => array( (int) $item['tag'] ),
+				);
+			}
+		}
+
 		return $defaults;
 	}
 
@@ -217,9 +412,11 @@ class Delivery_Exceptions extends Base {
 				<input type="hidden" name="action" value="okoskabet_save_exceptions" />
 
 				<?php
+				$this->render_display_section( $config );
 				$this->render_weekdays_section( $config, $categories, $tags );
 				$this->render_only_on_section( $config, $categories, $tags );
 				$this->render_from_until_section( $config, $categories, $tags );
+				$this->render_cutoff_section( $config, $categories, $tags );
 				?>
 
 				<?php submit_button( __( 'Save delivery exceptions', O_TEXTDOMAIN ) ); ?>
@@ -268,6 +465,10 @@ class Delivery_Exceptions extends Base {
 					e.preventDefault();
 					addRow('from_until_rows', buildFromUntilRow(nextIndex('from_until_rows')));
 				}
+				if (e.target.matches('.oko-add-cutoff')) {
+					e.preventDefault();
+					addRow('cutoff_rows', buildCutoffRow(nextIndex('cutoff_rows')));
+				}
 			});
 
 			function nextIndex(containerId) {
@@ -294,6 +495,11 @@ class Delivery_Exceptions extends Base {
 				if (!tpl) return '';
 				return tpl.innerHTML.replace(/__INDEX__/g, i);
 			}
+			function buildCutoffRow(i) {
+				var tpl = document.getElementById('oko-template-cutoff');
+				if (!tpl) return '';
+				return tpl.innerHTML.replace(/__INDEX__/g, i);
+			}
 		})();
 		</script>
 
@@ -306,6 +512,135 @@ class Delivery_Exceptions extends Base {
 		echo '<script type="text/template" id="oko-template-from-until">';
 		$this->render_from_until_row( '__INDEX__', array( 'label' => '', 'from' => '', 'until' => '', 'enabled' => true, 'categories' => array(), 'tags' => array() ), $categories, $tags );
 		echo '</script>';
+
+		echo '<script type="text/template" id="oko-template-cutoff">';
+		$this->render_cutoff_row( '__INDEX__', array( 'label' => '', 'days' => 1, 'time' => '09:00', 'enabled' => true, 'categories' => array(), 'tags' => array() ), $categories, $tags );
+		echo '</script>';
+	}
+
+	/**
+	 * Per-rule cutoff section. Each rule closes ordering for products in a chosen
+	 * category and/or tag a number of days before delivery, at a set time.
+	 */
+	private function render_cutoff_section( array $config, array $categories, array $tags ): void {
+		$enabled = ! empty( $config['cutoff_enabled'] );
+		$rows    = (array) ( $config['cutoff_rules'] ?? array() );
+		?>
+		<div class="oko-section <?php echo $enabled ? '' : 'is-disabled'; ?>">
+			<label class="oko-master-toggle">
+				<input type="checkbox" name="cutoff_enabled" value="1" <?php checked( $enabled ); ?> />
+				<?php esc_html_e( 'Enable: Earlier cutoff rules', O_TEXTDOMAIN ); ?>
+			</label>
+			<p class="oko-help">
+				<?php esc_html_e( 'Each rule closes ordering for the chosen categories and/or tags a number of days before delivery, at a set time — so e.g. fresh produce and dairy can each have their own deadline. If several rules apply to the cart, the earliest deadline wins.', O_TEXTDOMAIN ); ?>
+			</p>
+			<div class="oko-section-body">
+				<div id="cutoff_rows">
+					<?php foreach ( $rows as $i => $row ) : ?>
+						<?php $this->render_cutoff_row( (string) $i, $row, $categories, $tags ); ?>
+					<?php endforeach; ?>
+				</div>
+				<button type="button" class="button oko-add-btn oko-add-cutoff">
+					+ <?php esc_html_e( 'Add cutoff rule', O_TEXTDOMAIN ); ?>
+				</button>
+			</div>
+		</div>
+		<?php
+	}
+
+	private function render_cutoff_row( $index, array $row, array $categories, array $tags ): void {
+		?>
+		<div class="oko-row">
+			<div class="oko-row-row">
+				<label><?php esc_html_e( 'Navn', O_TEXTDOMAIN ); ?>:
+					<input type="text" name="cutoff_rules[<?php echo esc_attr( $index ); ?>][label]" value="<?php echo esc_attr( $row['label'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'e.g. Fresh produce', O_TEXTDOMAIN ); ?>" style="width:200px;" />
+				</label>
+				<label><?php esc_html_e( 'Days before delivery', O_TEXTDOMAIN ); ?>:
+					<input type="number" min="0" step="1" name="cutoff_rules[<?php echo esc_attr( $index ); ?>][days]" value="<?php echo esc_attr( (string) (int) ( $row['days'] ?? 1 ) ); ?>" style="width:70px;" />
+				</label>
+				<label><?php esc_html_e( 'Cutoff time', O_TEXTDOMAIN ); ?>:
+					<input type="time" name="cutoff_rules[<?php echo esc_attr( $index ); ?>][time]" value="<?php echo esc_attr( (string) ( $row['time'] ?? '09:00' ) ); ?>" />
+				</label>
+				<label>
+					<input type="checkbox" name="cutoff_rules[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
+					<?php esc_html_e( 'Aktiv', O_TEXTDOMAIN ); ?>
+				</label>
+				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
+					<?php esc_html_e( 'Fjern', O_TEXTDOMAIN ); ?>
+				</button>
+			</div>
+			<div class="oko-row-fields">
+				<div>
+					<label><?php esc_html_e( 'Kategorier', O_TEXTDOMAIN ); ?></label>
+					<?php $this->render_term_select( "cutoff_rules[$index][categories][]", $categories, (array) ( $row['categories'] ?? array() ) ); ?>
+				</div>
+				<div>
+					<label><?php esc_html_e( 'Tags', O_TEXTDOMAIN ); ?></label>
+					<?php $this->render_term_select( "cutoff_rules[$index][tags][]", $tags, (array) ( $row['tags'] ?? array() ) ); ?>
+				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Global "how many delivery days to show" control. Two modes: a number of
+	 * delivery dates, or a calendar window in days.
+	 */
+	private function render_display_section( array $config ): void {
+		$mode  = $config['display_mode'] ?? 'window'; // already normalised by get_config()
+		$value = (int) ( $config['display_value'] ?? 0 );
+		?>
+		<div class="oko-section">
+			<h3 style="margin-top:0;"><?php esc_html_e( 'Delivery days shown in checkout', O_TEXTDOMAIN ); ?></h3>
+			<p class="oko-help">
+				<?php esc_html_e( 'Choose how many delivery days the customer sees. Leave the number at 0 to keep the existing behaviour (the merchant\'s "maximum days in future" setting).', O_TEXTDOMAIN ); ?>
+			</p>
+			<div class="oko-row-row">
+				<label>
+					<input type="radio" name="display_mode" value="count" <?php checked( $mode, 'count' ); ?> />
+					<?php esc_html_e( 'Number of delivery days', O_TEXTDOMAIN ); ?>
+				</label>
+				<label>
+					<input type="radio" name="display_mode" value="window" <?php checked( $mode, 'window' ); ?> />
+					<?php esc_html_e( 'Number of calendar days ahead', O_TEXTDOMAIN ); ?>
+				</label>
+				<label>
+					<?php esc_html_e( 'Value', O_TEXTDOMAIN ); ?>:
+					<input type="number" min="0" step="1" name="display_value" value="<?php echo esc_attr( (string) $value ); ?>" style="width:80px;" />
+				</label>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Per-section override of the global display value. Lets a merchant say,
+	 * e.g., "globally show 4 days, but for weekday products show only 1".
+	 *
+	 * @param array  $config
+	 * @param string $section weekdays | only_on | from_until
+	 */
+	private function render_section_limit_control( array $config, string $section ): void {
+		$mode  = ( ( $config[ $section . '_limit_mode' ] ?? 'global' ) === 'special' ) ? 'special' : 'global';
+		$value = (int) ( $config[ $section . '_limit_value' ] ?? 0 );
+		?>
+		<div class="oko-row" style="background:#f6f7f7;">
+			<div class="oko-row-row">
+				<label class="oko-limit-toggle">
+					<input type="checkbox" name="<?php echo esc_attr( $section ); ?>_limit_mode" value="special" <?php checked( $mode, 'special' ); ?> />
+					<?php esc_html_e( 'Show a special number of delivery days for products in this section', O_TEXTDOMAIN ); ?>
+				</label>
+				<label>
+					<?php esc_html_e( 'Value', O_TEXTDOMAIN ); ?>:
+					<input type="number" min="0" step="1" name="<?php echo esc_attr( $section ); ?>_limit_value" value="<?php echo esc_attr( (string) $value ); ?>" style="width:80px;" />
+				</label>
+			</div>
+			<p class="oko-help">
+				<?php esc_html_e( 'Uses the same mode (number of days / calendar days) as the global setting. When a cart mixes limits, the smallest wins.', O_TEXTDOMAIN ); ?>
+			</p>
+		</div>
+		<?php
 	}
 
 	private function render_weekdays_section( array $config, array $categories, array $tags ): void {
@@ -332,6 +667,7 @@ class Delivery_Exceptions extends Base {
 				<?php esc_html_e( 'Under each weekday, choose which categories and/or tags may ONLY be delivered on that day. Products without an association have no restriction.', O_TEXTDOMAIN ); ?>
 			</p>
 			<div class="oko-section-body">
+				<?php $this->render_section_limit_control( $config, 'weekdays' ); ?>
 				<?php foreach ( $display_order as $w ) : ?>
 					<?php
 					$entry = $weekdays[ $w ] ?? array( 'enabled' => false, 'categories' => array(), 'tags' => array() );
@@ -373,6 +709,7 @@ class Delivery_Exceptions extends Base {
 				<?php esc_html_e( 'Create one or more exceptions where specific categories/tags can ONLY be delivered on a specific date. Each exception can be enabled/disabled individually.', O_TEXTDOMAIN ); ?>
 			</p>
 			<div class="oko-section-body">
+				<?php $this->render_section_limit_control( $config, 'only_on' ); ?>
 				<div id="only_on_rows">
 					<?php foreach ( $rows as $i => $row ) : ?>
 						<?php $this->render_only_on_row( (string) $i, $row, $categories, $tags ); ?>
@@ -431,6 +768,7 @@ class Delivery_Exceptions extends Base {
 				<?php esc_html_e( 'Create exceptions where specific categories/tags can only be delivered between two dates. The end date is optional — leave it out if the product should be deliverable indefinitely after the start date.', O_TEXTDOMAIN ); ?>
 			</p>
 			<div class="oko-section-body">
+				<?php $this->render_section_limit_control( $config, 'from_until' ); ?>
 				<div id="from_until_rows">
 					<?php foreach ( $rows as $i => $row ) : ?>
 						<?php $this->render_from_until_row( (string) $i, $row, $categories, $tags ); ?>
@@ -515,6 +853,16 @@ class Delivery_Exceptions extends Base {
 		$config['only_on_enabled']    = ! empty( $_POST['only_on_enabled'] );
 		$config['from_until_enabled'] = ! empty( $_POST['from_until_enabled'] );
 
+		// Display settings.
+		$posted_display_mode = isset( $_POST['display_mode'] ) ? sanitize_text_field( (string) wp_unslash( $_POST['display_mode'] ) ) : ''; // phpcs:ignore
+		$config['display_mode']  = ( $posted_display_mode === 'count' ) ? 'count' : 'window';
+		$config['display_value'] = isset( $_POST['display_value'] ) ? max( 0, (int) $_POST['display_value'] ) : 0;
+		foreach ( array_keys( self::LIMIT_SECTIONS ) as $section ) {
+			$posted_limit_mode = isset( $_POST[ $section . '_limit_mode' ] ) ? sanitize_text_field( (string) wp_unslash( $_POST[ $section . '_limit_mode' ] ) ) : ''; // phpcs:ignore
+			$config[ $section . '_limit_mode' ]  = ( $posted_limit_mode === 'special' ) ? 'special' : 'global';
+			$config[ $section . '_limit_value' ] = isset( $_POST[ $section . '_limit_value' ] ) ? max( 0, (int) $_POST[ $section . '_limit_value' ] ) : 0;
+		}
+
 		// Weekdays.
 		$posted_weekdays = isset( $_POST['weekdays'] ) && is_array( $_POST['weekdays'] ) ? wp_unslash( $_POST['weekdays'] ) : array(); // phpcs:ignore
 		foreach ( $config['weekdays'] as $w => $entry ) {
@@ -571,7 +919,33 @@ class Delivery_Exceptions extends Base {
 			);
 		}
 
+		// Per-rule cutoff.
+		$config['cutoff_enabled'] = ! empty( $_POST['cutoff_enabled'] );
+		$config['cutoff_rules']   = array();
+		$posted_cutoff = isset( $_POST['cutoff_rules'] ) && is_array( $_POST['cutoff_rules'] ) ? wp_unslash( $_POST['cutoff_rules'] ) : array(); // phpcs:ignore
+		foreach ( $posted_cutoff as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$cats = $this->sanitize_id_list( $row['categories'] ?? array() );
+			$tags = $this->sanitize_id_list( $row['tags'] ?? array() );
+			// A rule with no target does nothing — drop it.
+			if ( empty( $cats ) && empty( $tags ) ) {
+				continue;
+			}
+			$posted_time = sanitize_text_field( (string) ( $row['time'] ?? '' ) );
+			$config['cutoff_rules'][] = array(
+				'label'      => sanitize_text_field( (string) ( $row['label'] ?? '' ) ),
+				'days'       => max( 0, (int) ( $row['days'] ?? 1 ) ),
+				'time'       => preg_match( '/^\d{1,2}:\d{2}$/', $posted_time ) ? $posted_time : '09:00',
+				'enabled'    => ! empty( $row['enabled'] ),
+				'categories' => $cats,
+				'tags'       => $tags,
+			);
+		}
+
 		update_option( self::OPTION_KEY, $config );
+		self::purge_rules_cache();
 
 		// Send the user back to the main plugin settings page with a flag
 		// that the section uses to display a "Saved" notice, plus an anchor
@@ -631,7 +1005,7 @@ class Delivery_Exceptions extends Base {
 		$product_ids = array_values( array_filter( $product_ids, function ( $id ) { return $id > 0; } ) );
 
 		if ( empty( $product_ids ) ) {
-			return $dates;
+			return self::strip_past_dates( $dates );
 		}
 
 		$config           = self::get_config();
@@ -647,35 +1021,25 @@ class Delivery_Exceptions extends Base {
 			return true;
 		} ) );
 
-		// Stage 2: extend — add explicitly-named dates from only_on /
-		// from_until exceptions that were applicable to this cart but happen
-		// to fall outside the API's standard window. We only add dates that
-		// pass ALL the same rules, so combinations still hold (e.g. a
-		// weekday rule still constrains an extension from another rule).
-		$extra = array();
-		foreach ( $applicable_rules as $rule ) {
-			$candidates = self::extension_candidates_for_rule( $rule );
-			foreach ( $candidates as $candidate ) {
-				if ( in_array( $candidate, $result, true ) ) {
-					continue; // already in the standard list
-				}
-				// Validate against ALL rules — combinations must still hold.
-				$passes_all = true;
-				foreach ( $applicable_rules as $r2 ) {
-					if ( ! self::date_passes_rule( $candidate, $r2 ) ) {
-						$passes_all = false;
-						break;
-					}
-				}
-				if ( $passes_all ) {
-					$extra[] = $candidate;
-				}
-			}
-		}
-		if ( ! empty( $extra ) ) {
-			$result = array_values( array_unique( array_merge( $result, $extra ) ) );
-			sort( $result );
-		}
+		// Økoskabet's API is the single source of truth for which dates are
+		// possible — the plugin only ever filters that list down, it never
+		// invents dates. A wide-enough query window (see effective_query_window)
+		// guarantees the API already returned every date our rules might keep,
+		// including the first matching weekday on/after a "from" date.
+
+		// No past dates. The API excludes the past via the cutoff, so this is a
+		// belt-and-suspenders guard against a "from" boundary set in the past.
+		// Today itself is kept — a zero cutoff allows same-day delivery.
+		$result = self::strip_past_dates( $result );
+		sort( $result );
+
+		// Per-rule cutoff: if the cart holds a product that a rule closes earlier
+		// than normal, drop the soonest dates it can no longer make.
+		$result = self::apply_cutoff( $result, $product_ids, $config );
+
+		// Apply the configured display limit (a number of delivery days, or a
+		// calendar horizon) now that the cart's available dates are known.
+		$result = self::apply_display_limit( $result, $applicable_rules, $config );
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			// De-duplicate the log line per unique product-set per request.
@@ -686,10 +1050,8 @@ class Delivery_Exceptions extends Base {
 			if ( ! isset( $logged_cart_keys[ $cart_key ] ) ) {
 				$logged_cart_keys[ $cart_key ] = true;
 				error_log( sprintf(
-					'Økoskabet exceptions: %d input dates → %d kept after restriction, +%d extension(s) = %d final. Rules: %s',
+					'Økoskabet exceptions: %d input dates → %d shown. Rules: %s',
 					count( $dates ),
-					count( array_intersect( $dates, $result ) ) - count( $extra ),
-					count( $extra ),
 					count( $result ),
 					wp_json_encode( $applicable_rules )
 				) );
@@ -697,6 +1059,176 @@ class Delivery_Exceptions extends Base {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Drop the soonest dates the cart can no longer be ordered for. Each enabled
+	 * cutoff rule closes ordering for its categories/tags `days` before delivery
+	 * at `time`; a rule constrains this cart when any cart product matches it. A
+	 * date D is kept only if, for every constraining rule, now is on/before
+	 * (D − days) at that rule's time. When several rules apply the earliest
+	 * deadline wins — a date fails as soon as one rule's cutoff has passed.
+	 *
+	 * Runs only when a rule actually matches the cart, so unmatched carts are
+	 * never re-filtered (the API already applied the normal cutoff) and can't
+	 * drift from the back office's own cutoff logic.
+	 *
+	 * @param string[] $dates       Sorted Y-m-d delivery dates.
+	 * @param int[]    $product_ids Cart product IDs.
+	 * @param array    $config      Exceptions config.
+	 * @return string[]
+	 */
+	private static function apply_cutoff( array $dates, array $product_ids, array $config ): array {
+		if ( empty( $config['cutoff_enabled'] ) || empty( $product_ids ) || empty( $dates ) ) {
+			return $dates;
+		}
+
+		$rules = array();
+		foreach ( (array) ( $config['cutoff_rules'] ?? array() ) as $rule ) {
+			if ( empty( $rule['enabled'] ) ) {
+				continue;
+			}
+			if ( empty( $rule['categories'] ) && empty( $rule['tags'] ) ) {
+				continue;
+			}
+			$rules[] = $rule;
+		}
+		if ( empty( $rules ) ) {
+			return $dates;
+		}
+
+		// Keep only the rules that actually match a product in this cart.
+		$applicable = array();
+		foreach ( $product_ids as $pid ) {
+			$terms   = self::product_terms( (int) $pid );
+			$cat_ids = $terms['cats'];
+			$tag_ids = $terms['tags'];
+			foreach ( $rules as $i => $rule ) {
+				if ( ! isset( $applicable[ $i ] ) && self::rule_matches_terms( $rule, $cat_ids, $tag_ids ) ) {
+					$applicable[ $i ] = $rule;
+				}
+			}
+		}
+		if ( empty( $applicable ) ) {
+			return $dates;
+		}
+
+		try {
+			$now = self::wp_datetime( 'now' );
+		} catch ( \Exception $e ) {
+			return $dates;
+		}
+
+		return array_values( array_filter( $dates, function ( $date ) use ( $now, $applicable ): bool {
+			if ( ! is_string( $date ) || $date === '' ) {
+				return false;
+			}
+			foreach ( $applicable as $rule ) {
+				$days = max( 0, (int) ( $rule['days'] ?? 0 ) );
+				$time = preg_match( '/^\d{1,2}:\d{2}$/', (string) ( $rule['time'] ?? '' ) ) ? $rule['time'] : '09:00';
+				try {
+					$cutoff = self::wp_datetime( $date . ' ' . $time );
+				} catch ( \Exception $e ) {
+					continue; // unparseable — this rule can't constrain the date.
+				}
+				$cutoff->modify( sprintf( '-%d days', $days ) );
+				if ( $now > $cutoff ) {
+					return false; // this rule's deadline has passed.
+				}
+			}
+			return true;
+		} ) );
+	}
+
+	/**
+	 * Limit which of the cart's available dates are shown, per the merchant's
+	 * display configuration. Two modes:
+	 *
+	 *   - 'count':  show the first N dates (soonest first).
+	 *   - 'window': show every date within N calendar days from today.
+	 *
+	 * When no display value is configured the dates pass through untrimmed, so
+	 * existing installs keep their current behaviour until a merchant opts in.
+	 * A per-section "special" override (weekdays / only_on / from_until) can
+	 * tighten the value; when several apply to one cart the MOST RESTRICTIVE
+	 * (smallest) value wins.
+	 *
+	 * @param string[] $dates           Sorted, past-stripped delivery dates.
+	 * @param array    $applicable_rules Rules collect_applicable_rules() returned for this cart.
+	 * @param array    $config          Exceptions config.
+	 * @return string[]
+	 */
+	private static function apply_display_limit( array $dates, array $applicable_rules, array $config ): array {
+		$limit = self::resolve_display_limit( $applicable_rules, $config );
+		if ( $limit === null || $limit['value'] <= 0 ) {
+			return $dates; // not configured → no display trimming (legacy behaviour).
+		}
+
+		if ( $limit['mode'] === 'count' ) {
+			return array_slice( $dates, 0, $limit['value'] );
+		}
+
+		// 'window': keep dates on/before today + value days. Y-m-d sorts
+		// lexically, so compare strings rather than parsing every date.
+		$horizon = self::wp_datetime( 'today' );
+		$horizon->modify( sprintf( '+%d days', (int) $limit['value'] ) );
+		$horizon_ymd = $horizon->format( 'Y-m-d' );
+		return array_values( array_filter( $dates, function ( $date ) use ( $horizon_ymd ): bool {
+			return is_string( $date ) && $date !== '' && $date <= $horizon_ymd;
+		} ) );
+	}
+
+	/**
+	 * Resolve the effective display limit for a cart: the global mode plus the
+	 * smallest applicable value across the global setting and any per-section
+	 * "special" overrides whose section actually applies to this cart.
+	 *
+	 * Returns null when nothing is configured (so callers keep legacy behaviour).
+	 *
+	 * @param array $applicable_rules
+	 * @param array $config
+	 * @return array{mode:string,value:int}|null
+	 */
+	private static function resolve_display_limit( array $applicable_rules, array $config ): ?array {
+		// display_mode is normalised by get_config()/merge_with_defaults(), so
+		// readers can trust it. The display limit only kicks in when a merchant
+		// has explicitly set a value — we deliberately do NOT fall back to the
+		// legacy per-merchant `maximum_days_in_future` here (that governs the API
+		// query window, not display trimming; falling back would hide exception
+		// dates that existing installs currently show).
+		$mode  = $config['display_mode'] ?? 'window';
+		$value = (int) ( $config['display_value'] ?? 0 );
+
+		// Which exception sections are in play for this cart?
+		$present = array();
+		foreach ( $applicable_rules as $rule ) {
+			$section = array_search( $rule['type'] ?? '', self::LIMIT_SECTIONS, true );
+			if ( $section !== false ) {
+				$present[ $section ] = true;
+			}
+		}
+
+		$candidates = array();
+		if ( $value > 0 ) {
+			$candidates[] = $value;
+		}
+		foreach ( array_keys( self::LIMIT_SECTIONS ) as $section ) {
+			if ( empty( $present[ $section ] ) ) {
+				continue;
+			}
+			if ( ( $config[ $section . '_limit_mode' ] ?? 'global' ) !== 'special' ) {
+				continue;
+			}
+			$special = (int) ( $config[ $section . '_limit_value' ] ?? 0 );
+			if ( $special > 0 ) {
+				$candidates[] = $special;
+			}
+		}
+
+		if ( empty( $candidates ) ) {
+			return null;
+		}
+		return array( 'mode' => $mode, 'value' => min( $candidates ) );
 	}
 
 	/**
@@ -744,10 +1276,9 @@ class Delivery_Exceptions extends Base {
 			if ( ! $post ) {
 				continue;
 			}
-			$cat_ids = array();
-			$tag_ids = array();
-			foreach ( wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) ) as $tid ) { $cat_ids[ (int) $tid ] = true; }
-			foreach ( wp_get_post_terms( $pid, 'product_tag', array( 'fields' => 'ids' ) ) as $tid ) { $tag_ids[ (int) $tid ] = true; }
+			$terms   = self::product_terms( (int) $pid );
+			$cat_ids = $terms['cats'];
+			$tag_ids = $terms['tags'];
 			$product_meta[ $pid ] = array(
 				'name'    => $post->post_title !== '' ? $post->post_title : sprintf( __( 'Item #%d', O_TEXTDOMAIN ), $pid ),
 				'cat_ids' => $cat_ids,
@@ -840,6 +1371,28 @@ class Delivery_Exceptions extends Base {
 		return $out;
 	}
 
+	/**
+	 * The category and tag ids a product carries, as lookup maps.
+	 *
+	 * @param int $product_id
+	 * @return array{cats:array<int,bool>,tags:array<int,bool>}
+	 */
+	private static function product_terms( int $product_id ): array {
+		if ( isset( self::$product_terms_cache[ $product_id ] ) ) {
+			return self::$product_terms_cache[ $product_id ];
+		}
+		$cats = array();
+		$tags = array();
+		foreach ( wp_get_post_terms( $product_id, 'product_cat', array( 'fields' => 'ids' ) ) as $tid ) {
+			$cats[ (int) $tid ] = true;
+		}
+		foreach ( wp_get_post_terms( $product_id, 'product_tag', array( 'fields' => 'ids' ) ) as $tid ) {
+			$tags[ (int) $tid ] = true;
+		}
+		self::$product_terms_cache[ $product_id ] = array( 'cats' => $cats, 'tags' => $tags );
+		return self::$product_terms_cache[ $product_id ];
+	}
+
 	/** Does a single rule's category/tag list overlap with one product? */
 	private static function rule_matches_terms( array $rule, array $cat_ids, array $tag_ids ): bool {
 		$rule_cats = (array) ( $rule['categories'] ?? array() );
@@ -898,8 +1451,36 @@ class Delivery_Exceptions extends Base {
 	 * @throws \Exception if $when is unparseable
 	 */
 	private static function wp_datetime( string $when ): \DateTime {
-		$tz = function_exists( 'wp_timezone' ) ? wp_timezone() : new \DateTimeZone( 'UTC' );
+		// The site timezone can't change within a request, so resolve the
+		// DateTimeZone once instead of on every call (this runs many times per
+		// checkout render).
+		static $tz = null;
+		if ( $tz === null ) {
+			$tz = function_exists( 'wp_timezone' ) ? wp_timezone() : new \DateTimeZone( 'UTC' );
+		}
 		return new \DateTime( $when, $tz );
+	}
+
+	/** Today's date as a Y-m-d string in the site's timezone. */
+	private static function today_ymd(): string {
+		return self::wp_datetime( 'today' )->format( 'Y-m-d' );
+	}
+
+	/**
+	 * Drop any delivery date that falls before today (in the site's
+	 * timezone). "Today" is preserved — a zero cutoff legitimately allows
+	 * same-day delivery. The API returns zero-padded Y-m-d, which sorts
+	 * lexically, so a plain string comparison is correct and avoids parsing
+	 * every date into a DateTime on this hot path.
+	 *
+	 * @param string[] $dates Y-m-d delivery dates
+	 * @return string[]
+	 */
+	private static function strip_past_dates( array $dates ): array {
+		$today = self::today_ymd();
+		return array_values( array_filter( $dates, function ( $date ) use ( $today ): bool {
+			return is_string( $date ) && $date !== '' && $date >= $today;
+		} ) );
 	}
 
 	/** Format a Y-m-d date as a Danish "den d. F YYYY" string. */
@@ -914,13 +1495,12 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
-	 * Return the list of specific dates that an exception rule would
-	 * "introduce" if they aren't already in the API's standard window.
+	 * Return the specific date(s) a rule references, used only to widen the
+	 * API query window so those dates are actually fetched (the API stays the
+	 * source of truth — we never inject these dates into the result ourselves).
 	 *
 	 * - only_on rules contribute their single date.
-	 * - from_until rules with a 'from' date contribute that single date
-	 *   (we don't enumerate the entire range — just the boundary, so the
-	 *   customer at least sees the earliest possible delivery day).
+	 * - from_until rules contribute their 'from' boundary.
 	 * - weekday rules contribute nothing (they restrict, never extend).
 	 */
 	private static function extension_candidates_for_rule( array $rule ): array {
@@ -935,27 +1515,48 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
-	 * Inspect the configuration and the cart and tell the caller how many
-	 * days into the future Økoskabet's API needs to be queried for, so the
-	 * customer sees every applicable extension date — even those that fall
-	 * outside the normal display window.
+	 * Tell the caller how many days into the future Økoskabet's API needs to
+	 * be queried for, so the customer sees every date the cart's rules might
+	 * keep — without over-fetching. The API is the source of truth; we only
+	 * need to fetch a wide-enough slice of it.
 	 *
-	 * Returns the larger of `$default_days` and the number of days from
-	 * today to the furthest applicable only_on / from_until date.
+	 * The window is the largest of:
+	 *   - the configured display window (or the legacy `$default_days`); in
+	 *     "count" mode we widen to ~a week per requested date so weekday-only
+	 *     products can still yield that many dates;
+	 *   - the distance to the furthest applicable only_on / from_until date,
+	 *     plus a week of head-room past a "from" boundary so the first
+	 *     matching weekday on/after it is included (fixes weekday + from-date
+	 *     combinations that previously returned nothing).
+	 *
+	 * Capped at 365 days so a mistyped far-future date can't trigger an
+	 * unbounded query.
 	 */
 	public static function effective_query_window( int $default_days, array $product_ids ): int {
+		$config        = self::get_config();
+		$display_value = (int) ( $config['display_value'] ?? 0 );
+		$mode          = $config['display_mode'] ?? 'window'; // normalised by get_config()
+		$base          = $display_value > 0 ? $display_value : max( 1, $default_days );
+		// In count mode, widen to ~a week per requested date (plus head-room) so
+		// even a once-a-week product can still yield that many dates.
+		$window        = ( $mode === 'count' ) ? ( $base * 7 + self::QUERY_WINDOW_BUFFER_DAYS ) : $base;
+
 		$product_ids = array_values( array_filter( array_map( 'intval', $product_ids ), function ( $i ) { return $i > 0; } ) );
 		if ( empty( $product_ids ) ) {
-			return $default_days;
+			return min( max( $window, $default_days ), 365 );
 		}
 
 		$instance = new self();
-		$config   = self::get_config();
 		$rules    = $instance->collect_applicable_rules( $product_ids, $config );
 
 		$today = self::wp_datetime( 'today' );
-		$max   = $default_days;
 
+		// A week of head-room past any rule-referenced date. For from_until it
+		// guarantees the first matching weekday after a "from" date is fetched;
+		// for only_on it absorbs the lead-time / cutoff offset that shifts the
+		// API's window, so an exact date sitting on the window boundary isn't
+		// cut off by a day (the API counts its window from the first deliverable
+		// day, not from today).
 		foreach ( $rules as $rule ) {
 			$candidates = self::extension_candidates_for_rule( $rule );
 			foreach ( $candidates as $date ) {
@@ -964,17 +1565,14 @@ class Delivery_Exceptions extends Base {
 				} catch ( \Exception $e ) {
 					continue;
 				}
-				$diff = (int) $today->diff( $dt )->format( '%r%a' );
-				if ( $diff > $max ) {
-					$max = $diff;
+				$diff = (int) $today->diff( $dt )->format( '%r%a' ) + self::QUERY_WINDOW_BUFFER_DAYS;
+				if ( $diff > $window ) {
+					$window = $diff;
 				}
 			}
 		}
 
-		// Don't go beyond a hard cap of 365 days — Økoskabet won't reasonably
-		// be planning a year out, and we don't want to cause unbounded API
-		// load if a user mistypes a far-future date.
-		return min( $max, 365 );
+		return min( $window, 365 );
 	}
 
 	/**
@@ -986,6 +1584,31 @@ class Delivery_Exceptions extends Base {
 	 * @var array<string, array>
 	 */
 	private static $rules_cache = array();
+
+	/**
+	 * Per-product category/tag ids, memoised for the request.
+	 *
+	 * The date filter runs once per shed and once per pickup location, and
+	 * three separate places need the same term lists, so without this a
+	 * ten-shed shop with a five-item cart pays a hundred term queries where
+	 * ten would do.
+	 *
+	 * @var array<int,array{cats:array<int,bool>,tags:array<int,bool>}>
+	 */
+	private static $product_terms_cache = array();
+
+	/** @var array<string,mixed>|null */
+	private static $config_cache = null;
+
+	/**
+	 * Clear the per-request applicable-rules cache. Primarily for tests, where
+	 * the static cache would otherwise persist across cases in one process.
+	 */
+	public static function purge_rules_cache(): void {
+		self::$rules_cache         = array();
+		self::$product_terms_cache = array();
+		self::$config_cache        = null;
+	}
 
 	/**
 	 * Walk through the configuration, returning every rule that applies to
@@ -1005,38 +1628,71 @@ class Delivery_Exceptions extends Base {
 			return self::$rules_cache[ $cache_key ];
 		}
 
-		// Pre-collect category and tag IDs for every cart product so we
-		// don't repeat the term query for each rule.
-		$cart_cat_ids = array();
-		$cart_tag_ids = array();
+		// Pre-collect category and tag IDs per product (and a cart-wide union)
+		// so we don't repeat the term query for each rule. The per-product map
+		// is what lets us compute weekday availability product-by-product
+		// before intersecting across the cart.
+		$product_terms = array();
+		$cart_cat_ids  = array();
+		$cart_tag_ids  = array();
 		foreach ( $normalised as $pid ) {
-			foreach ( wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) ) as $tid ) {
+			$terms = self::product_terms( (int) $pid );
+			foreach ( array_keys( $terms['cats'] ) as $tid ) {
 				$cart_cat_ids[ (int) $tid ] = true;
 			}
-			foreach ( wp_get_post_terms( $pid, 'product_tag', array( 'fields' => 'ids' ) ) as $tid ) {
+			foreach ( array_keys( $terms['tags'] ) as $tid ) {
 				$cart_tag_ids[ (int) $tid ] = true;
 			}
+			$product_terms[ $pid ] = $terms;
 		}
 
 		$applicable = array();
 
-		// Weekdays family.
+		// Weekdays family — computed PER PRODUCT, then intersected across the
+		// cart. A product's allowed weekdays = the union of every enabled
+		// weekday rule that matches it (it can ship on any of those days). The
+		// cart can only ship on a day where EVERY weekday-restricted product
+		// can ship — i.e. the intersection of those per-product sets. Products
+		// that match no weekday rule are unrestricted and don't narrow it.
+		//
+		// Example: product A "Wed or Fri", product B "Fri only" → {Fri}. If the
+		// intersection is empty (e.g. A "Wed only" + B "Fri only") we emit a
+		// weekday_set with an empty list, which rejects every date — the
+		// checkout then surfaces the split-order / contact-shop flow.
 		if ( ! empty( $config['weekdays_enabled'] ) ) {
-			foreach ( $config['weekdays'] as $weekday => $entry ) {
-				if ( empty( $entry['enabled'] ) ) {
-					continue;
+			$cart_weekdays = null; // null = no weekday-restricted product seen yet.
+			foreach ( $normalised as $pid ) {
+				$pcats   = $product_terms[ $pid ]['cats'];
+				$ptags   = $product_terms[ $pid ]['tags'];
+				$allowed = array();
+				$matched = false;
+				foreach ( $config['weekdays'] as $weekday => $entry ) {
+					if ( empty( $entry['enabled'] ) ) {
+						continue;
+					}
+					if ( ! $this->terms_intersect( $entry, $pcats, $ptags ) ) {
+						continue;
+					}
+					$matched   = true;
+					$allowed[] = (int) $weekday;
 				}
-				if ( ! $this->terms_intersect( $entry, $cart_cat_ids, $cart_tag_ids ) ) {
-					continue;
+				if ( $matched ) {
+					$allowed       = array_values( array_unique( $allowed ) );
+					$cart_weekdays = ( $cart_weekdays === null )
+						? $allowed
+						: array_values( array_intersect( $cart_weekdays, $allowed ) );
 				}
+			}
+			if ( $cart_weekdays !== null ) {
 				$applicable[] = array(
-					'type'    => 'weekday_match',
-					'weekday' => (int) $weekday,
+					'type'     => 'weekday_set',
+					'weekdays' => array_values( $cart_weekdays ),
 				);
 			}
 		}
 
-		// Only-on family.
+		// Only-on family. A rule applies if any cart product matches it; the
+		// resulting date filter is AND'd with every other rule.
 		if ( ! empty( $config['only_on_enabled'] ) ) {
 			foreach ( $config['only_on'] as $row ) {
 				if ( empty( $row['enabled'] ) || empty( $row['date'] ) ) {
@@ -1069,29 +1725,8 @@ class Delivery_Exceptions extends Base {
 			}
 		}
 
-		// Multiple weekday-match rules → merge into a single rule that lists
-		// all permitted weekdays. Otherwise a customer with products
-		// matching "Mondays only" AND "Thursdays only" would see ZERO valid
-		// dates (each rule rejects the other's days), but logically the
-		// allowed set is "Mondays OR Thursdays".
-		$weekday_rules = array();
-		$rest          = array();
-		foreach ( $applicable as $r ) {
-			if ( $r['type'] === 'weekday_match' ) {
-				$weekday_rules[] = (int) $r['weekday'];
-			} else {
-				$rest[] = $r;
-			}
-		}
-		if ( ! empty( $weekday_rules ) ) {
-			$rest[] = array(
-				'type'     => 'weekday_set',
-				'weekdays' => array_values( array_unique( $weekday_rules ) ),
-			);
-		}
-
-		self::$rules_cache[ $cache_key ] = $rest;
-		return $rest;
+		self::$rules_cache[ $cache_key ] = $applicable;
+		return $applicable;
 	}
 
 	/**
@@ -1133,9 +1768,14 @@ class Delivery_Exceptions extends Base {
 
 		switch ( $rule['type'] ) {
 			case 'weekday_set':
+				// An empty allowed-set means the cart's weekday-restricted
+				// products share no common delivery day — reject every date so
+				// the checkout falls through to the split / contact-shop flow.
+				// (collect_applicable_rules only emits this rule when at least
+				// one product is weekday-restricted, so empty is meaningful.)
 				$allowed = array_map( 'intval', (array) ( $rule['weekdays'] ?? array() ) );
 				if ( empty( $allowed ) ) {
-					return true;
+					return false;
 				}
 				return in_array( (int) $dt->format( 'w' ), $allowed, true );
 

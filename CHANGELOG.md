@@ -2,6 +2,99 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.4.6 - 2026-08-26
+
+= Packaging fee =
+
+The plugin can now add a packaging fee to the order itself, so shops no longer
+need a separate fee plugin for the box, the cool packs and the packing. Set it
+up under Settings, below the delivery exceptions.
+
+The fee is a list of rules read from the top down, and the first one that fits
+the cart wins — so a shop can charge one amount when the order needs an
+insulated box and another when it doesn't:
+
+  1. "Emballage (frost)" — categories: Frost — 45 kr
+  2. "Emballage" — nothing selected — 28 kr
+
+Every cart pays exactly one fee, and a cart matching no rule pays nothing. Each
+rule can be attached to product categories or tags (picking a category includes
+its sub-categories; one matching product in the cart is enough), limited to
+particular delivery methods, and priced either as a fixed amount or with a
+ladder using the same "from = price" lines the shipping methods already use, so
+the fee can shrink or disappear on bigger orders.
+
+= Coupons can make the packaging free =
+
+Coupons have a new "Gratis emballage" tick, next to WooCommerce's own "Allow
+free shipping". It is deliberately separate: a shop can hand out free delivery
+without also giving the box away.
+
+= Notes =
+
+The fee is a cart fee, not shipping, so an ordinary free-shipping coupon leaves
+it alone and it is charged once per order. With split checkout each part-order
+carries its own fee, which matches the real cost: two deliveries mean two
+boxes.
+
+## 1.4.5 - 2026-08-25
+
+= The shop's order number now reaches Økoskabet =
+
+The order id was being sent under a name Økoskabet doesn't read, so the
+"Webshop order" column stayed empty. It now sends the two fields Økoskabet
+actually keeps: the bare number to search on, and the reference as the shop
+prints it.
+
+= Turning off the staging API works again =
+
+An unchecked checkbox is absent from WordPress's saved settings rather than
+false, so switching "Staging API" off never reached the stored merchant. A shop
+that had once used staging kept calling it with a production key, and every
+delivery method disappeared from the checkout.
+
+## 1.4.3 - 2026-08-25
+
+= Butiksafhentning (store pickup) =
+
+Merchants who have store pickup enabled in Økoskabet's back office can now
+offer it at checkout. The customer picks which of the shop's pickup locations
+to collect from and which day to collect on; the days come from the location's
+own collection days, not from the delivery regions. Collection is free by
+default. The opening hours are the shop's own to state — write them in the
+shipping method's Description field and WooCommerce shows them under the
+method.
+
+= Cutoff rules =
+
+Products can now close for ordering earlier than the merchant's normal cutoff.
+Each rule names a category and/or tag, a number of days before delivery, and a
+time of day, so fresh produce and dairy can each have their own deadline. When
+several rules apply to one basket the earliest deadline wins. Cutoffs apply to
+a collection exactly as they do to a delivery.
+
+= Delivery dates =
+
+Past dates are never shown. A weekday rule combined with a from-date no longer
+loses the dates it should keep. How many delivery days to show is configurable,
+either as a number of days or a calendar window. A basket with several products
+only offers dates every product can make.
+
+= Shipping fee ladder =
+
+Shipping methods take a tiered price — "0 = 99 / 500 = 69 / 1000 = 49 /
+2000 = 0" — set per WooCommerce shipping zone, with a switch for whether the
+amounts include VAT. A line that isn't a pair of numbers is ignored rather
+than read as "free from 0".
+
+= Also =
+
+The order sent to Økoskabet now carries the shop's own order number alongside
+the unchanged shipment reference, so merchants can search for a shipment by
+the number they see in WooCommerce. Saving the merchant settings now clears
+the cached shipping-method lookup, so a corrected API key takes effect at once
+instead of after five minutes.
+
 ## 1.4.2 - 2026-05-20
 
 = Show the fulfilling merchant on the admin order page =

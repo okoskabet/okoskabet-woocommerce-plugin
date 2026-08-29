@@ -24,6 +24,7 @@ return array(
     'okoskabet_woocommerce_plugin\\Integrations\\Cron' => $baseDir . '/integrations/Cron.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions' => $baseDir . '/integrations/Delivery_Exceptions.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router' => $baseDir . '/integrations/Merchant_Router.php',
+    'okoskabet_woocommerce_plugin\\Integrations\\Packaging_Fee' => $baseDir . '/integrations/Packaging_Fee.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Merchants' => $baseDir . '/integrations/Merchants.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Payment_Capture' => $baseDir . '/integrations/Payment_Capture.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Product_Merchant_Meta' => $baseDir . '/integrations/Product_Merchant_Meta.php',

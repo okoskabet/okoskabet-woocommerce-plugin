@@ -82,6 +82,23 @@ class OkoRest extends Base
 			)
 		);
 
+		// Where a merchant's store pickups are collected from. Mirrors the
+		// `/sheds` shape (id, name, address) plus the weekdays a location
+		// collects on, so the checkout can render either with one code path.
+		\register_rest_route(
+			'wp/v2',
+			'okoskabet/store_pickup',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => '__return_true',
+				'callback'            => array($this, 'get_store_pickup'),
+				'args'                => array(
+					'product_ids' => array('required' => false),
+					'merchant_id' => array('required' => false),
+				),
+			)
+		);
+
 		\register_rest_route(
 			'wp/v2',
 			'okoskabet/delivery_location_options',
@@ -429,6 +446,106 @@ class OkoRest extends Base
 			is_array($output_content)
 			&& empty($output_content['delivery_dates'])
 			&& ! empty($product_ids)
+			&& class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')
+		) {
+			$explanation = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::explanation_for_cart($product_ids);
+			if (!empty($explanation['has_exceptions'])) {
+				$output_content['exceptions_explanation'] = $explanation;
+			}
+		}
+
+		return new \WP_REST_Response(array(
+			'settings' => self::public_settings_payload($merchant, $maximum_days_in_future),
+			'results'  => $output_content,
+		), 200);
+	}
+
+	/**
+	 * Get the merchant's store-pickup locations, each with the dates a
+	 * customer can collect on.
+	 *
+	 * The upstream endpoint answers in the same shape `/sheds` does — id,
+	 * name, address — plus `days` (the weekdays that location collects on)
+	 * and, when asked, `delivery_dates`. It answers 404 for a merchant who
+	 * hasn't been sold store pickup, which we pass through as an empty list
+	 * so the checkout simply shows no method rather than an error.
+	 *
+	 * Collection dates run through the same `okoskabet_filtered_delivery_dates`
+	 * filter as sheds and home delivery, so the merchant's per-product cutoff
+	 * rules apply to a collection exactly as they do to a delivery.
+	 *
+	 * @param \WP_REST_Request<array> $request
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function get_store_pickup(\WP_REST_Request $request)
+	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
+
+		$merchant = self::resolve_request_merchant($request);
+		if ($merchant === null || empty($merchant['api_key'])) {
+			return new \WP_Error('missing_api_key', 'API key not configured for the resolved merchant', array('status' => 500));
+		}
+
+		$params       = $request->get_params();
+		$default_days = (int) ($merchant['maximum_days_in_future'] ?? 3);
+		$product_ids  = self::parse_product_ids($params['product_ids'] ?? '');
+
+		if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
+			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids);
+		} else {
+			$maximum_days_in_future = $default_days;
+		}
+
+		$request_url = \add_query_arg(array(
+			'delivery_dates'         => 'true',
+			'maximum_days_in_future' => $maximum_days_in_future,
+		), Merchants::api_url_for($merchant) . '/api/v1/store_pickup');
+
+		$response = \wp_remote_get($request_url, array(
+			'timeout' => 15,
+			'headers' => array(
+				'Authorization' => $merchant['api_key'],
+			),
+		));
+
+		if (\is_wp_error($response)) {
+			return new \WP_Error('api_error', $response->get_error_message(), array('status' => 502));
+		}
+
+		$code = (int) \wp_remote_retrieve_response_code($response);
+		$body = \wp_remote_retrieve_body($response);
+
+		// 404 means this merchant doesn't offer store pickup at all. That's a
+		// fact about the merchant, not a failure — answer with an empty list.
+		if ($code === 404) {
+			return new \WP_REST_Response(array(
+				'settings' => self::public_settings_payload($merchant, $maximum_days_in_future),
+				'results'  => array('pickup_locations' => array()),
+			), 200);
+		}
+
+		$output_content = \json_decode($body, true);
+
+		$any_dates_left = false;
+		if (is_array($output_content) && !empty($output_content['pickup_locations']) && is_array($output_content['pickup_locations'])) {
+			foreach ($output_content['pickup_locations'] as &$location) {
+				if (isset($location['delivery_dates']) && is_array($location['delivery_dates'])) {
+					$location['delivery_dates'] = apply_filters(
+						'okoskabet_filtered_delivery_dates',
+						$location['delivery_dates'],
+						$product_ids
+					);
+					if (!empty($location['delivery_dates'])) {
+						$any_dates_left = true;
+					}
+				}
+			}
+			unset($location);
+		}
+
+		if (
+			is_array($output_content)
+			&& !$any_dates_left
+			&& !empty($product_ids)
 			&& class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')
 		) {
 			$explanation = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::explanation_for_cart($product_ids);
