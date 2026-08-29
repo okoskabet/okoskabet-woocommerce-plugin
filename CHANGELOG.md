@@ -2,6 +2,23 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.4.7 - 2026-08-29
+
+= See what your Økoskabet features cost =
+
+A new panel under Settings lists the Økoskabet features your shop has, whether
+each one is on, and what Økoskabet charges you for it — a flat price, or one
+line per step when it is a volume ladder. It is your own agreement with
+Økoskabet, not the shipping your customers pay.
+
+Features are switched on and off in Økoskabet's back office rather than here,
+so the same answer holds whether you sell through WooCommerce, Shopify or the
+API directly. Where Økoskabet has locked a feature, the panel says so and why.
+
+If Økoskabet cannot be reached the panel shows the last prices it saw, dated,
+rather than an empty table — and if there are no priced features yet, it says
+that too. Neither affects your deliveries.
+
 ## 1.4.6 - 2026-08-26
 
 = Packaging fee =

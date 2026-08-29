@@ -81,6 +81,7 @@ class ComposerStaticInit8d18d9b01caf28828fc36e7de364d1f3
         'okoskabet_woocommerce_plugin\\Integrations\\CMB' => __DIR__ . '/../..' . '/integrations/CMB.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Cron' => __DIR__ . '/../..' . '/integrations/Cron.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions' => __DIR__ . '/../..' . '/integrations/Delivery_Exceptions.php',
+        'okoskabet_woocommerce_plugin\\Integrations\\Feature_Pricing' => __DIR__ . '/../..' . '/integrations/Feature_Pricing.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router' => __DIR__ . '/../..' . '/integrations/Merchant_Router.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Packaging_Fee' => __DIR__ . '/../..' . '/integrations/Packaging_Fee.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Merchants' => __DIR__ . '/../..' . '/integrations/Merchants.php',

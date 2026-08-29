@@ -1024,3 +1024,97 @@ msgstr "Gratis emballage"
 
 msgid "Waive Økoskabet's packaging fee for orders using this coupon."
 msgstr "Fjern Økoskabets emballagegebyr på ordrer med denne rabatkode."
+
+# ----------------------------------------------------------------------
+# Feature pricing panel (1.4.7)
+# ----------------------------------------------------------------------
+
+msgid "Your Økoskabet features and prices"
+msgstr "Dine funktioner og priser hos Økoskabet"
+
+msgid ""
+"What Økoskabet charges you for the features you use. This is not the shipping "
+"your customers pay — it is your own agreement, and it is managed in "
+"Økoskabet's back office."
+msgstr ""
+"Hvad Økoskabet opkræver dig for de funktioner du bruger. Det er ikke den fragt "
+"dine kunder betaler — det er din egen aftale, og den styres i Økoskabets "
+"backoffice."
+
+msgid ""
+"Prices could not be fetched from Økoskabet right now, so none are shown. This "
+"does not affect your deliveries."
+msgstr ""
+"Priserne kunne ikke hentes fra Økoskabet lige nu, så der vises ingen. Det "
+"påvirker ikke dine leveringer."
+
+msgid "Økoskabet has not set up any priced features for you yet."
+msgstr "Økoskabet har endnu ikke sat nogen prissatte funktioner op til dig."
+
+msgid ""
+"Økoskabet could not be reached, so these prices are the last ones we saw, %s "
+"ago. They may have changed since."
+msgstr ""
+"Økoskabet kunne ikke kontaktes, så disse priser er de senest kendte, fra for "
+"%s siden. De kan være ændret siden."
+
+msgid "Feature"
+msgstr "Funktion"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Your price"
+msgstr "Din pris"
+
+msgid ""
+"To switch a feature on or off, do it in Økoskabet's back office — that way it "
+"applies wherever you sell, not just in this shop."
+msgstr ""
+"Vil du tænde eller slukke for en funktion, gør det i Økoskabets backoffice — "
+"så gælder det alle de steder du sælger, ikke kun denne shop."
+
+msgid "Billing"
+msgstr "Afregning"
+
+msgid "Weekly"
+msgstr "Ugentligt"
+
+msgid "Every two weeks"
+msgstr "Hver 14. dag"
+
+msgid "Monthly"
+msgstr "Månedligt"
+
+msgid "current period %1$s to %2$s"
+msgstr "nuværende periode %1$s til %2$s"
+
+msgid "On"
+msgstr "Til"
+
+msgid "Off"
+msgstr "Fra"
+
+msgid "Locked by Økoskabet"
+msgstr "Låst af Økoskabet"
+
+msgid "No extra charge"
+msgstr "Ingen ekstra pris"
+
+msgid "%s and above"
+msgstr "%s og derover"
+
+msgid "%1$s–%2$s"
+msgstr "%1$s–%2$s"
+
+msgid "per label"
+msgstr "pr. label"
+
+msgid "per shipment"
+msgstr "pr. forsendelse"
+
+msgid "per order"
+msgstr "pr. ordre"
+
+msgid "per month"
+msgstr "pr. måned"
