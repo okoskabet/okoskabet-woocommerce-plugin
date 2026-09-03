@@ -1,0 +1,25 @@
+# Keep development files out of GitHub's auto-generated source archive.
+#
+# Releases attach a purpose-built zip and the update checker prefers it, but the
+# checker falls back to this archive when an asset is missing. Without these
+# rules that fallback would drop the entire repository — tests, build config and
+# all — into a merchant's wp-content/plugins.
+/.github            export-ignore
+/.gitattributes     export-ignore
+/.gitignore         export-ignore
+/docs               export-ignore
+/tests              export-ignore
+/assets/src         export-ignore
+/tests.sh           export-ignore
+/codeception.dist.yml export-ignore
+/wp-config-test.php export-ignore
+/babel.config.js    export-ignore
+/webpack.config.js  export-ignore
+/tsconfig.json      export-ignore
+/grumphp.yml        export-ignore
+/phpstan.neon       export-ignore
+/package.json       export-ignore
+/package-lock.json  export-ignore
+/yarn.lock          export-ignore
+/composer.lock      export-ignore
+/wpbp.json          export-ignore
