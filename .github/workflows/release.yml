@@ -1,0 +1,120 @@
+# Cut a plugin release that merchants can actually install.
+#
+# Two things go wrong when releases are made by hand, and this exists to make
+# both impossible:
+#
+#   1. WordPress reads the version from the `Version:` header inside the plugin
+#      file, never from the tag name. Tagging v1.5.0 while the header still says
+#      1.4.9 means every merchant is offered 1.4.9 and nobody can tell why.
+#      This job refuses to publish when the two disagree.
+#
+#   2. Without an attached zip, the update checker falls back to GitHub's
+#      auto-generated source archive — the whole repository, tests and dev
+#      config included, dropped into the merchant's wp-content/plugins. This
+#      job builds the same lean zip we install on staging and attaches it.
+#
+# Nothing here runs on a normal push. It triggers only when a tag is pushed,
+# which is the deliberate act of releasing.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The tag and the plugin header must agree
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          header=$(grep -m1 '^ \* Version:' okoskabet-woocommerce-plugin.php \
+            | sed 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
+
+          echo "Tag says:    $tag"
+          echo "Header says: $header"
+
+          if [ -z "$header" ]; then
+            echo "::error::Could not read the Version header from okoskabet-woocommerce-plugin.php."
+            exit 1
+          fi
+
+          if [ "$tag" != "$header" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the plugin header ($header). WordPress reads the header, so merchants would be offered $header no matter what the tag says. Fix one of them, delete the tag, and tag again."
+            exit 1
+          fi
+
+      - name: Build the plugin zip
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          staging="$(mktemp -d)"
+
+          # The folder name inside the zip becomes the plugin directory on the
+          # merchant's site, so it has to stay exactly this.
+          mkdir -p "$staging/okoskabet-woocommerce-plugin"
+
+          rsync -a \
+            --exclude '.git' --exclude '.gitignore' --exclude '.gitattributes' \
+            --exclude '.github' --exclude '.claude' \
+            --exclude 'node_modules' --exclude 'tests' --exclude 'tests.sh' \
+            --exclude 'codeception.dist.yml' --exclude 'wp-config-test.php' \
+            --exclude 'assets/src' --exclude 'docs' \
+            --exclude 'babel.config.js' --exclude 'webpack.config.js' \
+            --exclude 'tsconfig.json' --exclude 'grumphp.yml' --exclude 'phpstan.neon' \
+            --exclude 'package.json' --exclude 'package-lock.json' --exclude 'yarn.lock' \
+            --exclude 'composer.lock' --exclude 'wpbp.json' \
+            --exclude '*.zip' --exclude '.DS_Store' \
+            ./ "$staging/okoskabet-woocommerce-plugin/"
+
+          # vendor/ is committed, so there is nothing to install here. If that
+          # ever changes, a `composer install --no-dev -o` belongs above this.
+          if [ ! -f "$staging/okoskabet-woocommerce-plugin/vendor/autoload.php" ]; then
+            echo "::error::vendor/autoload.php is missing from the build. The plugin cannot boot without it."
+            exit 1
+          fi
+
+          ( cd "$staging" && zip -qr "$GITHUB_WORKSPACE/okoskabet-woocommerce-plugin-${version}.zip" okoskabet-woocommerce-plugin )
+
+          echo "ZIP_PATH=okoskabet-woocommerce-plugin-${version}.zip" >> "$GITHUB_ENV"
+          ls -lh "okoskabet-woocommerce-plugin-${version}.zip"
+
+      - name: Take the release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+
+          # Pull out just this version's section. Falls back to generated notes
+          # when the changelog has no entry, rather than shipping an empty one.
+          awk -v v="## $version " '
+            index($0, v) == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "No changelog entry for $version — falling back to generated notes."
+            rm -f release-notes.md
+          fi
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f release-notes.md ]; then
+            gh release create "$GITHUB_REF_NAME" "$ZIP_PATH" \
+              --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" "$ZIP_PATH" \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          fi

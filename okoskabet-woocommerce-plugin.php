@@ -124,7 +124,14 @@ require_once O_PLUGIN_ROOT . 'functions/functions.php';
 
 
 // Documentation to integrate GitHub, GitLab or BitBucket https://github.com/YahnisElsts/plugin-update-checker/blob/master/README.md
-Puc_v4_Factory::buildUpdateChecker('https://github.com/okoskabet/okoskabet-woocommerce-plugin', __FILE__, 'okoskabet-woocommerce-plugin');
+$okoskabet_update_checker = Puc_v4_Factory::buildUpdateChecker('https://github.com/okoskabet/okoskabet-woocommerce-plugin', __FILE__, 'okoskabet-woocommerce-plugin');
+
+// Install the zip attached to the release, not GitHub's auto-generated source
+// archive. The archive is the whole repository — tests, build config and all —
+// and it would land in the merchant's wp-content/plugins. The checker falls
+// back to the archive on its own when a release carries no matching asset, so
+// this is safe before the first release exists. See docs/RELEASING.md.
+$okoskabet_update_checker->getVcsApi()->enableReleaseAssets('/\.zip$/');
 
 if (!wp_installing()) {
 	register_activation_hook(O_TEXTDOMAIN . '/' . O_TEXTDOMAIN . '.php', array(new \okoskabet_woocommerce_plugin\Backend\ActDeact, 'activate'));
