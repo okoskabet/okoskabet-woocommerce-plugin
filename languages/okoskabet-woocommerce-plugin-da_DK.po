@@ -1070,6 +1070,15 @@ msgstr "Din pris (ekskl. moms)"
 msgid "All prices are excluding VAT. VAT is added on your invoice."
 msgstr "Alle priser er ekskl. moms. Momsen lægges på din faktura."
 
+msgid "What your setup costs in total"
+msgstr "Hvad din opsætning koster i alt"
+
+msgid "Nothing. None of the features you have switched on carry a price."
+msgstr "Ingenting. Ingen af de funktioner, du har slået til, koster noget."
+
+msgid "Counted once per thing you are billed for, not once per feature — switching on more delivery methods does not raise the price of a label."
+msgstr "Talt én gang pr. ting du afregnes for, ikke én gang pr. funktion — flere leveringsmetoder gør ikke et label dyrere."
+
 msgid ""
 "To switch a feature on or off, do it in Økoskabet's back office — that way it "
 "applies wherever you sell, not just in this shop."

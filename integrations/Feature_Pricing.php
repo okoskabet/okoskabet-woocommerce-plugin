@@ -182,6 +182,14 @@ class Feature_Pricing extends Base {
 					'unit'   => (string) ( $feature['price']['unit'] ?? '' ),
 					'amount' => isset( $feature['price']['amount'] ) ? (string) $feature['price']['amount'] : null,
 					'tiers'  => $tiers,
+					// Which billing product this price belongs to. Several
+					// features can share one — shed, home delivery and store
+					// pickup are all priced by label generation — and the
+					// merchant pays it once, so the total has to group on this
+					// rather than on the feature. An older back office does not
+					// send it; empty means "cannot be grouped", and the total is
+					// then left out rather than guessed at.
+					'product' => isset( $feature['price']['product'] ) ? (string) $feature['price']['product'] : '',
 				);
 			}
 
@@ -283,6 +291,146 @@ class Feature_Pricing extends Base {
 	}
 
 	// =========================================================================
+	// What the whole setup costs
+	// =========================================================================
+
+	/**
+	 * The ladders a merchant actually pays, given the features they have on.
+	 *
+	 * Summed per billing product, not per feature. Shed, home delivery and
+	 * store pickup are all priced by label generation, and a label is one of
+	 * the three — never all three — so counting them once each would treble a
+	 * price nobody charges.
+	 *
+	 * Products are kept apart by unit. A price per label and a price per packed
+	 * order do not add up to a number per label, and inventing one would be
+	 * worse than showing two lines.
+	 *
+	 * @param array<int,array> $features Normalised features.
+	 * @return array<int,array{unit:string,tiers:array}>|null Null when the
+	 *         answer cannot be trusted: a priced feature with no product to
+	 *         group on, or an amount that will not parse.
+	 */
+	public static function combined_ladders( array $features ): ?array {
+		$products = array();
+
+		foreach ( $features as $feature ) {
+			if ( empty( $feature['enabled'] ) || $feature['price'] === null ) {
+				// Off, or free. Either way it adds nothing.
+				continue;
+			}
+
+			$product = (string) ( $feature['price']['product'] ?? '' );
+			if ( $product === '' ) {
+				return null;
+			}
+
+			// First one wins; the rest are the same product saying the same thing.
+			if ( ! isset( $products[ $product ] ) ) {
+				$products[ $product ] = $feature['price'];
+			}
+		}
+
+		if ( empty( $products ) ) {
+			return array();
+		}
+
+		$by_unit = array();
+		foreach ( $products as $price ) {
+			$by_unit[ (string) $price['unit'] ][] = $price;
+		}
+
+		$out = array();
+		foreach ( $by_unit as $unit => $prices ) {
+			$tiers = self::sum_ladders( $prices );
+			if ( $tiers === null ) {
+				return null;
+			}
+			$out[] = array( 'unit' => (string) $unit, 'tiers' => $tiers );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Add several ladders together into one.
+	 *
+	 * Every step boundary from every ladder becomes a boundary of the result,
+	 * because that is where at least one of the prices changes.
+	 *
+	 * @param array<int,array> $prices
+	 * @return array<int,array{from:int,to:int|null,unit_price:string}>|null
+	 */
+	private static function sum_ladders( array $prices ): ?array {
+		$boundaries = array( 1 );
+
+		foreach ( $prices as $price ) {
+			foreach ( self::steps_of( $price ) as $step ) {
+				$boundaries[] = $step['from'];
+			}
+		}
+
+		$boundaries = array_values( array_unique( $boundaries ) );
+		sort( $boundaries );
+
+		$tiers = array();
+		$count = count( $boundaries );
+
+		foreach ( $boundaries as $i => $from ) {
+			$total = 0.0;
+
+			foreach ( $prices as $price ) {
+				$rate = self::rate_at( $price, $from );
+				if ( $rate === null ) {
+					// An amount we could not parse — "efter aftale" and the
+					// like. It has no number, so neither does the total.
+					return null;
+				}
+				$total += $rate;
+			}
+
+			$tiers[] = array(
+				'from'       => $from,
+				'to'         => $i + 1 < $count ? $boundaries[ $i + 1 ] - 1 : null,
+				'unit_price' => number_format( $total, 2, '.', '' ),
+			);
+		}
+
+		return $tiers;
+	}
+
+	/** A price as steps, whether it was written as a ladder or a flat amount. */
+	private static function steps_of( array $price ): array {
+		if ( ! empty( $price['tiers'] ) ) {
+			return $price['tiers'];
+		}
+
+		return array(
+			array(
+				'from'       => 1,
+				'to'         => null,
+				'unit_price' => (string) ( $price['amount'] ?? '0' ),
+			),
+		);
+	}
+
+	/** What one price costs at a given quantity, or null if it will not parse. */
+	private static function rate_at( array $price, int $quantity ): ?float {
+		foreach ( self::steps_of( $price ) as $step ) {
+			$from = (int) $step['from'];
+			$to   = $step['to'];
+
+			if ( $quantity >= $from && ( $to === null || $quantity <= (int) $to ) ) {
+				return is_numeric( $step['unit_price'] ) ? (float) $step['unit_price'] : null;
+			}
+		}
+
+		// Below the first step. A ladder that starts at 51 says nothing about
+		// the first 50, and nothing costs nothing.
+		return 0.0;
+	}
+
+	// =========================================================================
 	// Admin UI
 	// =========================================================================
 
@@ -348,6 +496,8 @@ class Feature_Pricing extends Base {
 					</tbody>
 				</table>
 
+				<?php $this->render_total( $pricing['features'], $currency ); ?>
+
 				<p class="description" style="margin-top:10px;">
 					<?php
 					// Said in the header and again here. These are B2B prices and
@@ -403,6 +553,51 @@ class Feature_Pricing extends Base {
 	private function date( string $iso ): string {
 		$time = strtotime( $iso );
 		return $time === false ? $iso : date_i18n( get_option( 'date_format' ), $time );
+	}
+
+	/**
+	 * What the features they have switched on cost together.
+	 *
+	 * Silent when it cannot be worked out — an older back office that does not
+	 * name the billing product, or a price that is words rather than a number.
+	 * A merchant who sees no total goes and asks; one who sees a wrong total
+	 * budgets on it.
+	 */
+	private function render_total( array $features, string $currency ): void {
+		$ladders = self::combined_ladders( $features );
+
+		if ( $ladders === null ) {
+			return;
+		}
+		?>
+		<div style="margin-top:16px;padding:12px 14px;background:#f6f7f7;border-left:4px solid #2271b1;max-width:900px;">
+			<p style="margin:0 0 6px;">
+				<strong><?php esc_html_e( 'What your setup costs in total', O_TEXTDOMAIN ); ?></strong>
+			</p>
+
+			<?php if ( empty( $ladders ) ) : ?>
+				<p style="margin:0;">
+					<?php esc_html_e( 'Nothing. None of the features you have switched on carry a price.', O_TEXTDOMAIN ); ?>
+				</p>
+			<?php else : ?>
+				<?php foreach ( $ladders as $ladder ) : ?>
+					<?php foreach ( self::price_lines( array( 'unit' => $ladder['unit'], 'amount' => null, 'tiers' => $ladder['tiers'] ), $currency ) as $line ) : ?>
+						<div><?php echo esc_html( $line ); ?></div>
+					<?php endforeach; ?>
+				<?php endforeach; ?>
+
+				<p class="description" style="margin:6px 0 0;">
+					<?php
+					// The three delivery methods share one price because a label
+					// is one of them, never all three. Said out loud, because a
+					// merchant looking at three identical rows will otherwise
+					// wonder why the total is not three times as large.
+					esc_html_e( 'Counted once per thing you are billed for, not once per feature — switching on more delivery methods does not raise the price of a label.', O_TEXTDOMAIN );
+					?>
+				</p>
+			<?php endif; ?>
+		</div>
+		<?php
 	}
 
 	private function render_feature_row( array $feature, string $currency ): void {
