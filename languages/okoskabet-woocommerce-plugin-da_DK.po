@@ -1064,8 +1064,11 @@ msgstr "Funktion"
 msgid "Status"
 msgstr "Status"
 
-msgid "Your price"
-msgstr "Din pris"
+msgid "Your price (excl. VAT)"
+msgstr "Din pris (ekskl. moms)"
+
+msgid "All prices are excluding VAT. VAT is added on your invoice."
+msgstr "Alle priser er ekskl. moms. Momsen lægges på din faktura."
 
 msgid ""
 "To switch a feature on or off, do it in Økoskabet's back office — that way it "

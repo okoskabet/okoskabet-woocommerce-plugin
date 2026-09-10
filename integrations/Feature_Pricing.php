@@ -338,7 +338,7 @@ class Feature_Pricing extends Base {
 						<tr>
 							<th><?php esc_html_e( 'Feature', O_TEXTDOMAIN ); ?></th>
 							<th style="width:180px;"><?php esc_html_e( 'Status', O_TEXTDOMAIN ); ?></th>
-							<th style="width:280px;"><?php esc_html_e( 'Your price', O_TEXTDOMAIN ); ?></th>
+							<th style="width:280px;"><?php esc_html_e( 'Your price (excl. VAT)', O_TEXTDOMAIN ); ?></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -349,6 +349,16 @@ class Feature_Pricing extends Base {
 				</table>
 
 				<p class="description" style="margin-top:10px;">
+					<?php
+					// Said in the header and again here. These are B2B prices and
+					// VAT is added on the invoice, so a merchant who multiplies a
+					// price by their usage and budgets for it would otherwise be
+					// short by a quarter.
+					esc_html_e( 'All prices are excluding VAT. VAT is added on your invoice.', O_TEXTDOMAIN );
+					?>
+				</p>
+
+				<p class="description">
 					<?php esc_html_e( 'To switch a feature on or off, do it in Økoskabet\'s back office — that way it applies wherever you sell, not just in this shop.', O_TEXTDOMAIN ); ?>
 				</p>
 
