@@ -1038,6 +1038,68 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 }
 
 
+/**
+ * What an order contained, in the shape Økoskabet stores on the shipment.
+ *
+ * Sent on every shipment, whatever its type — a collection has contents just
+ * like a delivery does, and whether an order ends up in the packing room is
+ * Økoskabet's decision, not this plugin's. A merchant can be given the packing
+ * room after the fact, and orders that were already in the system would then
+ * have no contents for good.
+ *
+ * `product_id` is the field that carries weight: tags sit on the product, and
+ * two variations of one product are the same goods to a warehouse. The
+ * variation is kept beside it for the SKU it explains.
+ *
+ * Fees and deposits have no product behind them and are included anyway —
+ * Økoskabet files those under a catch-all, which is where things nobody
+ * categorised are supposed to show up.
+ *
+ * @param \WC_Order $order
+ * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,sku:string,quantity:int}>
+ */
+function oko_order_line_items(\WC_Order $order): array
+{
+	$lines = array();
+
+	foreach ($order->get_items(array('line_item', 'fee')) as $item) {
+		$quantity = (int) $item->get_quantity();
+
+		// A line for nothing is not something a shop sends, and a refund line
+		// is not something a packer can put in a box.
+		if ($quantity < 1) {
+			continue;
+		}
+
+		$product_id = 0;
+		$variant_id = 0;
+		$sku        = '';
+
+		if ($item instanceof \WC_Order_Item_Product) {
+			$product_id = (int) $item->get_product_id();
+			$variant_id = (int) $item->get_variation_id();
+
+			// The product can be gone — deleted from the catalogue after the
+			// order was placed. The line survives it; the SKU does not.
+			$product = $item->get_product();
+			if ($product instanceof \WC_Product) {
+				$sku = (string) $product->get_sku();
+			}
+		}
+
+		$lines[] = array(
+			'product_id' => $product_id > 0 ? $product_id : null,
+			'variant_id' => $variant_id > 0 ? $variant_id : null,
+			'name'       => (string) $item->get_name(),
+			'sku'        => $sku,
+			'quantity'   => $quantity,
+		);
+	}
+
+	return $lines;
+}
+
+
 add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
 
 /**
@@ -1180,6 +1242,10 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			],
 			'notes'              => (string) $order->get_customer_note(),
 			'delivery_date'      => $order_delivery_date,
+			// What the order contained. Økoskabet splits these into zones and
+			// prints them as packing slips; without them an order is a name
+			// with no contents.
+			'line_items'         => oko_order_line_items($order),
 		];
 
 		if ($is_store_pickup) {
