@@ -1246,6 +1246,13 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			// prints them as packing slips; without them an order is a name
 			// with no contents.
 			'line_items'         => oko_order_line_items($order),
+			// Where to ask us what those product ids are. The finished address
+			// rather than a base, because the route is keyed on the merchant
+			// id this plugin issues — handing over a base would leave
+			// Økoskabet guessing the last part of the path, which is the
+			// string surgery we are trying to avoid. Sent on every order, so
+			// it repairs itself if the shop moves domain.
+			'webshop_products_url' => rest_url('wp/v2/okoskabet/products/' . rawurlencode((string) ($merchant['id'] ?? 'default'))),
 		];
 
 		if ($is_store_pickup) {

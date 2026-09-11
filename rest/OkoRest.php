@@ -163,6 +163,28 @@ class OkoRest extends Base
 			)
 		);
 
+		// Catalogue lookup for Økoskabet's packing room. Keyed on the
+		// merchant for the same reason the webhook is: one shop can host
+		// several merchants, each with its own secret, and a signature must
+		// never be verifiable against the wrong one.
+		//
+		// POST rather than GET because the signature covers the raw body,
+		// and a GET has no body to cover. That also puts the timestamp
+		// inside what is signed, so a replay cannot be given a fresh one.
+		\register_rest_route(
+			'wp/v2',
+			'okoskabet/products/(?P<merchant_id>[a-z0-9_\-]+)',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => '__return_true',
+				'callback'            => array($this, 'handle_products'),
+				'args'                => array(
+					'ids'       => array('required' => true),
+					'timestamp' => array('required' => true),
+				),
+			)
+		);
+
 		// Legacy webhook route — kept for backward compatibility. Always
 		// dispatches to the default merchant. New deployments should use
 		// the per-merchant URL above.
@@ -684,6 +706,102 @@ class OkoRest extends Base
 	 * @param \WP_REST_Request<array> $request
 	 * @return array|\WP_Error
 	 */
+	/** How far a request's timestamp may be from ours before we refuse it. */
+	const PRODUCTS_CLOCK_SKEW = 300;
+
+	/** Most products Økoskabet may ask about in one request. */
+	const PRODUCTS_MAX_IDS = 100;
+
+	/**
+	 * Tell Økoskabet what a handful of product ids are.
+	 *
+	 * Read-only, and the only endpoint here that Økoskabet calls of its own
+	 * accord rather than in answer to a shop's request. The packing room uses
+	 * it to turn order lines into something a person can pick: a name, a
+	 * picture, and the tags that decide which zone a thing belongs to.
+	 *
+	 * Authenticated exactly like the webhook — HMAC-SHA256 over the raw body,
+	 * against this merchant's own secret — so there is no second credential to
+	 * issue, store and rotate.
+	 *
+	 * @param \WP_REST_Request $request
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function handle_products(\WP_REST_Request $request)
+	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
+
+		$merchant = Merchants::get(Merchant_Router::sanitize_id((string) $request->get_param('merchant_id')));
+		if (!$merchant) {
+			return new \WP_Error('unknown_merchant', 'Unknown merchant', array('status' => 404));
+		}
+
+		// The same switch that stops incoming webhooks stops this. A merchant
+		// who has turned Økoskabet's inbound calls off means all of them, and
+		// one kill switch that does what it says beats two that each do half.
+		$settings = \o_get_settings();
+		if (empty($settings['_webhook_enabled'])) {
+			return new \WP_Error('webhook_disabled', 'Økoskabet inbound calls are disabled', array('status' => 403));
+		}
+
+		$secret = (string) ($merchant['webhook_secret'] ?? '');
+		if ($secret === '') {
+			return new \WP_Error('webhook_secret_missing', 'Webhook secret not configured for this merchant', array('status' => 500));
+		}
+
+		$headers            = $request->get_headers();
+		$received_signature = '';
+		if (!empty($headers['x_hmac_sha256'])) {
+			$received_signature = is_array($headers['x_hmac_sha256']) ? $headers['x_hmac_sha256'][0] : $headers['x_hmac_sha256'];
+		}
+		if ($received_signature === '') {
+			return new \WP_Error('signature_missing', 'Missing signature header', array('status' => 401));
+		}
+
+		$expected_signature = hash_hmac('sha256', $request->get_body(), $secret);
+		if (!hash_equals($expected_signature, strtolower($received_signature))) {
+			return new \WP_Error('signature_invalid', 'Invalid HMAC signature', array('status' => 401));
+		}
+
+		// Inside the signature, not beside it. A timestamp in a header would
+		// be free to replace, which is the same as not having one.
+		$timestamp = (int) $request->get_param('timestamp');
+		if (abs(time() - $timestamp) > self::PRODUCTS_CLOCK_SKEW) {
+			return new \WP_Error('timestamp_out_of_range', 'Timestamp outside the accepted window', array('status' => 401));
+		}
+
+		$ids = array();
+		foreach ((array) $request->get_param('ids') as $id) {
+			$id = (int) $id;
+			if ($id > 0) {
+				$ids[$id] = $id;
+			}
+		}
+		$ids = array_slice(array_values($ids), 0, self::PRODUCTS_MAX_IDS);
+
+		$products = array();
+		foreach ($ids as $id) {
+			$product = \function_exists('wc_get_product') ? \wc_get_product($id) : null;
+
+			// A product the shop does not have is left out rather than
+			// refused. An order line outlives the product it was bought from,
+			// and Økoskabet caches the absence as an answer.
+			if (!$product instanceof \WC_Product) {
+				continue;
+			}
+
+			$image_id = (int) $product->get_image_id();
+
+			$products[] = array(
+				'id'    => $id,
+				'name'  => (string) $product->get_name(),
+				'image' => $image_id > 0 ? (string) \wp_get_attachment_url($image_id) : '',
+				'tags'  => array_values(array_map('strval', (array) \wp_get_post_terms($id, 'product_tag', array('fields' => 'names')))),
+			);
+		}
+
+		return new \WP_REST_Response($products, 200);
+	}
+
 	public function handle_webhook(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
