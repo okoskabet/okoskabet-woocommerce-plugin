@@ -1100,6 +1100,140 @@ function oko_order_line_items(\WC_Order $order): array
 }
 
 
+/**
+ * Everything Økoskabet is told about an order, in one place.
+ *
+ * Built once and used twice — when the order is first sent, and again when it
+ * is edited afterwards. Two builders would drift, and the second one would be
+ * the one nobody noticed had gone wrong.
+ *
+ * @param \WC_Order $order
+ * @param array     $merchant The merchant this order routes to.
+ * @return array|null Null when the order carries no delivery date, which means
+ *                    it is not an Økoskabet order at all.
+ */
+function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
+{
+	$order_number = $order->get_order_number();
+	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
+	$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
+	// _billing_okoskabet_delivery_location stores the English label (from dropdown).
+	$order_delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
+	// _billing_okoskabet_delivery_note stores the free-text note from the customer.
+	$order_delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+
+	// Build the logistics note sent to Økoskabet's API.
+	// Always in English: combine dropdown selection and free-text note.
+	$logistics_note_parts = array();
+	if (!empty($order_delivery_location)) {
+		$logistics_note_parts[] = $order_delivery_location; // Already stored in English.
+	}
+	if (!empty($order_delivery_note)) {
+		$logistics_note_parts[] = $order_delivery_note;
+	}
+	$logistics_note = implode(' — ', $logistics_note_parts);
+
+	if (empty($order_delivery_date)) {
+		return null;
+	}
+
+	$is_shed_delivery  = false;
+	$is_store_pickup   = false;
+	foreach ($order->get_shipping_methods() as $shipping_method) {
+		$method_id = $shipping_method->get_method_id();
+		if ($method_id === 'hey_okoskabet_shipping_shed') {
+			$is_shed_delivery = true;
+			break;
+		}
+		if ($method_id === 'hey_okoskabet_shipping_store_pickup') {
+			$is_store_pickup = true;
+			break;
+		}
+	}
+
+	if (!$is_shed_delivery) {
+		$order_shed = '';
+	}
+
+	// A store pickup has no delivery target at all — the shop keeps the
+	// goods until the customer collects them — so it carries neither a
+	// shed reservation nor a delivery address. What it does carry is the
+	// place to collect from, chosen at checkout from the merchant's own
+	// pickup locations.
+	$order_pickup_location_id = $is_store_pickup
+		? $order->get_meta('_billing_okoskabet_pickup_location_id', true)
+		: '';
+
+
+	// One shipment, three shapes. Everything every shipment carries is
+	// built once; each type then adds only what makes it that type —
+	// so a new key (like order_number) is added in one place, not three.
+	$data = [
+		'locale'             => get_locale(),
+		'allow_invalid'      => true,
+		'shipment_reference' => (string) $order_number,
+		// The shop's own order id, so a support conversation has something
+		// the merchant recognises. Økoskabet keeps two: the bare number
+		// people search on, and the reference as the shop prints it (which
+		// a numbering plugin may prefix, "#1042" and such). Write-only at
+		// Økoskabet's end; shipment_reference (our stable key) is untouched.
+		'webshop_order_number'    => (string) $order->get_id(),
+		'webshop_order_reference' => (string) $order->get_order_number(),
+		'customer'           => [
+			'first_name' => $order->get_billing_first_name(),
+			'last_name'  => $order->get_billing_last_name(),
+			'phone'      => $order->get_billing_phone(),
+			'email'      => $order->get_billing_email(),
+		],
+		'notes'              => (string) $order->get_customer_note(),
+		'delivery_date'      => $order_delivery_date,
+		// What the order contained. Økoskabet splits these into zones and
+		// prints them as packing slips; without them an order is a name
+		// with no contents.
+		'line_items'         => oko_order_line_items($order),
+		// Where to ask us what those product ids are. The finished address
+		// rather than a base, because the route is keyed on the merchant
+		// id this plugin issues — handing over a base would leave
+		// Økoskabet guessing the last part of the path, which is the
+		// string surgery we are trying to avoid. Sent on every order, so
+		// it repairs itself if the shop moves domain.
+		'webshop_products_url' => rest_url('wp/v2/okoskabet/products/' . rawurlencode((string) ($merchant['id'] ?? 'default'))),
+	];
+
+	if ($is_store_pickup) {
+		// A collection has no delivery target at all — the shop keeps the
+		// goods — so it names the place to collect from instead.
+		$data['shipment_type']      = 'store_pickup';
+		$data['pickup_location_id'] = $order_pickup_location_id !== '' ? (int) $order_pickup_location_id : null;
+	} elseif (!empty($order_shed)) {
+		$data['reservation'] = [
+			'shed_id'           => $order_shed,
+			'max_duration_days' => 1,
+		];
+	} else {
+		$recipient_name = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
+		$data['customer']['recipient_name'] = $recipient_name;
+		$data['home_delivery'] = array_filter([
+			'recipient_name' => $recipient_name,
+			'address_1'      => $order->get_shipping_address_1(),
+			'address_2'      => $order->get_shipping_address_2(),
+			'city'           => $order->get_shipping_city(),
+			'postal_code'    => $order->get_shipping_postcode(),
+			// Combined English location + free-text note, or null if empty.
+			'location'       => !empty($logistics_note) ? $logistics_note : null,
+		]);
+		// Send the logistics note (dropdown selection + free-text) as the API
+		// notes field so it appears in Økoskabet's Notes column. Falls back to
+		// the standard WooCommerce customer note when no logistics note is set.
+		if (!empty($logistics_note)) {
+			$data['notes'] = $logistics_note;
+		}
+	}
+
+	return $data;
+}
+
+
 add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
 
 /**
@@ -1168,122 +1302,18 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			return;
 		}
 
-		$order_number = $order->get_order_number();
-		$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
-		$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
-		// _billing_okoskabet_delivery_location stores the English label (from dropdown).
-		$order_delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
-		// _billing_okoskabet_delivery_note stores the free-text note from the customer.
-		$order_delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
-
-		// Build the logistics note sent to Økoskabet's API.
-		// Always in English: combine dropdown selection and free-text note.
-		$logistics_note_parts = array();
-		if (!empty($order_delivery_location)) {
-			$logistics_note_parts[] = $order_delivery_location; // Already stored in English.
-		}
-		if (!empty($order_delivery_note)) {
-			$logistics_note_parts[] = $order_delivery_note;
-		}
-		$logistics_note = implode(' — ', $logistics_note_parts);
-
-		if (empty($order_delivery_date)) {
+		$url  = $api_url . '/api/v1/shipments/';
+		$data = oko_shipment_payload($order, $merchant);
+		if ($data === null) {
 			return;
 		}
 
-		$is_shed_delivery  = false;
-		$is_store_pickup   = false;
-		foreach ($order->get_shipping_methods() as $shipping_method) {
-			$method_id = $shipping_method->get_method_id();
-			if ($method_id === 'hey_okoskabet_shipping_shed') {
-				$is_shed_delivery = true;
-				break;
-			}
-			if ($method_id === 'hey_okoskabet_shipping_store_pickup') {
-				$is_store_pickup = true;
-				break;
-			}
-		}
-
-		if (!$is_shed_delivery) {
-			$order_shed = '';
-		}
-
-		// A store pickup has no delivery target at all — the shop keeps the
-		// goods until the customer collects them — so it carries neither a
-		// shed reservation nor a delivery address. What it does carry is the
-		// place to collect from, chosen at checkout from the merchant's own
-		// pickup locations.
-		$order_pickup_location_id = $is_store_pickup
-			? $order->get_meta('_billing_okoskabet_pickup_location_id', true)
-			: '';
-
-		$url = $api_url . '/api/v1/shipments/';
-
-		// One shipment, three shapes. Everything every shipment carries is
-		// built once; each type then adds only what makes it that type —
-		// so a new key (like order_number) is added in one place, not three.
-		$data = [
-			'locale'             => get_locale(),
-			'allow_invalid'      => true,
-			'shipment_reference' => (string) $order_number,
-			// The shop's own order id, so a support conversation has something
-			// the merchant recognises. Økoskabet keeps two: the bare number
-			// people search on, and the reference as the shop prints it (which
-			// a numbering plugin may prefix, "#1042" and such). Write-only at
-			// Økoskabet's end; shipment_reference (our stable key) is untouched.
-			'webshop_order_number'    => (string) $order->get_id(),
-			'webshop_order_reference' => (string) $order->get_order_number(),
-			'customer'           => [
-				'first_name' => $order->get_billing_first_name(),
-				'last_name'  => $order->get_billing_last_name(),
-				'phone'      => $order->get_billing_phone(),
-				'email'      => $order->get_billing_email(),
-			],
-			'notes'              => (string) $order->get_customer_note(),
-			'delivery_date'      => $order_delivery_date,
-			// What the order contained. Økoskabet splits these into zones and
-			// prints them as packing slips; without them an order is a name
-			// with no contents.
-			'line_items'         => oko_order_line_items($order),
-			// Where to ask us what those product ids are. The finished address
-			// rather than a base, because the route is keyed on the merchant
-			// id this plugin issues — handing over a base would leave
-			// Økoskabet guessing the last part of the path, which is the
-			// string surgery we are trying to avoid. Sent on every order, so
-			// it repairs itself if the shop moves domain.
-			'webshop_products_url' => rest_url('wp/v2/okoskabet/products/' . rawurlencode((string) ($merchant['id'] ?? 'default'))),
-		];
-
-		if ($is_store_pickup) {
-			// A collection has no delivery target at all — the shop keeps the
-			// goods — so it names the place to collect from instead.
-			$data['shipment_type']      = 'store_pickup';
-			$data['pickup_location_id'] = $order_pickup_location_id !== '' ? (int) $order_pickup_location_id : null;
-		} elseif (!empty($order_shed)) {
-			$data['reservation'] = [
-				'shed_id'           => $order_shed,
-				'max_duration_days' => 1,
-			];
-		} else {
-			$recipient_name = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
-			$data['customer']['recipient_name'] = $recipient_name;
-			$data['home_delivery'] = array_filter([
-				'recipient_name' => $recipient_name,
-				'address_1'      => $order->get_shipping_address_1(),
-				'address_2'      => $order->get_shipping_address_2(),
-				'city'           => $order->get_shipping_city(),
-				'postal_code'    => $order->get_shipping_postcode(),
-				// Combined English location + free-text note, or null if empty.
-				'location'       => !empty($logistics_note) ? $logistics_note : null,
-			]);
-			// Send the logistics note (dropdown selection + free-text) as the API
-			// notes field so it appears in Økoskabet's Notes column. Falls back to
-			// the standard WooCommerce customer note when no logistics note is set.
-			if (!empty($logistics_note)) {
-				$data['notes'] = $logistics_note;
-			}
-		}
+		// Read back off the payload rather than kept in a second set of
+		// variables, so the order note and what we actually sent can never
+		// disagree about which kind of shipment this was.
+		$order_delivery_date = (string) ($data['delivery_date'] ?? '');
+		$is_store_pickup     = ($data['shipment_type'] ?? '') === 'store_pickup';
+		$order_shed          = (string) ($data['reservation']['shed_id'] ?? '');
 
 		$response = wp_remote_post($url, array(
 			'timeout' => 15,
@@ -1320,8 +1350,140 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		$order->set_customer_note($oko_order_note . "\n" . $customer_note, 0);
 
 		$order->update_meta_data('billing_okoskabet_done', true);
+
+		// Record what Økoskabet now has — after the note above, because the
+		// note is part of what we send. Without this the save below would look
+		// like an edit and send the same order straight back a second time.
+		$sent = oko_shipment_payload($order, $merchant);
+		if ($sent !== null) {
+			$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($sent));
+		}
+
 		$order->save();
 	}
+}
+
+/** Meta holding a fingerprint of what we last told Økoskabet about an order. */
+const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
+
+/**
+ * A fingerprint of a payload, so we can tell whether anything actually changed.
+ */
+function oko_shipment_fingerprint(array $payload): string
+{
+	return md5((string) wp_json_encode($payload));
+}
+
+add_action('woocommerce_update_order', 'oko_resend_shipment_on_update', 20, 1);
+
+/**
+ * Send an edited order to Økoskabet again.
+ *
+ * An order can be changed after it has been placed — a date moved, an address
+ * corrected, a line removed — and until now none of that reached Økoskabet.
+ * The order was frozen there from the moment it was created, and the packing
+ * room, the driver and the shed reservation all worked from the original.
+ *
+ * Deliberately quiet:
+ *
+ *   - Only for orders Økoskabet already has. An order that was never sent is
+ *     not sent by editing it; that is what placing it is for.
+ *   - Only when the payload actually differs from the last one we sent.
+ *     `woocommerce_update_order` fires on every save, including our own, and a
+ *     shop that saves an order ten times should not send ten identical PUTs.
+ *   - Once per request, whatever WooCommerce does internally.
+ *   - A failure is logged and the fingerprint is left alone, so the next save
+ *     tries again. It never touches the order's status: an edit that cannot
+ *     reach Økoskabet is a problem to retry, not a reason to fail an order a
+ *     customer has already paid for.
+ *
+ * @param int $order_id
+ */
+function oko_resend_shipment_on_update(int $order_id): void
+{
+	static $seen = array();
+
+	if (isset($seen[$order_id])) {
+		return;
+	}
+
+	$order = wc_get_order($order_id);
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	// Never sent, or on its way out. A cancellation is a DELETE elsewhere.
+	if (empty($order->get_meta('billing_okoskabet_done', true)) || $order->get_status() === 'cancelled') {
+		return;
+	}
+
+	/**
+	 * Escape hatch for a shop that would rather Økoskabet kept the order as
+	 * it was placed.
+	 */
+	if (! apply_filters('oko_resend_shipment_on_update', true, $order)) {
+		return;
+	}
+
+	$merchant = null;
+	if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
+		$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_order($order);
+		$merchant = $resolved['merchant'] ?? null;
+	}
+	if (! $merchant) {
+		$merchant = o_get_merchant();
+	}
+	if (empty($merchant['api_key'])) {
+		return;
+	}
+
+	$payload = oko_shipment_payload($order, $merchant);
+	if ($payload === null) {
+		return;
+	}
+
+	$fingerprint = oko_shipment_fingerprint($payload);
+	if ($fingerprint === (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true)) {
+		return;
+	}
+
+	$seen[$order_id] = true;
+
+	$response = wp_remote_request(
+		o_merchant_api_url($merchant) . '/api/v1/shipments/' . rawurlencode((string) $order->get_order_number()),
+		array(
+			'method'  => 'PUT',
+			'timeout' => 15,
+			'headers' => array(
+				'Content-Type'  => 'application/json',
+				'Authorization' => (string) $merchant['api_key'],
+			),
+			'body' => wp_json_encode($payload),
+		)
+	);
+
+	if (is_wp_error($response)) {
+		error_log('okoskabet_woocommerce_plugin: could not resend order ' . $order->get_order_number() . ': ' . $response->get_error_message());
+		return;
+	}
+
+	$http_code = (int) wp_remote_retrieve_response_code($response);
+	if ($http_code < 200 || $http_code > 299) {
+		error_log(sprintf(
+			'okoskabet_woocommerce_plugin: resend of order %s rejected (%d): %s',
+			$order->get_order_number(),
+			$http_code,
+			wp_remote_retrieve_body($response)
+		));
+		return;
+	}
+
+	// Meta only, not a full save — writing the fingerprint should not itself
+	// read as an edit and call us straight back. `save_meta_data()` also goes
+	// through the order's data store, so this works whether the shop keeps
+	// orders in posts or in WooCommerce's own tables.
+	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, $fingerprint);
+	$order->save_meta_data();
 }
 
 add_action('woocommerce_after_checkout_validation', 'okoskabet_woocommerce_plugin_after_checkout_validation');
