@@ -1462,20 +1462,50 @@ function oko_resend_shipment_on_update(int $order_id): void
 		)
 	);
 
+	// Could not reach Økoskabet at all. Leave the fingerprint alone so the
+	// next save tries again — this is exactly the case retrying is for.
 	if (is_wp_error($response)) {
 		error_log('okoskabet_woocommerce_plugin: could not resend order ' . $order->get_order_number() . ': ' . $response->get_error_message());
 		return;
 	}
 
 	$http_code = (int) wp_remote_retrieve_response_code($response);
-	if ($http_code < 200 || $http_code > 299) {
+	$body      = (string) wp_remote_retrieve_body($response);
+
+	// A refusal is not a failure to deliver. Økoskabet locks a shipment once
+	// it has received it, and answers 422 from then on — so an order that has
+	// gone past that point would otherwise be resent on every single save for
+	// the rest of its life, quietly and forever. Anything in the 4xx range
+	// says this payload will never be accepted, and sending it again
+	// unchanged cannot help; record it as dealt with. A later edit is a
+	// different payload and gets one attempt of its own.
+	//
+	// 5xx is left to retry: that is Økoskabet having a bad minute, not a
+	// verdict on the order.
+	if ($http_code >= 500) {
 		error_log(sprintf(
-			'okoskabet_woocommerce_plugin: resend of order %s rejected (%d): %s',
+			'okoskabet_woocommerce_plugin: resend of order %s failed (%d), will retry: %s',
 			$order->get_order_number(),
 			$http_code,
-			wp_remote_retrieve_body($response)
+			$body
 		));
 		return;
+	}
+
+	if ($http_code < 200 || $http_code > 299) {
+		// 404 comes back as plain text, not JSON, so decode defensively and
+		// fall back to the raw body.
+		$decoded = json_decode($body, true);
+		$reason  = is_array($decoded) && ! empty($decoded['error_message'])
+			? (string) $decoded['error_message']
+			: $body;
+
+		error_log(sprintf(
+			'okoskabet_woocommerce_plugin: resend of order %s refused (%d), not retrying: %s',
+			$order->get_order_number(),
+			$http_code,
+			$reason
+		));
 	}
 
 	// Meta only, not a full save — writing the fingerprint should not itself
