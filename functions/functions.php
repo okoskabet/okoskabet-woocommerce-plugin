@@ -1492,6 +1492,26 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
+	// Being turned away is not the same as being told no. 401 and 403 are
+	// about the credential, and say nothing about the order — Økoskabet
+	// answers 401 for a key that has been rotated *and* for a request that
+	// carried no key at all. Treating those as settled would mean a key the
+	// merchant fixes tomorrow never repairs the orders edited today, and a bug
+	// that dropped the header would quietly mark every order as dealt with.
+	// So they retry, and they say so loudly: this is the one failure here that
+	// needs a person.
+	if ($http_code === 401 || $http_code === 403) {
+		error_log(sprintf(
+			'okoskabet_woocommerce_plugin: RESEND REFUSED for order %s (%d) — Økoskabet would not accept the API key for merchant %s. '
+				. 'Edits to this order are not reaching Økoskabet. Check the key under Økoskabet settings. Response: %s',
+			$order->get_order_number(),
+			$http_code,
+			$merchant['id'] ?? '?',
+			$body
+		));
+		return;
+	}
+
 	if ($http_code < 200 || $http_code > 299) {
 		// 404 comes back as plain text, not JSON, so decode defensively and
 		// fall back to the raw body.
