@@ -1367,6 +1367,18 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
 
 /**
+ * Meta marking an order Økoskabet will not take changes to any more.
+ *
+ * A shipment locks once a parcel has left the merchant's hands, and no edit
+ * after that is ever accepted. One-way on purpose: nothing unlocks a parcel
+ * that has already been collected.
+ */
+const OKO_SHIPMENT_LOCKED_META = '_okoskabet_shipment_locked';
+
+/** The `error_code` Økoskabet uses for a shipment that can no longer change. */
+const OKO_ERROR_CODE_LOCKED = 'shipment_locked';
+
+/**
  * A fingerprint of a payload, so we can tell whether anything actually changed.
  */
 function oko_shipment_fingerprint(array $payload): string
@@ -1414,6 +1426,13 @@ function oko_resend_shipment_on_update(int $order_id): void
 
 	// Never sent, or on its way out. A cancellation is a DELETE elsewhere.
 	if (empty($order->get_meta('billing_okoskabet_done', true)) || $order->get_status() === 'cancelled') {
+		return;
+	}
+
+	// Økoskabet has told us this one can no longer change. Every further edit
+	// would be a call that cannot succeed, so we stop asking — the goods are
+	// already on their way to someone.
+	if (! empty($order->get_meta(OKO_SHIPMENT_LOCKED_META, true))) {
 		return;
 	}
 
@@ -1520,12 +1539,24 @@ function oko_resend_shipment_on_update(int $order_id): void
 			? (string) $decoded['error_message']
 			: $body;
 
-		error_log(sprintf(
-			'okoskabet_woocommerce_plugin: resend of order %s refused (%d), not retrying: %s',
-			$order->get_order_number(),
-			$http_code,
-			$reason
-		));
+		// A named reason, when there is one. Deliberately matched on the code
+		// and never on the message: the message is translated into the caller's
+		// language, so a match written against the English one would pass every
+		// test we wrote and say nothing in a Danish shop.
+		if (is_array($decoded) && ($decoded['error_code'] ?? '') === OKO_ERROR_CODE_LOCKED) {
+			$order->update_meta_data(OKO_SHIPMENT_LOCKED_META, true);
+			error_log(sprintf(
+				'okoskabet_woocommerce_plugin: order %s can no longer be changed at Økoskabet — a parcel has been received. Later edits stay in the shop only.',
+				$order->get_order_number()
+			));
+		} else {
+			error_log(sprintf(
+				'okoskabet_woocommerce_plugin: resend of order %s refused (%d), not retrying: %s',
+				$order->get_order_number(),
+				$http_code,
+				$reason
+			));
+		}
 	}
 
 	// Meta only, not a full save — writing the fingerprint should not itself
