@@ -445,12 +445,15 @@ class Packaging_Fee extends Base {
 	}
 
 	/**
-	 * Whether the remembered date may be used: on the checkout and its own
-	 * recalculations only. The cart page never shows the calendar, so a date
-	 * left over from an abandoned checkout must not price the cart there.
+	 * Whether the remembered date may be used: in the checkout's own
+	 * recalculations only. The cart page never shows the calendar, and a
+	 * checkout page being loaded starts with no date chosen — in both, a date
+	 * left over from an earlier visit must not price the order.
 	 */
 	private static function on_checkout(): bool {
-		return \function_exists( 'WC' ) && WC()->session && \function_exists( 'is_checkout' ) && is_checkout();
+		return \function_exists( 'WC' ) && WC()->session
+			&& \function_exists( 'is_checkout' ) && is_checkout()
+			&& \function_exists( 'wp_doing_ajax' ) && wp_doing_ajax();
 	}
 
 	/** The order is placed; the next cart starts with no date chosen. */
