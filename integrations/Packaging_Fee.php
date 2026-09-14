@@ -185,6 +185,7 @@ class Packaging_Fee extends Base {
 		// Fires at the start of each checkout recalculation, before the totals,
 		// so a pre-order fee sees the date the customer has just picked.
 		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'remember_chosen_date' ) );
+		add_action( 'woocommerce_checkout_order_created', array( $this, 'forget_chosen_date' ) );
 
 		// "Gratis emballage" sits on the coupon itself, right where a merchant
 		// already goes to tick "Allow free shipping".
@@ -220,6 +221,26 @@ class Packaging_Fee extends Base {
 		self::$config_cache = self::normalise_config( $stored );
 
 		return self::$config_cache;
+	}
+
+	/**
+	 * Whether the delivery date the customer picks can change the fee: the fee
+	 * is on and at least one enabled rule charges pre-orders only. The checkout
+	 * only recalculates on a date change when it can, so a shop without such a
+	 * rule keeps a checkout that behaves exactly as it did.
+	 */
+	public static function date_can_change_fee(): bool {
+		$config = self::get_config();
+		if ( empty( $config['enabled'] ) ) {
+			return false;
+		}
+		foreach ( $config['rules'] as $rule ) {
+			if ( ! empty( $rule['enabled'] ) && (int) ( $rule['min_days_ahead'] ?? 0 ) > 0 ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -417,10 +438,26 @@ class Packaging_Fee extends Base {
 		// phpcs:disable WordPress.Security.NonceVerification -- read-only, checkout verifies its own nonce.
 		$date = isset( $_POST['billing_okoskabet_delivery_date'] )
 			? sanitize_text_field( wp_unslash( (string) $_POST['billing_okoskabet_delivery_date'] ) )
-			: ( \function_exists( 'WC' ) && WC()->session ? (string) WC()->session->get( self::SESSION_DELIVERY_DATE, '' ) : '' );
+			: ( self::on_checkout() ? (string) WC()->session->get( self::SESSION_DELIVERY_DATE, '' ) : '' );
 		// phpcs:enable WordPress.Security.NonceVerification
 
 		return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ? $date : null;
+	}
+
+	/**
+	 * Whether the remembered date may be used: on the checkout and its own
+	 * recalculations only. The cart page never shows the calendar, so a date
+	 * left over from an abandoned checkout must not price the cart there.
+	 */
+	private static function on_checkout(): bool {
+		return \function_exists( 'WC' ) && WC()->session && \function_exists( 'is_checkout' ) && is_checkout();
+	}
+
+	/** The order is placed; the next cart starts with no date chosen. */
+	public function forget_chosen_date(): void {
+		if ( \function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->set( self::SESSION_DELIVERY_DATE, '' );
+		}
 	}
 
 	/**

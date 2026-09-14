@@ -363,6 +363,13 @@
 							break;
 						}
 					}
+				} else if (nfe && nfe.value) {
+					// "Andet" leaves the location empty and keeps the text in
+					// the note. This row is rebuilt on every recalculation of
+					// the checkout, and without this it came back on the first
+					// option — which then threw the customer's note away and
+					// sent "In front of the door" instead.
+					sel.value = ANDET_VALUE;
 				}
 				sel.addEventListener("change", function () {
 					refreshNoteVisibility();

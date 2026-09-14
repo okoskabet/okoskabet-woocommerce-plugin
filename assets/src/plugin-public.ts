@@ -20,16 +20,24 @@ class OkoskabetCheckout {
 	private displayOption: 'inline' | 'modal';
 	private shedDeliveryDescription: string;
 	private homeDeliveryDescription: string;
+	private dateAffectsTotals: boolean;
+
+	// Whether the customer has the shed picker open in modal mode. The picker
+	// is rebuilt on every recalculation of the checkout, and without this a
+	// customer part-way through choosing would see the modal close on them.
+	private optionsOpen = false;
 
 	private deliveryOptions: App | undefined;
 
 	constructor(
 		locale: string,
 		displayOption: 'inline' | 'modal',
-		descriptions: { homeDelivery: string; shedDelivery: string }
+		descriptions: { homeDelivery: string; shedDelivery: string },
+		dateAffectsTotals: boolean
 	) {
 		this.locale = locale;
 		this.displayOption = displayOption;
+		this.dateAffectsTotals = dateAffectsTotals;
 		this.homeDeliveryDescription = descriptions.homeDelivery;
 		this.shedDeliveryDescription = descriptions.shedDelivery;
 
@@ -79,6 +87,7 @@ class OkoskabetCheckout {
 		$( document ).on( 'change', 'input.shipping_method', function () {
 			that.deliveryOptions?.$destroy();
 			that.deliveryOptions = undefined;
+			that.optionsOpen = false;
 			that.clearInputs();
 		} );
 	}
@@ -126,6 +135,7 @@ class OkoskabetCheckout {
 				postalCode,
 				initialDeliveryDate,
 				initialShedId,
+				initialShowOptions: this.optionsOpen,
 				locale: this.locale,
 				strings: {
 					shedDeliveryDescription: this.shedDeliveryDescription,
@@ -136,6 +146,9 @@ class OkoskabetCheckout {
 				},
 				onSelectDeliveryDate: ( date: string ) => {
 					this.setDeliveryDateInput( date );
+				},
+				onToggleOptions: ( open: boolean ) => {
+					this.optionsOpen = open;
 				},
 			},
 		} );
@@ -267,10 +280,11 @@ class OkoskabetCheckout {
 		// The date can change what the order costs: a date far enough ahead is
 		// a pre-order, and a pre-order can carry its own fee. WooCommerce only
 		// recalculates when told to, and a total that changes after the customer
-		// has pressed pay is not a price they were shown. Clearing the date is
-		// left out, because that only happens alongside a change of shipping
-		// method, which recalculates on its own.
-		if ( value ) {
+		// has pressed pay is not a price they were shown. Only shops with such a
+		// fee ask for it. Clearing the date is left out, because that only
+		// happens alongside a change of shipping method, which recalculates on
+		// its own.
+		if ( value && this.dateAffectsTotals ) {
 			jQuery( document.body ).trigger( 'update_checkout' );
 		}
 	}
@@ -289,9 +303,15 @@ window.addEventListener( 'DOMContentLoaded', function () {
 		locale: locale,
 		displayOption: displayOption,
 		descriptions: descriptions,
+		dateAffectsTotals: dateAffectsTotals,
 	} = ( window as any )._okoskabet_checkout;
 
-	new OkoskabetCheckout( locale, displayOption, descriptions );
+	new OkoskabetCheckout(
+		locale,
+		displayOption,
+		descriptions,
+		Boolean( dateAffectsTotals )
+	);
 
 	window.mapboxgl.accessToken =
 		'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';

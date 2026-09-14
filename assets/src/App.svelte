@@ -18,9 +18,11 @@
 	// What the customer had chosen before the checkout was last recalculated.
 	export let initialDeliveryDate: string | undefined = undefined;
 	export let initialShedId: string | undefined = undefined;
+	export let initialShowOptions = false;
 
 	export let onSelectShed: (selectedShedId: string) => void;
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
+	export let onToggleOptions: (open: boolean) => void = () => undefined;
 </script>
 
 {#if shippingMethod === 'shed-delivery'}
@@ -31,7 +33,9 @@
 		{postalCode}
 		{initialShedId}
 		{initialDeliveryDate}
+		{initialShowOptions}
 		{onSelectShed}
+		{onToggleOptions}
 		{onSelectDeliveryDate}
 		description={strings.shedDeliveryDescription}
 	/>

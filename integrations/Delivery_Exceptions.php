@@ -806,7 +806,7 @@ class Delivery_Exceptions extends Base {
 				</label>
 				<label title="<?php esc_attr_e( 'Shows these products every date up to the until date, even past the normal number of days. For pre-orders: the soonest days as usual, and Christmas as well.', O_TEXTDOMAIN ); ?>">
 					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
-					<?php esc_html_e( 'Pre-order: show dates up to the until date', O_TEXTDOMAIN ); ?>
+					<?php esc_html_e( 'Pre-order: offer these dates on top of the normal ones', O_TEXTDOMAIN ); ?>
 				</label>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
 					<?php esc_html_e( 'Fjern', O_TEXTDOMAIN ); ?>
@@ -1180,19 +1180,17 @@ class Delivery_Exceptions extends Base {
 			return $dates; // not configured → no display trimming (legacy behaviour).
 		}
 
-		// A pre-order rule is the one thing allowed past the limit. Without this
-		// the limit cut away the very dates the rule exists to offer — ice cream
-		// for Christmas vanished at day ten — and a merchant's only way round it
-		// was to raise the limit for every product in the shop.
-		$reach = self::pre_order_reach( $applicable_rules );
+		// A pre-order rule's own days are the one thing allowed past the limit.
+		// Without this the limit cut away the very dates the rule exists to
+		// offer — ice cream for Christmas vanished at day ten — and a merchant's
+		// only way round it was to raise the limit for every product in the shop.
+		$pre_order_ranges = self::pre_order_ranges( $applicable_rules );
 
 		if ( $limit['mode'] === 'count' ) {
 			$shown = array_slice( $dates, 0, $limit['value'] );
-			if ( $reach !== null ) {
-				foreach ( array_slice( $dates, $limit['value'] ) as $date ) {
-					if ( is_string( $date ) && $date <= $reach ) {
-						$shown[] = $date;
-					}
+			foreach ( array_slice( $dates, $limit['value'] ) as $date ) {
+				if ( self::date_in_ranges( $date, $pre_order_ranges ) ) {
+					$shown[] = $date;
 				}
 			}
 			return $shown;
@@ -1203,11 +1201,8 @@ class Delivery_Exceptions extends Base {
 		$horizon = self::wp_datetime( 'today' );
 		$horizon->modify( sprintf( '+%d days', (int) $limit['value'] ) );
 		$horizon_ymd = $horizon->format( 'Y-m-d' );
-		if ( $reach !== null && $reach > $horizon_ymd ) {
-			$horizon_ymd = $reach;
-		}
-		return array_values( array_filter( $dates, function ( $date ) use ( $horizon_ymd ): bool {
-			return is_string( $date ) && $date !== '' && $date <= $horizon_ymd;
+		return array_values( array_filter( $dates, function ( string $date ) use ( $horizon_ymd, $pre_order_ranges ): bool {
+			return ( $date !== '' && $date <= $horizon_ymd ) || self::date_in_ranges( $date, $pre_order_ranges );
 		} ) );
 	}
 
@@ -1554,25 +1549,40 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
-	 * How far a pre-order rule opens the calendar for this cart: the latest
-	 * 'until' among the applicable from/until rules marked as pre-orders, or
-	 * null when none is.
+	 * The days pre-order rules open for this cart, as [from, until] pairs of
+	 * Y-m-d strings. A rule without a from date opens everything up to its
+	 * until date; one without an until date opens nothing, since there would
+	 * be no end to it.
 	 *
 	 * @param array $applicable_rules As collect_applicable_rules() returns them.
+	 * @return array<int,array{0:string,1:string}>
 	 */
-	public static function pre_order_reach( array $applicable_rules ): ?string {
-		$reach = null;
+	public static function pre_order_ranges( array $applicable_rules ): array {
+		$ranges = array();
 
 		foreach ( $applicable_rules as $rule ) {
 			if ( ( $rule['type'] ?? '' ) !== 'from_until' || empty( $rule['extend'] ) || empty( $rule['until'] ) ) {
 				continue;
 			}
-			if ( $reach === null || $rule['until'] > $reach ) {
-				$reach = (string) $rule['until'];
+			$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) $rule['until'] );
+		}
+
+		return $ranges;
+	}
+
+	/**
+	 * Whether a Y-m-d date falls inside any of the given [from, until] pairs.
+	 *
+	 * @param array<int,array{0:string,1:string}> $ranges
+	 */
+	private static function date_in_ranges( string $date, array $ranges ): bool {
+		foreach ( $ranges as [ $from, $until ] ) {
+			if ( $date !== '' && $date >= $from && $date <= $until ) {
+				return true;
 			}
 		}
 
-		return $reach;
+		return false;
 	}
 
 	/**
@@ -1845,6 +1855,12 @@ class Delivery_Exceptions extends Base {
 				return $dt->format( 'Y-m-d' ) === ( $rule['date'] ?? '' );
 
 			case 'from_until':
+				// A pre-order opens days, it never closes them: the same ice
+				// cream is still for sale next week. Which far-off days it
+				// opens is decided by apply_display_limit().
+				if ( ! empty( $rule['extend'] ) ) {
+					return true;
+				}
 				$from  = $rule['from'] ?? '';
 				$until = $rule['until'] ?? '';
 				if ( $from === '' ) {

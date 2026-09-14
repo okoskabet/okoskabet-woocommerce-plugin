@@ -12,6 +12,8 @@
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
 	export let initialShedId: string | undefined = undefined;
 	export let initialDeliveryDate: string | undefined = undefined;
+	export let initialShowOptions = false;
+	export let onToggleOptions: (open: boolean) => void = () => undefined;
 
 	// Starting from the shed and date the customer already chose. Left empty,
 	// both lists pick their own first option when they appear, and every
@@ -20,7 +22,7 @@
 	// a date that the shed still offers, so the date only needs a start value.
 	let selectedShedId: string | undefined = initialShedId;
 	let selectedDeliveryDate: string | undefined = initialDeliveryDate;
-	let showOptions = displayMode === 'inline';
+	let showOptions = displayMode === 'inline' || initialShowOptions;
 
 	$: {
 		if (selectedShedId) {
@@ -91,11 +93,13 @@
 	function handleOpenModal(e: Event) {
 		e.preventDefault();
 		showOptions = true;
+		onToggleOptions(true);
 	}
 
 	function handleCloseModal(e: Event) {
 		e.preventDefault();
 		showOptions = false;
+		onToggleOptions(false);
 	}
 </script>
 

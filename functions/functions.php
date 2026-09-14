@@ -229,6 +229,10 @@ function custom_content_for_custom_shipping_checkout(): void
 	$config = wp_json_encode(array(
 		'locale'        => get_locale(),
 		'displayOption' => $settings['_display_option'] ?? '',
+		// Recalculate the totals when the delivery date changes — only needed,
+		// and only done, when the date can put a pre-order fee on the order.
+		'dateAffectsTotals' => class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Packaging_Fee')
+			&& \okoskabet_woocommerce_plugin\Integrations\Packaging_Fee::date_can_change_fee(),
 		'descriptions'  => array(
 			'homeDelivery' => $local_description,
 			'shedDelivery' => $shed_description,
@@ -937,6 +941,36 @@ function oko_fee_tax_ratio(string $tax_class): float
 }
 
 add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
+add_filter('woocommerce_checkout_get_value', 'oko_checkout_starts_without_last_orders_choice', 10, 2);
+
+/**
+ * Start every checkout without the date, shed and pickup place of the
+ * customer's last order.
+ *
+ * WooCommerce remembers billing fields on the customer and fills them in next
+ * time. For an address that is a kindness; for these it is a trap. The picker
+ * keeps a date it finds already chosen, so a customer who pre-ordered for
+ * Christmas last year would open their next checkout on Christmas again —
+ * with the pre-order fee — without having picked anything. A value that was
+ * actually posted in this request is left alone.
+ *
+ * @param mixed  $value Null unless something earlier decided the value.
+ * @param string $input The field name.
+ * @return mixed
+ */
+function oko_checkout_starts_without_last_orders_choice($value, $input)
+{
+	$fresh_every_time = array(
+		'billing_okoskabet_delivery_date',
+		'billing_okoskabet_shed_id',
+		'billing_okoskabet_pickup_location_id',
+	);
+	// phpcs:ignore WordPress.Security.NonceVerification -- only checks presence; WooCommerce verifies the checkout.
+	if (in_array($input, $fresh_every_time, true) && !isset($_POST[$input])) {
+		return '';
+	}
+	return $value;
+}
 
 function custom_override_checkout_fields(array $fields): array
 {
@@ -1189,7 +1223,7 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 			'phone'      => $order->get_billing_phone(),
 			'email'      => $order->get_billing_email(),
 		],
-		'notes'              => (string) $order->get_customer_note(),
+		'notes'              => oko_customer_note_as_written($order),
 		'delivery_date'      => $order_delivery_date,
 		// What the order contained. Økoskabet splits these into zones and
 		// prints them as packing slips; without them an order is a name
@@ -1227,10 +1261,15 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 			'location'       => !empty($logistics_note) ? $logistics_note : null,
 		]);
 		// Send the logistics note (dropdown selection + free-text) as the API
-		// notes field so it appears in Økoskabet's Notes column. Falls back to
-		// the standard WooCommerce customer note when no logistics note is set.
+		// notes field so it appears in Økoskabet's Notes column. A message the
+		// customer wrote in WooCommerce's own order-notes field comes after it
+		// rather than being replaced by it: the dropdown always has a value, so
+		// replacing meant a customer's message could arrive as nothing but
+		// "In front of the door".
 		if (!empty($logistics_note)) {
-			$data['notes'] = $logistics_note;
+			$data['notes'] = $data['notes'] !== ''
+				? $logistics_note . "\n" . $data['notes']
+				: $logistics_note;
 		}
 	}
 
@@ -1343,7 +1382,7 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		}
 
 		$customer_note = $order->get_customer_note() ?: '';
-		$oko_order_note = 'ØKOSKABET ' . $order_delivery_date;
+		$oko_order_note = OKO_ORDER_NOTE_PREFIX . $order_delivery_date;
 		if ($is_store_pickup) {
 			$oko_order_note .= ' ' . __('Store pickup', O_TEXTDOMAIN);
 		} elseif (empty($order_shed)) {
@@ -1355,13 +1394,9 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 
 		$order->update_meta_data('billing_okoskabet_done', true);
 
-		// Record what Økoskabet now has — after the note above, because the
-		// note is part of what we send. Without this the save below would look
+		// Record what Økoskabet now has. Without this the save below would look
 		// like an edit and send the same order straight back a second time.
-		$sent = oko_shipment_payload($order, $merchant);
-		if ($sent !== null) {
-			$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($sent));
-		}
+		$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($data));
 
 		$order->save();
 	}
@@ -1382,11 +1417,37 @@ const OKO_SHIPMENT_LOCKED_META = '_okoskabet_shipment_locked';
 /** The `error_code` Økoskabet uses for a shipment that can no longer change. */
 const OKO_ERROR_CODE_LOCKED = 'shipment_locked';
 
+/** First word of the line we put in front of the customer's note once the order is sent. */
+const OKO_ORDER_NOTE_PREFIX = 'ØKOSKABET ';
+
+/**
+ * The order note as the customer wrote it.
+ *
+ * Once Økoskabet has the order we put a line of our own in front of the note
+ * ("ØKOSKABET 2026-12-24 Hjemmelevering"), for the shop's staff. That line is
+ * not the customer's, and it goes stale the moment the date is moved — so it
+ * is left out of anything we send.
+ */
+function oko_customer_note_as_written(\WC_Order $order): string
+{
+	$note = (string) $order->get_customer_note();
+	if (strpos($note, OKO_ORDER_NOTE_PREFIX) !== 0) {
+		return $note;
+	}
+	$newline = strpos($note, "\n");
+	return $newline === false ? '' : substr($note, $newline + 1);
+}
+
 /**
  * A fingerprint of a payload, so we can tell whether anything actually changed.
+ *
+ * Leaves out what describes the request rather than the order: the language
+ * and the shop's own address can differ between the customer's checkout and
+ * an admin's screen on a multilingual shop, and that is not an edit.
  */
 function oko_shipment_fingerprint(array $payload): string
 {
+	unset($payload['locale'], $payload['webshop_products_url']);
 	return md5((string) wp_json_encode($payload));
 }
 
@@ -1465,8 +1526,17 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
+	// Orders sent before this version have no record of what was sent, so
+	// there is nothing to compare an edit with — and treating "no record" as
+	// "changed" would send every old order again the first time a shop marks
+	// it completed. They stay as they were placed.
+	$sent_fingerprint = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true);
+	if ($sent_fingerprint === '') {
+		return;
+	}
+
 	$fingerprint = oko_shipment_fingerprint($payload);
-	if ($fingerprint === (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true)) {
+	if ($fingerprint === $sent_fingerprint) {
 		return;
 	}
 
@@ -1496,11 +1566,11 @@ function oko_resend_shipment_on_update(int $order_id): void
 	$body      = (string) wp_remote_retrieve_body($response);
 
 	// A refusal is not a failure to deliver. Økoskabet locks a shipment once
-	// it has received it, and answers 422 from then on — so an order that has
-	// gone past that point would otherwise be resent on every single save for
-	// the rest of its life, quietly and forever. Anything in the 4xx range
-	// says this payload will never be accepted, and sending it again
-	// unchanged cannot help; record it as dealt with. A later edit is a
+	// a parcel has been received, and answers 422 from then on — so an order
+	// past that point would otherwise be resent on every single save for the
+	// rest of its life, quietly and forever. Other than 401 and 403 below, a
+	// refusal says this payload will never be accepted, and sending it again
+	// unchanged cannot help; it is recorded as dealt with. A later edit is a
 	// different payload and gets one attempt of its own.
 	//
 	// 5xx is left to retry: that is Økoskabet having a bad minute, not a
@@ -1547,7 +1617,7 @@ function oko_resend_shipment_on_update(int $order_id): void
 		// and never on the message: the message is translated into the caller's
 		// language, so a match written against the English one would pass every
 		// test we wrote and say nothing in a Danish shop.
-		if (is_array($decoded) && ($decoded['error_code'] ?? '') === OKO_ERROR_CODE_LOCKED) {
+		if ($http_code === 422 && is_array($decoded) && ($decoded['error_code'] ?? '') === OKO_ERROR_CODE_LOCKED) {
 			$order->update_meta_data(OKO_SHIPMENT_LOCKED_META, true);
 			error_log(sprintf(
 				'okoskabet_woocommerce_plugin: order %s can no longer be changed at Økoskabet — a parcel has been received. Later edits stay in the shop only.',
