@@ -6,9 +6,14 @@
 	export let description: string;
 	export let address: string;
 	export let postalCode: string;
+	export let initialDeliveryDate: string | undefined = undefined;
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
 
-	let selectedDeliveryDate: string | undefined;
+	// Starting from the date the customer already chose, rather than from
+	// nothing. Left empty, the date list would pick its own first option the
+	// moment it appears, and every recalculation of the checkout would quietly
+	// move the delivery to the soonest day.
+	let selectedDeliveryDate: string | undefined = initialDeliveryDate;
 
 	$: {
 		if (selectedDeliveryDate) {
@@ -17,6 +22,36 @@
 	}
 
 	$: apiResponse = callApi('home-delivery', address, postalCode);
+
+	// A date that was on offer before the recalculation may not be any more —
+	// a new postcode, a different cart. Keep it only while it still is, and
+	// fall back to the soonest date otherwise, as the list always did. With no
+	// dates at all the choice is cleared, so an order cannot go out on a day
+	// that was never offered for this address.
+	$: keepChosenDateIfStillOffered(apiResponse);
+
+	async function keepChosenDateIfStillOffered(
+		response: typeof apiResponse
+	) {
+		let deliveryDates: string[];
+		try {
+			({ delivery_dates: deliveryDates } = await response);
+		} catch {
+			return;
+		}
+
+		// A newer lookup has started since this one; let it decide.
+		if (response !== apiResponse) {
+			return;
+		}
+
+		if (selectedDeliveryDate && !deliveryDates.includes(selectedDeliveryDate)) {
+			selectedDeliveryDate = deliveryDates[0];
+			if (!selectedDeliveryDate) {
+				onSelectDeliveryDate('');
+			}
+		}
+	}
 </script>
 
 <div>

@@ -15,6 +15,10 @@
 	export let address: string;
 	export let postalCode: string;
 
+	// What the customer had chosen before the checkout was last recalculated.
+	export let initialDeliveryDate: string | undefined = undefined;
+	export let initialShedId: string | undefined = undefined;
+
 	export let onSelectShed: (selectedShedId: string) => void;
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
 </script>
@@ -25,6 +29,8 @@
 		{locale}
 		{address}
 		{postalCode}
+		{initialShedId}
+		{initialDeliveryDate}
 		{onSelectShed}
 		{onSelectDeliveryDate}
 		description={strings.shedDeliveryDescription}
@@ -34,6 +40,7 @@
 		{locale}
 		{address}
 		{postalCode}
+		{initialDeliveryDate}
 		{onSelectDeliveryDate}
 		description={strings.homeDeliveryDescription}
 	/>

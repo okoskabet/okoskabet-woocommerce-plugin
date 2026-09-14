@@ -10,9 +10,16 @@
 	export let postalCode: string;
 	export let onSelectShed: (selectedShedId: string) => void = () => undefined;
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
+	export let initialShedId: string | undefined = undefined;
+	export let initialDeliveryDate: string | undefined = undefined;
 
-	let selectedShedId: string | undefined;
-	let selectedDeliveryDate: string | undefined;
+	// Starting from the shed and date the customer already chose. Left empty,
+	// both lists pick their own first option when they appear, and every
+	// recalculation of the checkout would quietly move the customer to the
+	// first shed and its soonest day. selectDeliveryDate() below already keeps
+	// a date that the shed still offers, so the date only needs a start value.
+	let selectedShedId: string | undefined = initialShedId;
+	let selectedDeliveryDate: string | undefined = initialDeliveryDate;
 	let showOptions = displayMode === 'inline';
 
 	$: {
@@ -29,6 +36,36 @@
 	}
 
 	$: apiResponse = callApi('shed-delivery', address, postalCode);
+
+	// A shed chosen before the recalculation may not be offered any more — a
+	// new postcode brings a different list. Fall back to the first shed, as the
+	// list always did, so the date is then re-checked against that shed. With
+	// no sheds at all both choices are cleared, so an order cannot go out to a
+	// shed that was never offered for this address.
+	$: keepChosenShedIfStillOffered(apiResponse);
+
+	async function keepChosenShedIfStillOffered(response: typeof apiResponse) {
+		let sheds: { id: string }[];
+		try {
+			({ sheds } = await response);
+		} catch {
+			return;
+		}
+
+		// A newer lookup has started since this one; let it decide.
+		if (response !== apiResponse) {
+			return;
+		}
+
+		if (selectedShedId && !sheds.some((shed) => shed.id === selectedShedId)) {
+			selectedShedId = sheds[0]?.id;
+			if (!selectedShedId) {
+				onSelectShed('');
+				selectedDeliveryDate = undefined;
+				onSelectDeliveryDate('');
+			}
+		}
+	}
 
 	async function selectDeliveryDate() {
 		if (selectedShedId) {

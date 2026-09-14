@@ -100,6 +100,19 @@ class OkoskabetCheckout {
 
 		const { shippingMethod, address, postalCode } = shippingData;
 
+		// The picker is torn down and rebuilt every time WooCommerce recalculates
+		// the checkout — an address edit, a coupon, a gift card. Read what the
+		// customer had chosen before it goes, so the new picker can put it back
+		// instead of silently starting over from the first date. The hidden
+		// fields survive the rebuild because they sit in the billing form, not in
+		// the order review that WooCommerce replaces.
+		const initialDeliveryDate =
+			this.getFormFieldValue( DELIVERY_DATE_INPUT_SELECTOR ) || undefined;
+		const initialShedId =
+			shippingMethod === 'shed-delivery'
+				? this.getFormFieldValue( SHED_ID_INPUT_SELECTOR ) || undefined
+				: undefined;
+
 		if ( shippingMethod === 'home-delivery' ) {
 			this.setLocationInput( '' );
 		}
@@ -111,6 +124,8 @@ class OkoskabetCheckout {
 				shippingMethod,
 				address,
 				postalCode,
+				initialDeliveryDate,
+				initialShedId,
 				locale: this.locale,
 				strings: {
 					shedDeliveryDescription: this.shedDeliveryDescription,
@@ -237,7 +252,27 @@ class OkoskabetCheckout {
 	}
 
 	private setDeliveryDateInput( value: string ): void {
-		jQuery( DELIVERY_DATE_INPUT_SELECTOR ).val( value );
+		const $input = jQuery( DELIVERY_DATE_INPUT_SELECTOR );
+
+		// Only an actual change goes any further. The picker reports its date
+		// again every time it is rebuilt, and recalculating the checkout is what
+		// rebuilds it — so without this, putting the same date back would ask
+		// for another recalculation, forever.
+		if ( $input.val() === value ) {
+			return;
+		}
+
+		$input.val( value );
+
+		// The date can change what the order costs: a date far enough ahead is
+		// a pre-order, and a pre-order can carry its own fee. WooCommerce only
+		// recalculates when told to, and a total that changes after the customer
+		// has pressed pay is not a price they were shown. Clearing the date is
+		// left out, because that only happens alongside a change of shipping
+		// method, which recalculates on its own.
+		if ( value ) {
+			jQuery( document.body ).trigger( 'update_checkout' );
+		}
 	}
 
 	private setLocationInput( value: string ): void {
