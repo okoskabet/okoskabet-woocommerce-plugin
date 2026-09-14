@@ -261,7 +261,9 @@ class OkoskabetCheckout {
 
 	private clearInputs() {
 		this.setLocationInput( '' );
-		this.setDeliveryDateInput( '' );
+		// Set directly: this runs on a change of shipping method, which
+		// recalculates the checkout on its own.
+		jQuery( DELIVERY_DATE_INPUT_SELECTOR ).val( '' );
 	}
 
 	private setDeliveryDateInput( value: string ): void {
@@ -281,10 +283,9 @@ class OkoskabetCheckout {
 		// a pre-order, and a pre-order can carry its own fee. WooCommerce only
 		// recalculates when told to, and a total that changes after the customer
 		// has pressed pay is not a price they were shown. Only shops with such a
-		// fee ask for it. Clearing the date is left out, because that only
-		// happens alongside a change of shipping method, which recalculates on
-		// its own.
-		if ( value && this.dateAffectsTotals ) {
+		// fee ask for it. A date being cleared counts too — a new postcode with
+		// no delivery days left the pre-order fee of the old date on screen.
+		if ( this.dateAffectsTotals ) {
 			jQuery( document.body ).trigger( 'update_checkout' );
 		}
 	}
