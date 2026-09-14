@@ -207,7 +207,7 @@ class Feature_Pricing extends Base {
 		return $out;
 	}
 
-	/** Drop the caches. Used on save elsewhere, and by the tests. */
+	/** Drop the cached configuration response, so the next read fetches it again. Used by the tests. */
 	public static function purge( string $merchant_id = 'default' ): void {
 		delete_transient( self::TRANSIENT_PREFIX . sanitize_key( $merchant_id ) );
 	}

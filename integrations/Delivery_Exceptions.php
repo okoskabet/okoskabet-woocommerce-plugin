@@ -1129,13 +1129,19 @@ class Delivery_Exceptions extends Base {
 			return $dates;
 		}
 
-		return array_values( array_filter( $dates, function ( $date ) use ( $now, $applicable ): bool {
+		$deadlines = array();
+		foreach ( $applicable as $rule ) {
+			$deadlines[] = array(
+				'days' => max( 0, (int) ( $rule['days'] ?? 0 ) ),
+				'time' => preg_match( '/^\d{1,2}:\d{2}$/', (string) ( $rule['time'] ?? '' ) ) ? $rule['time'] : '09:00',
+			);
+		}
+
+		return array_values( array_filter( $dates, function ( $date ) use ( $now, $deadlines ): bool {
 			if ( ! is_string( $date ) || $date === '' ) {
 				return false;
 			}
-			foreach ( $applicable as $rule ) {
-				$days = max( 0, (int) ( $rule['days'] ?? 0 ) );
-				$time = preg_match( '/^\d{1,2}:\d{2}$/', (string) ( $rule['time'] ?? '' ) ) ? $rule['time'] : '09:00';
+			foreach ( $deadlines as [ 'days' => $days, 'time' => $time ] ) {
 				try {
 					$cutoff = self::wp_datetime( $date . ' ' . $time );
 				} catch ( \Exception $e ) {

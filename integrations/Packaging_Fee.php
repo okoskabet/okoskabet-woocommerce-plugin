@@ -346,6 +346,9 @@ class Packaging_Fee extends Base {
 	 * @return array|null
 	 */
 	public static function matching_rule( array $config, \WC_Cart $cart ): ?array {
+		// Looked up only once, and only if a pre-order rule is reached.
+		$today       = null;
+		$chosen_date = null;
 		foreach ( $config['rules'] as $rule ) {
 			if ( empty( $rule['enabled'] ) ) {
 				continue;
@@ -356,8 +359,15 @@ class Packaging_Fee extends Base {
 			if ( ! self::rule_matches_cart_terms( $rule, $cart ) ) {
 				continue;
 			}
-			if ( ! self::date_is_far_enough( (int) ( $rule['min_days_ahead'] ?? 0 ), self::chosen_delivery_date(), self::today() ) ) {
-				continue;
+			$min_days_ahead = (int) ( $rule['min_days_ahead'] ?? 0 );
+			if ( $min_days_ahead > 0 ) {
+				if ( $today === null ) {
+					$today       = self::today();
+					$chosen_date = self::chosen_delivery_date();
+				}
+				if ( ! self::date_is_far_enough( $min_days_ahead, $chosen_date, $today ) ) {
+					continue;
+				}
 			}
 			return $rule;
 		}
@@ -404,10 +414,11 @@ class Packaging_Fee extends Base {
 	 * the day on screen rather than appearing only after they have paid.
 	 */
 	private static function chosen_delivery_date(): ?string {
-		// phpcs:ignore WordPress.Security.NonceVerification -- read-only, checkout verifies its own nonce.
+		// phpcs:disable WordPress.Security.NonceVerification -- read-only, checkout verifies its own nonce.
 		$date = isset( $_POST['billing_okoskabet_delivery_date'] )
 			? sanitize_text_field( wp_unslash( (string) $_POST['billing_okoskabet_delivery_date'] ) )
 			: ( \function_exists( 'WC' ) && WC()->session ? (string) WC()->session->get( self::SESSION_DELIVERY_DATE, '' ) : '' );
+		// phpcs:enable WordPress.Security.NonceVerification
 
 		return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ? $date : null;
 	}
@@ -1013,8 +1024,8 @@ class Packaging_Fee extends Base {
 				'label'      => $label,
 				'amount'     => $amount,
 				'tiers'      => $tiers,
-				'categories' => array_values( array_filter( array_map( 'absint', (array) ( $row['categories'] ?? array() ) ) ) ),
-				'tags'       => array_values( array_filter( array_map( 'absint', (array) ( $row['tags'] ?? array() ) ) ) ),
+				'categories' => self::clean_term_ids( $row['categories'] ?? array() ),
+				'tags'       => self::clean_term_ids( $row['tags'] ?? array() ),
 				'methods'    => array_values( array_filter(
 					array_map( 'sanitize_text_field', (array) ( $row['methods'] ?? array() ) ),
 					array( self::class, 'is_valid_method_key' )

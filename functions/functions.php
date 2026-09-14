@@ -489,11 +489,22 @@ function oko_ladder_cost_for_subtotal(array $tiers, float $subtotal): ?float
 /** The combined shipping tax ratio (e.g. 0.25), or 0 when shipping isn't taxed. */
 function oko_shipping_tax_ratio(): float
 {
+	return oko_tax_ratio(static fn(): array => WC_Tax::get_shipping_tax_rates());
+}
+
+/**
+ * The combined ratio (e.g. 0.25) of the tax rates $rates returns, or 0 when
+ * the shop doesn't charge tax. The rates are only looked up when it does.
+ *
+ * @param callable(): array $rates
+ */
+function oko_tax_ratio(callable $rates): float
+{
 	if (!function_exists('wc_tax_enabled') || !wc_tax_enabled()) {
 		return 0.0;
 	}
 	$total = 0.0;
-	foreach (WC_Tax::get_shipping_tax_rates() as $rate) {
+	foreach ($rates() as $rate) {
 		$total += (float) $rate['rate'];
 	}
 	return $total / 100.0;
@@ -922,14 +933,7 @@ function oko_packaging_fee_term_ids($saved, string $taxonomy): array
 /** The combined tax ratio (e.g. 0.25) for a fee tax class, or 0 when untaxed. */
 function oko_fee_tax_ratio(string $tax_class): float
 {
-	if (!function_exists('wc_tax_enabled') || !wc_tax_enabled()) {
-		return 0.0;
-	}
-	$total = 0.0;
-	foreach (WC_Tax::get_rates($tax_class) as $rate) {
-		$total += (float) $rate['rate'];
-	}
-	return $total / 100.0;
+	return oko_tax_ratio(static fn(): array => WC_Tax::get_rates($tax_class));
 }
 
 add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
