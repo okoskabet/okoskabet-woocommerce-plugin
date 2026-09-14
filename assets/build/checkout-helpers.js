@@ -379,7 +379,6 @@
 			}
 
 			cellContent.appendChild(noteWrapper);
-			refreshNoteVisibility();
 
 			// Insert the row inside the order review table — after shipping
 			// row, before total.
@@ -399,6 +398,10 @@
 				var fallback = document.getElementById("order_review");
 				if (fallback) { fallback.appendChild(wrapper); }
 			}
+			// Only once the row is in the page: refreshNoteVisibility() looks
+			// the select up by id, and before this it found nothing — so a
+			// restored "Andet" came back with its note box hidden.
+			refreshNoteVisibility();
 			syncHiddenFields();
 		}
 
