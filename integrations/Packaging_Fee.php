@@ -369,15 +369,53 @@ class Packaging_Fee extends Base {
 		if ( ! WC()->session ) {
 			return false;
 		}
-		foreach ( (array) WC()->session->get( 'chosen_shipping_methods', array() ) as $rate_id ) {
-			// Chosen rates look like `hey_okoskabet_shipping_home:3`: the method,
-			// then which copy of it in which zone. A rule may name either.
-			if ( self::method_matches( (string) $rate_id, $rule['methods'] ) ) {
+		foreach ( (array) WC()->session->get( 'chosen_shipping_methods', array() ) as $package_key => $rate_id ) {
+			if ( self::method_matches( self::chosen_rate_key( $package_key, (string) $rate_id ), $rule['methods'] ) ) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * The chosen rate as `method:instance`, whatever its id happens to say.
+	 *
+	 * The session only holds the rate's id, and the Økoskabet methods register
+	 * their rates under the bare method id — `hey_okoskabet_shipping_home`,
+	 * with no instance after it. So home delivery to the mainland and home
+	 * delivery to the islands arrive here looking identical, and a rule aimed
+	 * at one of them matched neither.
+	 *
+	 * The rate object itself still knows which copy produced it, because
+	 * WooCommerce records the instance when the rate is added. So the id is
+	 * looked up in the calculated packages and the key is built from the rate.
+	 * The ids are left as they are on purpose: the checkout script and the
+	 * order validation compare against them, and renaming them would be a
+	 * change to every merchant's checkout for the sake of a fee.
+	 *
+	 * Falls back to the id as given when there is nothing to look up, which is
+	 * still right for any method whose ids already carry their instance.
+	 *
+	 * @param int|string $package_key
+	 */
+	private static function chosen_rate_key( $package_key, string $rate_id ): string {
+		if ( ! function_exists( 'WC' ) || ! WC()->shipping() ) {
+			return $rate_id;
+		}
+
+		$packages = WC()->shipping()->get_packages();
+		$rate     = $packages[ $package_key ]['rates'][ $rate_id ] ?? null;
+
+		if ( ! $rate instanceof \WC_Shipping_Rate ) {
+			return $rate_id;
+		}
+
+		$instance = (int) $rate->get_instance_id();
+
+		return $instance > 0
+			? $rate->get_method_id() . ':' . $instance
+			: $rate->get_method_id();
 	}
 
 	/**
