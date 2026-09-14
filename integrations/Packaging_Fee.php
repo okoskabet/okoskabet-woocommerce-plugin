@@ -70,6 +70,105 @@ class Packaging_Fee extends Base {
 		);
 	}
 
+	/**
+	 * Everything a rule can be limited to: each delivery method as a whole,
+	 * and each place a merchant has actually put one.
+	 *
+	 * The whole-method entries cover every copy of that method in every zone,
+	 * which is what rules saved before this existed already mean. The
+	 * individual entries exist because two copies of the same method are
+	 * not the same delivery to a merchant — home delivery to the mainland and
+	 * home delivery to Bornholm, or an ordinary delivery and a pre-order —
+	 * and a merchant who charges more for one of them had no way to say so.
+	 *
+	 * Keyed the way WooCommerce reports a chosen rate: the method id, then a
+	 * colon and the instance id for a specific copy.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function method_choices(): array {
+		$choices = array();
+
+		foreach ( self::method_labels() as $method_id => $label ) {
+			/* translators: %s = a delivery method, e.g. "Home delivery" */
+			$choices[ $method_id ] = sprintf( __( '%s — everywhere', O_TEXTDOMAIN ), $label );
+		}
+
+		if ( ! class_exists( '\WC_Shipping_Zones' ) ) {
+			return $choices;
+		}
+
+		$zones = \WC_Shipping_Zones::get_zones();
+		// The catch-all zone is not in get_zones(), and a merchant can put
+		// methods in it like any other.
+		$zones[] = array( 'zone_id' => 0 );
+
+		foreach ( $zones as $zone_row ) {
+			$zone = new \WC_Shipping_Zone( (int) $zone_row['zone_id'] );
+
+			foreach ( $zone->get_shipping_methods() as $method ) {
+				$method_id = (string) $method->id;
+				if ( ! isset( self::method_labels()[ $method_id ] ) ) {
+					continue;
+				}
+
+				$key   = $method_id . ':' . (int) $method->get_instance_id();
+				$title = trim( (string) $method->get_title() );
+
+				$choices[ $key ] = sprintf(
+					/* translators: 1: shipping zone, 2: the method's own title, 3: which kind of method it is */
+					__( '%1$s — %2$s (%3$s)', O_TEXTDOMAIN ),
+					$zone->get_zone_name(),
+					$title !== '' ? $title : self::method_labels()[ $method_id ],
+					self::method_labels()[ $method_id ]
+				);
+			}
+		}
+
+		return $choices;
+	}
+
+	/**
+	 * Whether a chosen rate is one of the methods a rule names.
+	 *
+	 * A rule naming a whole method matches every copy of it; a rule naming a
+	 * specific copy matches only that one.
+	 *
+	 * @param string   $rate_id  As WooCommerce reports it, e.g. `hey_okoskabet_shipping_home:5`.
+	 * @param string[] $methods  What the rule is limited to.
+	 */
+	public static function method_matches( string $rate_id, array $methods ): bool {
+		$parts     = explode( ':', $rate_id );
+		$method_id = $parts[0];
+		$instance  = isset( $parts[1] ) && $parts[1] !== '' ? $method_id . ':' . (int) $parts[1] : null;
+
+		return in_array( $method_id, $methods, true )
+			|| ( $instance !== null && in_array( $instance, $methods, true ) );
+	}
+
+	/**
+	 * Whether a posted value is something a rule may be limited to: one of the
+	 * Økoskabet methods, or a specific copy of one.
+	 *
+	 * Checked by shape rather than against the zones as they are right now, so
+	 * a copy the merchant has since deleted survives a save — see the note in
+	 * render_rule_row().
+	 */
+	public static function is_valid_method_key( $key ): bool {
+		$key = (string) $key;
+
+		if ( isset( self::method_labels()[ $key ] ) ) {
+			return true;
+		}
+
+		$parts = explode( ':', $key );
+
+		return count( $parts ) === 2
+			&& isset( self::method_labels()[ $parts[0] ] )
+			&& ctype_digit( $parts[1] )
+			&& (int) $parts[1] > 0;
+	}
+
 	/** Request-level cache of the normalised configuration. */
 	private static $config_cache = null;
 
@@ -271,10 +370,9 @@ class Packaging_Fee extends Base {
 			return false;
 		}
 		foreach ( (array) WC()->session->get( 'chosen_shipping_methods', array() ) as $rate_id ) {
-			// Chosen rates look like `hey_okoskabet_shipping_home:3` — the part
-			// after the colon is the shipping-zone instance, irrelevant here.
-			$method_id = explode( ':', (string) $rate_id )[0];
-			if ( in_array( $method_id, $rule['methods'], true ) ) {
+			// Chosen rates look like `hey_okoskabet_shipping_home:3`: the method,
+			// then which copy of it in which zone. A rule may name either.
+			if ( self::method_matches( (string) $rate_id, $rule['methods'] ) ) {
 				return true;
 			}
 		}
@@ -633,6 +731,25 @@ class Packaging_Fee extends Base {
 	}
 
 	private function render_rule_row( $index, array $row, array $categories, array $tags ): void {
+		// Looking the zones up once per page rather than once per rule.
+		static $all_method_choices = null;
+		if ( $all_method_choices === null ) {
+			$all_method_choices = self::method_choices();
+		}
+
+		// A copy of a method the merchant has since deleted from its zone is
+		// still listed, marked as gone, rather than dropped. Dropping it would
+		// quietly widen the rule to "any delivery" the next time the page was
+		// saved — and a fee that suddenly lands on every order is found by a
+		// customer, not by the merchant.
+		$method_choices = $all_method_choices;
+		foreach ( array_map( 'strval', (array) ( $row['methods'] ?? array() ) ) as $saved ) {
+			if ( $saved !== '' && ! isset( $method_choices[ $saved ] ) ) {
+				/* translators: %s = the internal id of a delivery method that no longer exists */
+				$method_choices[ $saved ] = sprintf( __( 'Removed delivery method (%s)', O_TEXTDOMAIN ), $saved );
+			}
+		}
+
 		$amount = $row['amount'] ?? '0';
 		// get_config() hands back floats; the blank row and the JS template
 		// hand back strings. Print whatever came in without reformatting, so a
@@ -682,7 +799,7 @@ class Packaging_Fee extends Base {
 				<div>
 					<label><?php esc_html_e( 'Delivery methods', O_TEXTDOMAIN ); ?></label>
 					<select name="rules[<?php echo esc_attr( $index ); ?>][methods][]" multiple class="oko-fee-terms">
-						<?php foreach ( self::method_labels() as $method_id => $method_label ) : ?>
+						<?php foreach ( $method_choices as $method_id => $method_label ) : ?>
 							<option value="<?php echo esc_attr( $method_id ); ?>" <?php selected( in_array( $method_id, array_map( 'strval', (array) ( $row['methods'] ?? array() ) ), true ) ); ?>>
 								<?php echo esc_html( $method_label ); ?>
 							</option>
@@ -780,9 +897,9 @@ class Packaging_Fee extends Base {
 				'tiers'      => $tiers,
 				'categories' => array_values( array_filter( array_map( 'absint', (array) ( $row['categories'] ?? array() ) ) ) ),
 				'tags'       => array_values( array_filter( array_map( 'absint', (array) ( $row['tags'] ?? array() ) ) ) ),
-				'methods'    => array_values( array_intersect(
+				'methods'    => array_values( array_filter(
 					array_map( 'sanitize_text_field', (array) ( $row['methods'] ?? array() ) ),
-					array_keys( self::method_labels() )
+					array( self::class, 'is_valid_method_key' )
 				) ),
 				'enabled'    => ! empty( $row['enabled'] ),
 			);

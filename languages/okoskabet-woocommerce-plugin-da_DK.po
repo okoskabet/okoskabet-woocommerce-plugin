@@ -1130,3 +1130,11 @@ msgstr "pr. ordre"
 
 msgid "per month"
 msgstr "pr. måned"
+
+#. translators: %s = a delivery method, e.g. "Home delivery"
+msgid "%s — everywhere"
+msgstr "%s — overalt"
+
+#. translators: %s = the internal id of a delivery method that no longer exists
+msgid "Removed delivery method (%s)"
+msgstr "Slettet leveringsmetode (%s)"
