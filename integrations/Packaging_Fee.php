@@ -182,6 +182,10 @@ class Packaging_Fee extends Base {
 
 		add_action( 'woocommerce_cart_calculate_fees', array( $this, 'apply' ) );
 
+		// Fires at the start of each checkout recalculation, before the totals,
+		// so a pre-order fee sees the date the customer has just picked.
+		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'remember_chosen_date' ) );
+
 		// "Gratis emballage" sits on the coupon itself, right where a merchant
 		// already goes to tick "Allow free shipping".
 		add_action( 'woocommerce_coupon_options', array( $this, 'render_coupon_option' ), 10, 2 );
@@ -278,6 +282,7 @@ class Packaging_Fee extends Base {
 			'categories' => self::clean_term_ids( $rule['categories'] ?? array() ),
 			'tags'       => self::clean_term_ids( $rule['tags'] ?? array() ),
 			'methods'    => array_values( array_filter( array_map( 'strval', (array) ( $rule['methods'] ?? array() ) ) ) ),
+			'min_days_ahead' => max( 0, (int) ( $rule['min_days_ahead'] ?? 0 ) ),
 			'enabled'    => ! empty( $rule['enabled'] ),
 		);
 	}
@@ -351,10 +356,80 @@ class Packaging_Fee extends Base {
 			if ( ! self::rule_matches_cart_terms( $rule, $cart ) ) {
 				continue;
 			}
+			if ( ! self::date_is_far_enough( (int) ( $rule['min_days_ahead'] ?? 0 ), self::chosen_delivery_date(), self::today() ) ) {
+				continue;
+			}
 			return $rule;
 		}
 
 		return null;
+	}
+
+	/** Session key holding the delivery date the customer has picked so far. */
+	const SESSION_DELIVERY_DATE = 'okoskabet_delivery_date';
+
+	/**
+	 * Whether a delivery date is far enough ahead for a rule that only charges
+	 * pre-orders.
+	 *
+	 * "More than N days" rather than "at least", so N can simply be the shop's
+	 * normal number of days: every date the calendar would show anyway is an
+	 * ordinary order, and only a date past it is a pre-order. No date chosen
+	 * yet means no pre-order — the cart page, or a checkout the customer has
+	 * not got to the calendar on.
+	 */
+	public static function date_is_far_enough( int $min_days_ahead, ?string $date, \DateTimeImmutable $today ): bool {
+		if ( $min_days_ahead <= 0 ) {
+			return true;
+		}
+		if ( $date === null ) {
+			return false;
+		}
+
+		return $date > $today->modify( sprintf( '+%d days', $min_days_ahead ) )->format( 'Y-m-d' );
+	}
+
+	/** Today in the shop's own time zone, where delivery days are counted. */
+	private static function today(): \DateTimeImmutable {
+		return new \DateTimeImmutable( 'today', \function_exists( 'wp_timezone' ) ? wp_timezone() : null );
+	}
+
+	/**
+	 * The delivery date the customer has picked, if any.
+	 *
+	 * When the order is placed it is in the submitted form. While the customer
+	 * is still choosing, WooCommerce recalculates through an AJAX call that
+	 * carries the whole form as one string — remember_chosen_date() keeps the
+	 * date from it in the session, so the fee in the totals already matches
+	 * the day on screen rather than appearing only after they have paid.
+	 */
+	private static function chosen_delivery_date(): ?string {
+		// phpcs:ignore WordPress.Security.NonceVerification -- read-only, checkout verifies its own nonce.
+		$date = isset( $_POST['billing_okoskabet_delivery_date'] )
+			? sanitize_text_field( wp_unslash( (string) $_POST['billing_okoskabet_delivery_date'] ) )
+			: ( \function_exists( 'WC' ) && WC()->session ? (string) WC()->session->get( self::SESSION_DELIVERY_DATE, '' ) : '' );
+
+		return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ? $date : null;
+	}
+
+	/**
+	 * Keep the delivery date from a checkout recalculation in the session.
+	 *
+	 * @param string $posted_data The checkout form, URL-encoded.
+	 */
+	public function remember_chosen_date( $posted_data ): void {
+		if ( ! \function_exists( 'WC' ) || ! WC()->session ) {
+			return;
+		}
+
+		$fields = array();
+		parse_str( (string) $posted_data, $fields );
+
+		$date = isset( $fields['billing_okoskabet_delivery_date'] )
+			? sanitize_text_field( (string) $fields['billing_okoskabet_delivery_date'] )
+			: '';
+
+		WC()->session->set( self::SESSION_DELIVERY_DATE, preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ? $date : '' );
 	}
 
 	/**
@@ -764,6 +839,7 @@ class Packaging_Fee extends Base {
 			'categories' => array(),
 			'tags'       => array(),
 			'methods'    => array(),
+			'min_days_ahead' => 0,
 			'enabled'    => true,
 		);
 	}
@@ -811,6 +887,10 @@ class Packaging_Fee extends Base {
 				</label>
 				<label><?php esc_html_e( 'Amount', O_TEXTDOMAIN ); ?>:
 					<input type="text" inputmode="decimal" name="rules[<?php echo esc_attr( $index ); ?>][amount]" value="<?php echo esc_attr( $amount ); ?>" style="width:90px;" />
+				</label>
+				<label title="<?php esc_attr_e( 'Only when the chosen delivery date is further ahead than this. Match it to your normal number of days, and the rule charges pre-orders only. 0 means any date.', O_TEXTDOMAIN ); ?>"><?php esc_html_e( 'Pre-order only: date more than', O_TEXTDOMAIN ); ?>
+					<input type="number" min="0" step="1" name="rules[<?php echo esc_attr( $index ); ?>][min_days_ahead]" value="<?php echo esc_attr( (string) (int) ( $row['min_days_ahead'] ?? 0 ) ); ?>" style="width:60px;" />
+					<?php esc_html_e( 'days ahead', O_TEXTDOMAIN ); ?>
 				</label>
 				<label>
 					<input type="checkbox" name="rules[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
@@ -939,6 +1019,7 @@ class Packaging_Fee extends Base {
 					array_map( 'sanitize_text_field', (array) ( $row['methods'] ?? array() ) ),
 					array( self::class, 'is_valid_method_key' )
 				) ),
+				'min_days_ahead' => max( 0, (int) ( $row['min_days_ahead'] ?? 0 ) ),
 				'enabled'    => ! empty( $row['enabled'] ),
 			);
 		}

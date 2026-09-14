@@ -1138,3 +1138,18 @@ msgstr "%s — overalt"
 #. translators: %s = the internal id of a delivery method that no longer exists
 msgid "Removed delivery method (%s)"
 msgstr "Slettet leveringsmetode (%s)"
+
+msgid "Shows these products every date up to the until date, even past the normal number of days. For pre-orders: the soonest days as usual, and Christmas as well."
+msgstr "Viser disse varer alle datoer frem til til-datoen, også ud over det normale antal dage. Til forudbestilling: de nærmeste dage som altid, og julen med."
+
+msgid "Pre-order: show dates up to the until date"
+msgstr "Forudbestilling: vis datoer frem til til-datoen"
+
+msgid "Only when the chosen delivery date is further ahead than this. Match it to your normal number of days, and the rule charges pre-orders only. 0 means any date."
+msgstr "Kun når den valgte leveringsdato ligger længere fremme end dette. Sæt det til jeres normale antal dage, så rammer reglen kun forudbestillinger. 0 betyder alle datoer."
+
+msgid "Pre-order only: date more than"
+msgstr "Kun forudbestilling: dato mere end"
+
+msgid "days ahead"
+msgstr "dage frem"

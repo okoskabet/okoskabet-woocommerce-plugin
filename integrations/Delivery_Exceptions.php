@@ -318,6 +318,11 @@ class Delivery_Exceptions extends Base {
 					'from'       => sanitize_text_field( (string) ( $item['from']    ?? '' ) ),
 					'until'      => sanitize_text_field( (string) ( $item['until']   ?? '' ) ),
 					'enabled'    => (bool) ( $item['enabled'] ?? true ),
+					// Off unless a merchant ticks it. Rules saved before this
+					// existed are restrictions, and turning every one of them
+					// into an extension would, for a year-round rule, put a
+					// year of dates in front of that merchant's customers.
+					'extend'     => (bool) ( $item['extend'] ?? false ),
 					'categories' => array_map( 'intval', (array) ( $item['categories'] ?? array() ) ),
 					'tags'       => array_map( 'intval', (array) ( $item['tags']       ?? array() ) ),
 				);
@@ -510,7 +515,7 @@ class Delivery_Exceptions extends Base {
 		echo '</script>';
 
 		echo '<script type="text/template" id="oko-template-from-until">';
-		$this->render_from_until_row( '__INDEX__', array( 'label' => '', 'from' => '', 'until' => '', 'enabled' => true, 'categories' => array(), 'tags' => array() ), $categories, $tags );
+		$this->render_from_until_row( '__INDEX__', array( 'label' => '', 'from' => '', 'until' => '', 'enabled' => true, 'extend' => false, 'categories' => array(), 'tags' => array() ), $categories, $tags );
 		echo '</script>';
 
 		echo '<script type="text/template" id="oko-template-cutoff">';
@@ -799,6 +804,10 @@ class Delivery_Exceptions extends Base {
 					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
 					<?php esc_html_e( 'Aktiv', O_TEXTDOMAIN ); ?>
 				</label>
+				<label title="<?php esc_attr_e( 'Shows these products every date up to the until date, even past the normal number of days. For pre-orders: the soonest days as usual, and Christmas as well.', O_TEXTDOMAIN ); ?>">
+					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
+					<?php esc_html_e( 'Pre-order: show dates up to the until date', O_TEXTDOMAIN ); ?>
+				</label>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
 					<?php esc_html_e( 'Fjern', O_TEXTDOMAIN ); ?>
 				</button>
@@ -914,6 +923,7 @@ class Delivery_Exceptions extends Base {
 				'from'       => $from,
 				'until'      => $until,
 				'enabled'    => ! empty( $row['enabled'] ),
+				'extend'     => ! empty( $row['extend'] ),
 				'categories' => $this->sanitize_id_list( $row['categories'] ?? array() ),
 				'tags'       => $this->sanitize_id_list( $row['tags'] ?? array() ),
 			);
@@ -1164,8 +1174,22 @@ class Delivery_Exceptions extends Base {
 			return $dates; // not configured → no display trimming (legacy behaviour).
 		}
 
+		// A pre-order rule is the one thing allowed past the limit. Without this
+		// the limit cut away the very dates the rule exists to offer — ice cream
+		// for Christmas vanished at day ten — and a merchant's only way round it
+		// was to raise the limit for every product in the shop.
+		$reach = self::pre_order_reach( $applicable_rules );
+
 		if ( $limit['mode'] === 'count' ) {
-			return array_slice( $dates, 0, $limit['value'] );
+			$shown = array_slice( $dates, 0, $limit['value'] );
+			if ( $reach !== null ) {
+				foreach ( array_slice( $dates, $limit['value'] ) as $date ) {
+					if ( is_string( $date ) && $date <= $reach ) {
+						$shown[] = $date;
+					}
+				}
+			}
+			return $shown;
 		}
 
 		// 'window': keep dates on/before today + value days. Y-m-d sorts
@@ -1173,6 +1197,9 @@ class Delivery_Exceptions extends Base {
 		$horizon = self::wp_datetime( 'today' );
 		$horizon->modify( sprintf( '+%d days', (int) $limit['value'] ) );
 		$horizon_ymd = $horizon->format( 'Y-m-d' );
+		if ( $reach !== null && $reach > $horizon_ymd ) {
+			$horizon_ymd = $reach;
+		}
 		return array_values( array_filter( $dates, function ( $date ) use ( $horizon_ymd ): bool {
 			return is_string( $date ) && $date !== '' && $date <= $horizon_ymd;
 		} ) );
@@ -1500,7 +1527,9 @@ class Delivery_Exceptions extends Base {
 	 * source of truth — we never inject these dates into the result ourselves).
 	 *
 	 * - only_on rules contribute their single date.
-	 * - from_until rules contribute their 'from' boundary.
+	 * - from_until rules contribute their 'from' boundary, and their 'until'
+	 *   too when marked as a pre-order — otherwise a rule starting in the past
+	 *   widens nothing, and the days it is meant to open are never fetched.
 	 * - weekday rules contribute nothing (they restrict, never extend).
 	 */
 	private static function extension_candidates_for_rule( array $rule ): array {
@@ -1508,10 +1537,36 @@ class Delivery_Exceptions extends Base {
 			case 'only_on':
 				return ! empty( $rule['date'] ) ? array( $rule['date'] ) : array();
 			case 'from_until':
-				return ! empty( $rule['from'] ) ? array( $rule['from'] ) : array();
+				$candidates = ! empty( $rule['from'] ) ? array( $rule['from'] ) : array();
+				if ( ! empty( $rule['extend'] ) && ! empty( $rule['until'] ) ) {
+					$candidates[] = $rule['until'];
+				}
+				return $candidates;
 			default:
 				return array();
 		}
+	}
+
+	/**
+	 * How far a pre-order rule opens the calendar for this cart: the latest
+	 * 'until' among the applicable from/until rules marked as pre-orders, or
+	 * null when none is.
+	 *
+	 * @param array $applicable_rules As collect_applicable_rules() returns them.
+	 */
+	public static function pre_order_reach( array $applicable_rules ): ?string {
+		$reach = null;
+
+		foreach ( $applicable_rules as $rule ) {
+			if ( ( $rule['type'] ?? '' ) !== 'from_until' || empty( $rule['extend'] ) || empty( $rule['until'] ) ) {
+				continue;
+			}
+			if ( $reach === null || $rule['until'] > $reach ) {
+				$reach = (string) $rule['until'];
+			}
+		}
+
+		return $reach;
 	}
 
 	/**
@@ -1718,9 +1773,10 @@ class Delivery_Exceptions extends Base {
 					continue;
 				}
 				$applicable[] = array(
-					'type'  => 'from_until',
-					'from'  => $row['from'],
-					'until' => $row['until'] ?? '',
+					'type'   => 'from_until',
+					'from'   => $row['from'],
+					'until'  => $row['until'] ?? '',
+					'extend' => ! empty( $row['extend'] ),
 				);
 			}
 		}
