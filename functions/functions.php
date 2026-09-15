@@ -343,7 +343,9 @@ function custom_content_for_custom_shipping_checkout(): void
 		// hidden and the button moved across. The script travels with the
 		// button, so it runs every time the order review is rebuilt — and
 		// cannot be served stale by a page cache that keeps an old script
-		// file around.
+		// file around. It is bound in capture before anything else, and stops
+		// the click there: an earlier build's cached script also toggled on
+		// this button, and two toggles cancel out.
 		printf(
 			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><button type="button" class="button okoskabet-pre-order-toggle" data-pre-order="%s">%s</button></td></tr>',
 			$pre_order ? '1' : '',
@@ -357,12 +359,12 @@ function custom_content_for_custom_shipping_checkout(): void
 			. "window.okoskabetPreOrderBound=true;"
 			. "document.addEventListener('click',function(e){"
 			. "var t=e.target.closest&&e.target.closest('.okoskabet-pre-order-toggle');if(!t){return;}"
-			. "e.preventDefault();"
+			. "e.preventDefault();e.stopImmediatePropagation();"
 			. "var f=document.getElementById('billing_okoskabet_pre_order');if(!f){return;}"
 			. "f.value=f.value==='1'?'':'1';"
 			. "var d=document.getElementById('billing_okoskabet_delivery_date');if(d){d.value='';}"
 			. "if(window.jQuery){window.jQuery(document.body).trigger('update_checkout');}"
-			. "});"
+			. "},true);"
 			. "})();</script>";
 	}
 
