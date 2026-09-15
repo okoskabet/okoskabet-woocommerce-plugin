@@ -217,14 +217,23 @@ class OkoskabetCheckout {
 			return null;
 		}
 
-		const shippingMethodsList = inputElement.closest( 'ul' );
-		const insertAfter = shippingMethodsList || inputElement.parentElement;
+		const target = document.createElement( 'div' );
+		target.id = 'okoskabet-shipping';
 
+		// Inside the chosen method's own line, so its description and picker
+		// read as belonging to it. Placed after the whole list, they sat under
+		// whichever method happened to be last — the Økoskab text under store
+		// pickup, once pickup was the last line.
+		const chosenLine = inputElement.closest( 'li' );
+		if ( chosenLine ) {
+			chosenLine.appendChild( target );
+			return target;
+		}
+
+		const insertAfter =
+			inputElement.closest( 'ul' ) || inputElement.parentElement;
 		if ( insertAfter ) {
-			const target = document.createElement( 'div' );
-			target.id = 'okoskabet-shipping';
 			insertAfter.after( target );
-
 			return target;
 		}
 		return null;
