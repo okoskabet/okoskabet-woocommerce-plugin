@@ -1219,3 +1219,12 @@ msgstr "Fragtmetoder der vises i deres egen række under Forsendelse i kassen, f
 
 msgid "Heading of that row"
 msgstr "Overskrift på rækken"
+
+msgid "Free"
+msgstr "Gratis"
+
+msgid "Show a note above the buttons while a pre-order is chosen"
+msgstr "Vis en tekst over knapperne, når forudbestilling er valgt"
+
+msgid "e.g. Fresh vegetables and dairy cannot be pre-ordered."
+msgstr "fx Frisk grønt og mælkeprodukter kan ikke forudbestilles."

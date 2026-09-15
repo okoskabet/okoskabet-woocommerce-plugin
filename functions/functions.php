@@ -337,8 +337,10 @@ function custom_content_for_custom_shipping_checkout(): void
 		// primary button style.
 		$pre_order = oko_is_pre_order_checkout();
 		$button    = '<button type="button" class="button okoskabet-pre-order-toggle%s" data-pre-order="%s" aria-pressed="%s">%s</button>';
+		$notice = $pre_order ? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_notice() : '';
 		printf(
-			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s</div></td></tr>',
+			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s%s</div></td></tr>',
+			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="flex-basis:100%;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
 			sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label())),
 			sprintf($button, $pre_order ? ' alt' : '', '1', $pre_order ? 'true' : 'false', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label()))
 		);
@@ -596,6 +598,7 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		var pad=getComputedStyle(th).paddingLeft;
 		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:flex;flex-wrap:wrap;gap:8px;';
 		th.appendChild(choice);
+		th.style.paddingBottom=(choice.offsetHeight+32)+'px';
 	}
 
 	var marks=shipping?shipping.querySelectorAll('.okoskabet-separate-rate'):[];

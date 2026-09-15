@@ -216,6 +216,11 @@ class Delivery_Exceptions extends Base {
 			'pre_order_label'    => '',
 			'normal_order_label' => '',
 
+			// A note shown above the buttons while a pre-order is chosen, e.g.
+			// what cannot be pre-ordered. Off until the shop turns it on.
+			'pre_order_notice_enabled' => false,
+			'pre_order_notice'         => '',
+
 			// from_until: list of {label, from, until, enabled, categories, tags}.
 			'from_until' => array(),
 
@@ -267,6 +272,10 @@ class Delivery_Exceptions extends Base {
 			if ( isset( $stored[ $k ] ) ) {
 				$defaults[ $k ] = sanitize_text_field( (string) $stored[ $k ] );
 			}
+		}
+		$defaults['pre_order_notice_enabled'] = ! empty( $stored['pre_order_notice_enabled'] );
+		if ( isset( $stored['pre_order_notice'] ) ) {
+			$defaults['pre_order_notice'] = sanitize_textarea_field( (string) $stored['pre_order_notice'] );
 		}
 
 		// Display settings.
@@ -739,6 +748,13 @@ class Delivery_Exceptions extends Base {
 						<input type="text" name="normal_order_label" value="<?php echo esc_attr( $config['normal_order_label'] ); ?>" placeholder="<?php echo esc_attr( self::normal_order_label( array() ) ); ?>" style="width:200px;" />
 					</label>
 				</div>
+				<div style="margin-bottom:12px;">
+					<label>
+						<input type="checkbox" name="pre_order_notice_enabled" value="1" <?php checked( ! empty( $config['pre_order_notice_enabled'] ) ); ?> />
+						<?php esc_html_e( 'Show a note above the buttons while a pre-order is chosen', O_TEXTDOMAIN ); ?>
+					</label><br />
+					<textarea name="pre_order_notice" rows="2" style="width:100%;max-width:520px;margin-top:6px;" placeholder="<?php esc_attr_e( 'e.g. Fresh vegetables and dairy cannot be pre-ordered.', O_TEXTDOMAIN ); ?>"><?php echo esc_textarea( $config['pre_order_notice'] ); ?></textarea>
+				</div>
 				<?php $this->render_section_limit_control( $config, 'only_on' ); ?>
 				<div id="only_on_rows">
 					<?php foreach ( $rows as $i => $row ) : ?>
@@ -895,6 +911,8 @@ class Delivery_Exceptions extends Base {
 		foreach ( array( 'pre_order_label', 'normal_order_label' ) as $k ) {
 			$config[ $k ] = isset( $_POST[ $k ] ) ? sanitize_text_field( (string) wp_unslash( $_POST[ $k ] ) ) : ''; // phpcs:ignore
 		}
+		$config['pre_order_notice_enabled'] = ! empty( $_POST['pre_order_notice_enabled'] );
+		$config['pre_order_notice']         = isset( $_POST['pre_order_notice'] ) ? sanitize_textarea_field( (string) wp_unslash( $_POST['pre_order_notice'] ) ) : ''; // phpcs:ignore
 
 		// Display settings.
 		$posted_display_mode = isset( $_POST['display_mode'] ) ? sanitize_text_field( (string) wp_unslash( $_POST['display_mode'] ) ) : ''; // phpcs:ignore
@@ -1642,6 +1660,12 @@ class Delivery_Exceptions extends Base {
 	public static function pre_order_label( ?array $config = null ): string {
 		$config = $config ?? self::get_config();
 		return ( $config['pre_order_label'] ?? '' ) !== '' ? (string) $config['pre_order_label'] : __( 'Pre-order', O_TEXTDOMAIN );
+	}
+
+	/** The note shown while a pre-order is chosen, or '' when it is off. */
+	public static function pre_order_notice(): string {
+		$config = self::get_config();
+		return ! empty( $config['pre_order_notice_enabled'] ) ? trim( (string) $config['pre_order_notice'] ) : '';
 	}
 
 	/** The wording of the button back to a normal order. */
