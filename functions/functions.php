@@ -184,14 +184,32 @@ function o_merchant_supports_method(string $merchant_id, string $method_code): b
 }
 
 
+/**
+ * The URL of a built checkout file, whose name carries a hash of its content
+ * (see webpack.config.js). Page caches that strip ?ver= cannot serve a stale
+ * copy of a file whose name changed. Falls back to the plain name, so a build
+ * made before the hashing still loads.
+ */
+function oko_build_asset_url(string $name, string $ext): string
+{
+	static $found = array();
+	$key = $name . '.' . $ext;
+	if (! isset($found[$key])) {
+		$matches     = glob(O_PLUGIN_ROOT . 'assets/build/' . $name . '.*.' . $ext) ?: array();
+		$matches     = array_values(array_filter($matches, static fn(string $file): bool => substr($file, -10) !== '.asset.php'));
+		$found[$key] = $matches ? basename($matches[0]) : $key;
+	}
+	return O_PLUGIN_ROOT_URL . 'assets/build/' . $found[$key];
+}
+
 function enqueue_checkout_scripts(): void
 {
 	if (is_checkout()) {
 		wp_enqueue_script('mapbox-gl-js', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js', array(), '3.3.0', true);
 		wp_enqueue_style('mapbox-gl-css', 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css', array(), '3.3.0');
 
-		wp_enqueue_script('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.js', array(), O_VERSION, true);
-		wp_enqueue_style('okoskabet-shipping', plugin_dir_url(__DIR__) . 'assets/build/plugin-public.css', array(), O_VERSION);
+		wp_enqueue_script('okoskabet-shipping', oko_build_asset_url('plugin-public', 'js'), array(), O_VERSION, true);
+		wp_enqueue_style('okoskabet-shipping', oko_build_asset_url('plugin-public', 'css'), array(), O_VERSION);
 	}
 }
 add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
@@ -285,7 +303,7 @@ function custom_content_for_custom_shipping_checkout(): void
 	// translatable strings and merchant-configurable values.
 	wp_register_script(
 		'okoskabet-checkout-helpers',
-		O_PLUGIN_ROOT_URL . 'assets/build/checkout-helpers.js',
+		oko_build_asset_url('checkout-helpers', 'js'),
 		array(),
 		O_VERSION,
 		true
@@ -340,7 +358,7 @@ function custom_content_for_custom_shipping_checkout(): void
 		$notice = $pre_order ? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_notice() : '';
 		printf(
 			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s%s</div></td></tr>',
-			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="grid-column:1/-1;width:0;min-width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
+			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="grid-column:1/-1;box-sizing:border-box;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
 			sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label())),
 			sprintf($button, $pre_order ? ' alt' : '', '1', $pre_order ? 'true' : 'false', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label()))
 		);
@@ -676,9 +694,12 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		th.style.position='relative';
 		th.style.paddingBottom='72px';
 		var pad=getComputedStyle(th).paddingLeft;
-		// A grid as wide as the two buttons; the note spans both and wraps
-		// within that width (width 0 keeps it from widening the columns).
-		choice.style.cssText='position:absolute;left:'+pad+';bottom:16px;max-width:calc(100% - 2 * '+pad+');display:grid;grid-template-columns:auto auto;gap:8px;';
+		// Filling the cell: the two buttons side by side in equal halves, one
+		// under the other when the cell is too narrow, and the note spanning
+		// the same width above them. Never wider than the cell it sits in.
+		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;';
+		var bs=choice.querySelectorAll('.okoskabet-pre-order-toggle');
+		for(var j=0;j<bs.length;j++){bs[j].style.margin='0';bs[j].style.whiteSpace='normal';}
 		th.appendChild(choice);
 		th.style.paddingBottom=(choice.offsetHeight+32)+'px';
 	}
