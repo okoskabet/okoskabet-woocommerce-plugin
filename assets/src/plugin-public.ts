@@ -1,7 +1,7 @@
 import './styles/public.scss';
 
 import App from './App.svelte';
-import type { ShippingMethod } from './types';
+import type { DateMode, ShippingMethod } from './types';
 
 const SELECTED_SHIPPING_METHOD_SELECTOR =
 	'input[name="shipping_method[0]"]:checked';
@@ -107,7 +107,7 @@ class OkoskabetCheckout {
 			return;
 		}
 
-		const { shippingMethod, address, postalCode } = shippingData;
+		const { shippingMethod, address, postalCode, dateMode } = shippingData;
 
 		// The picker is torn down and rebuilt every time WooCommerce recalculates
 		// the checkout — an address edit, a coupon, a gift card. Read what the
@@ -136,6 +136,7 @@ class OkoskabetCheckout {
 				initialDeliveryDate,
 				initialShedId,
 				initialShowOptions: this.optionsOpen,
+				dateMode,
 				locale: this.locale,
 				strings: {
 					shedDeliveryDescription: this.shedDeliveryDescription,
@@ -194,6 +195,7 @@ class OkoskabetCheckout {
 				shippingMethod: ShippingMethod;
 				address: string;
 				postalCode: string;
+				dateMode: DateMode;
 		  }
 		| undefined {
 		const shippingMethod = this.getSelectedShippingMethod();
@@ -212,8 +214,22 @@ class OkoskabetCheckout {
 				shippingMethod,
 				address,
 				postalCode,
+				dateMode: this.getSelectedDateMode(),
 			};
 		}
+	}
+
+	// The delivery-date setting of the chosen rate, printed next to its radio
+	// button by PHP. The rate's id carries no instance, so the setting cannot
+	// be looked up from here.
+	private getSelectedDateMode(): DateMode {
+		const mode = this.getSelectedShippingMethodElement()
+			?.closest( 'li' )
+			?.querySelector< HTMLElement >( '.okoskabet-date-mode' )
+			?.dataset.dateMode;
+		return mode === 'when_available' || mode === 'never'
+			? mode
+			: 'required';
 	}
 
 	private getSelectedShippingMethodElement(): HTMLInputElement | undefined {

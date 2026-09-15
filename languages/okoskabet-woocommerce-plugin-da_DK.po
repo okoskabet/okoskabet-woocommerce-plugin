@@ -1159,3 +1159,21 @@ msgstr "Forudbestilling: tilbyd denne dato ud over de normale"
 
 msgid "Offers this date for these products even past the normal number of days, while the normal days stay open. For pre-orders: the soonest days as usual, and this day as well."
 msgstr "Tilbyder denne dato for varerne, også ud over det normale antal dage, mens de normale dage stadig kan vælges. Til forudbestilling: de nærmeste dage som altid, og denne dag også."
+
+msgid "Delivery date"
+msgstr "Leveringsdato"
+
+msgid "For island deliveries. Orders without a date reach Økoskabet as unprocessable shipments and are given a date by hand."
+msgstr "Til ø-leveringer. Ordrer uden dato kommer ind hos Økoskabet som ubehandlede forsendelser og får en dato manuelt."
+
+msgid "The customer picks a date"
+msgstr "Kunden vælger en dato"
+
+msgid "A date if the area has delivery days — otherwise the order is placed without one"
+msgstr "Dato hvis området har leveringsdage – ellers bestilles uden dato"
+
+msgid "No date at checkout — every order is scheduled by hand"
+msgstr "Ingen dato i kassen – alle ordrer planlægges manuelt"
+
+msgid "without delivery date"
+msgstr "uden leveringsdato"

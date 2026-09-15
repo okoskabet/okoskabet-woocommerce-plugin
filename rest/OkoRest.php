@@ -421,7 +421,18 @@ class OkoRest extends Base
 	 */
 	public function get_home_delivery(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
+		return self::home_delivery_response($request);
+	}
 
+	/**
+	 * The home-delivery dates for a postcode and cart, as the checkout asks
+	 * for them. Static so the checkout's own validation can ask the same
+	 * question the picker did, without a round trip through HTTP.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function home_delivery_response(\WP_REST_Request $request)
+	{
 		$merchant = self::resolve_request_merchant($request);
 		if ($merchant === null || empty($merchant['api_key'])) {
 			return new \WP_Error('missing_api_key', 'API key not configured for the resolved merchant', array('status' => 500));

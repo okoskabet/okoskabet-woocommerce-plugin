@@ -428,6 +428,113 @@ function oko_shipping_instance_fields(string $default_title, string $default_cos
 	);
 }
 
+/** The customer picks a delivery date, as always. */
+const OKO_DATE_MODE_REQUIRED = 'required';
+/** A date when the area has delivery days; otherwise the order goes in without one. */
+const OKO_DATE_MODE_WHEN_AVAILABLE = 'when_available';
+/** No date at checkout at all; every order is scheduled by hand. */
+const OKO_DATE_MODE_NEVER = 'never';
+
+/** Meta marking an order placed, on purpose, without a delivery date. */
+const OKO_WITHOUT_DATE_META = '_okoskabet_without_delivery_date';
+
+/**
+ * The "delivery date" setting on a home-delivery method.
+ *
+ * Made for island deliveries: one area has fixed days (Bornholm every
+ * Monday) and the customer picks one, another has none (Samsø) and the order
+ * is scheduled by hand. Which areas have days is set on the delivery zones in
+ * Økoskabet's back office, so one method covers both. An order without a date
+ * reaches Økoskabet as an unprocessable shipment, which is where a date is
+ * given to it.
+ */
+function oko_delivery_date_mode_field(): array
+{
+	return array(
+		'title'       => esc_html__('Delivery date', O_TEXTDOMAIN),
+		'type'        => 'select',
+		'description' => esc_html__('For island deliveries. Orders without a date reach Økoskabet as unprocessable shipments and are given a date by hand.', O_TEXTDOMAIN),
+		'default'     => OKO_DATE_MODE_REQUIRED,
+		'desc_tip'    => false,
+		'options'     => array(
+			OKO_DATE_MODE_REQUIRED       => esc_html__('The customer picks a date', O_TEXTDOMAIN),
+			OKO_DATE_MODE_WHEN_AVAILABLE => esc_html__('A date if the area has delivery days — otherwise the order is placed without one', O_TEXTDOMAIN),
+			OKO_DATE_MODE_NEVER          => esc_html__('No date at checkout — every order is scheduled by hand', O_TEXTDOMAIN),
+		),
+	);
+}
+
+/**
+ * The delivery-date setting of the method behind a shipping rate. Anything
+ * but a home delivery, or a copy that has never been saved, requires a date.
+ */
+function oko_delivery_date_mode_for_rate($rate): string
+{
+	if (! $rate instanceof \WC_Shipping_Rate || $rate->get_method_id() !== 'hey_okoskabet_shipping_home') {
+		return OKO_DATE_MODE_REQUIRED;
+	}
+	$instance_id = (int) $rate->get_instance_id();
+	$method      = $instance_id > 0 && class_exists('WC_Shipping_Zones') ? \WC_Shipping_Zones::get_shipping_method($instance_id) : false;
+	$mode        = $method ? (string) $method->get_option('delivery_date_mode', OKO_DATE_MODE_REQUIRED) : OKO_DATE_MODE_REQUIRED;
+
+	return in_array($mode, array(OKO_DATE_MODE_WHEN_AVAILABLE, OKO_DATE_MODE_NEVER), true) ? $mode : OKO_DATE_MODE_REQUIRED;
+}
+
+/** The delivery-date setting of the home delivery the customer has chosen. */
+function oko_chosen_delivery_date_mode(): string
+{
+	if (! function_exists('WC') || ! WC()->session || ! WC()->shipping()) {
+		return OKO_DATE_MODE_REQUIRED;
+	}
+	$packages = WC()->shipping()->get_packages();
+	foreach ((array) WC()->session->get('chosen_shipping_methods', array()) as $package_key => $rate_id) {
+		$rate = $packages[$package_key]['rates'][(string) $rate_id] ?? null;
+		if ($rate instanceof \WC_Shipping_Rate && $rate->get_method_id() === 'hey_okoskabet_shipping_home') {
+			return oko_delivery_date_mode_for_rate($rate);
+		}
+	}
+	return OKO_DATE_MODE_REQUIRED;
+}
+
+add_action('woocommerce_after_shipping_rate', 'oko_print_delivery_date_mode');
+
+/**
+ * Tell the checkout script which date setting a home-delivery rate has. The
+ * rate's id carries no instance, so the script cannot look it up itself;
+ * this sits right next to the rate's radio button and is rebuilt with it.
+ */
+function oko_print_delivery_date_mode($rate): void
+{
+	if (! $rate instanceof \WC_Shipping_Rate || $rate->get_method_id() !== 'hey_okoskabet_shipping_home') {
+		return;
+	}
+	printf('<span class="okoskabet-date-mode" data-date-mode="%s" hidden></span>', esc_attr(oko_delivery_date_mode_for_rate($rate)));
+}
+
+/**
+ * Whether Økoskabet has delivery days for this address and cart, asked the
+ * same way the date picker asks. Null when the question could not be
+ * answered.
+ */
+function oko_home_delivery_has_dates(string $postcode, array $product_ids): ?bool
+{
+	if (! class_exists('\\okoskabet_woocommerce_plugin\\Rest\\OkoRest')) {
+		return null;
+	}
+	$request = new \WP_REST_Request('GET');
+	$request->set_param('zip', $postcode);
+	$request->set_param('product_ids', implode(',', array_map('intval', $product_ids)));
+	$response = \okoskabet_woocommerce_plugin\Rest\OkoRest::home_delivery_response($request);
+	if (! $response instanceof \WP_REST_Response) {
+		return null;
+	}
+	$data = $response->get_data();
+	if (! is_array($data['results'] ?? null) || ! array_key_exists('delivery_dates', $data['results'])) {
+		return null;
+	}
+	return ! empty($data['results']['delivery_dates']);
+}
+
 /**
  * Parse a fee ladder from the textarea. Each non-empty line is
  * "from_subtotal = price" (the separator may be '=', ':', ',' or whitespace).
@@ -694,7 +801,8 @@ function hey_okoskabet_shipping_method_home_init(): void
 					'instance-settings',
 					'instance-settings-modal',
 				);
-				$this->instance_form_fields = oko_shipping_instance_fields($this->method_title);
+				$this->instance_form_fields = oko_shipping_instance_fields($this->method_title)
+					+ array('delivery_date_mode' => oko_delivery_date_mode_field());
 
 				$this->cost_value          = $this->get_option('cost');
 				$this->cost_discount       = $this->get_option('costDiscount');
@@ -1171,7 +1279,10 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	}
 	$logistics_note = implode(' — ', $logistics_note_parts);
 
-	if (empty($order_delivery_date)) {
+	// No date means this is not an Økoskabet order — unless it was placed
+	// without one on purpose, to be given a date by hand.
+	$without_date = empty($order_delivery_date) && $order->get_meta(OKO_WITHOUT_DATE_META, true) === 'yes';
+	if (empty($order_delivery_date) && ! $without_date) {
 		return null;
 	}
 
@@ -1237,6 +1348,13 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		// it repairs itself if the shop moves domain.
 		'webshop_products_url' => rest_url('wp/v2/okoskabet/products/' . rawurlencode((string) ($merchant['id'] ?? 'default'))),
 	];
+
+	// Left out rather than sent empty when the order has no date: the
+	// shipment then lands among Økoskabet's unprocessable shipments, where it
+	// is given one by hand.
+	if ($without_date) {
+		unset($data['delivery_date']);
+	}
 
 	if ($is_store_pickup) {
 		// A collection has no delivery target at all — the shop keeps the
@@ -1382,7 +1500,7 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		}
 
 		$customer_note = $order->get_customer_note() ?: '';
-		$oko_order_note = OKO_ORDER_NOTE_PREFIX . $order_delivery_date;
+		$oko_order_note = OKO_ORDER_NOTE_PREFIX . ($order_delivery_date !== '' ? $order_delivery_date : __('without delivery date', O_TEXTDOMAIN));
 		if ($is_store_pickup) {
 			$oko_order_note .= ' ' . __('Store pickup', O_TEXTDOMAIN);
 		} elseif (empty($order_shed)) {
@@ -1653,7 +1771,7 @@ function okoskabet_woocommerce_plugin_after_checkout_validation(array $fields): 
 		}
 	}
 	if ($shipping_method === 'hey_okoskabet_shipping_home') {
-		if (empty($fields['billing_okoskabet_delivery_date'])) {
+		if (empty($fields['billing_okoskabet_delivery_date']) && ! oko_home_delivery_may_go_without_date($fields)) {
 			wc_add_notice(__("Please select a Delivery date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
 	}
@@ -1663,6 +1781,59 @@ function okoskabet_woocommerce_plugin_after_checkout_validation(array $fields): 
 		if (empty($fields['billing_okoskabet_pickup_location_id']) || empty($fields['billing_okoskabet_delivery_date'])) {
 			wc_add_notice(__("Please select a pickup location and a pickup date before submitting the order.", O_TEXTDOMAIN), 'error');
 		}
+	}
+}
+
+/**
+ * Whether a home delivery without a date may be placed. With "a date if the
+ * area has delivery days", the answer is checked again here rather than
+ * trusted from the page: a customer who got past the picker before it had
+ * loaded would otherwise send a Bornholm order off to be scheduled by hand.
+ */
+function oko_home_delivery_may_go_without_date(array $fields): bool
+{
+	$mode = oko_chosen_delivery_date_mode();
+	if ($mode === OKO_DATE_MODE_NEVER) {
+		return true;
+	}
+	if ($mode !== OKO_DATE_MODE_WHEN_AVAILABLE) {
+		return false;
+	}
+
+	$postcode = (string) ($fields['shipping_postcode'] ?? '');
+	if ($postcode === '' || empty($fields['ship_to_different_address'])) {
+		$postcode = (string) ($fields['billing_postcode'] ?? '');
+	}
+	$product_ids = array();
+	if (function_exists('WC') && WC()->cart) {
+		foreach (WC()->cart->get_cart() as $item) {
+			$product_ids[] = (int) ($item['product_id'] ?? 0);
+		}
+	}
+
+	// Only a clear "no days here" lets it through. If the question cannot be
+	// answered, the customer is asked to pick a date, as they always were.
+	return oko_home_delivery_has_dates($postcode, array_filter($product_ids)) === false;
+}
+
+add_action('woocommerce_checkout_create_order', 'oko_mark_order_without_date', 15, 2);
+
+/**
+ * Record that an order goes without a delivery date on purpose, so it is
+ * still sent to Økoskabet. With "no date at checkout" any date left in the
+ * form from an earlier choice is dropped as well.
+ */
+function oko_mark_order_without_date($order, $data): void
+{
+	if (! in_array('hey_okoskabet_shipping_home', (array) ($data['shipping_method'] ?? array()), true)) {
+		return;
+	}
+	$mode = oko_chosen_delivery_date_mode();
+	if ($mode === OKO_DATE_MODE_NEVER) {
+		$order->update_meta_data('_billing_okoskabet_delivery_date', '');
+	}
+	if ($mode !== OKO_DATE_MODE_REQUIRED && empty($order->get_meta('_billing_okoskabet_delivery_date', true))) {
+		$order->update_meta_data(OKO_WITHOUT_DATE_META, 'yes');
 	}
 }
 

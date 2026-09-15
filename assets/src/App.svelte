@@ -1,7 +1,7 @@
 <script lang="ts">
 	import HomeDelivery from './HomeDelivery.svelte';
 	import ShedDelivery from './ShedDelivery.svelte';
-	import type { DisplayMode, ShippingMethod } from './types';
+	import type { DateMode, DisplayMode, ShippingMethod } from './types';
 
 	interface Strings {
 		shedDeliveryDescription: string;
@@ -19,6 +19,7 @@
 	export let initialDeliveryDate: string | undefined = undefined;
 	export let initialShedId: string | undefined = undefined;
 	export let initialShowOptions = false;
+	export let dateMode: DateMode = 'required';
 
 	export let onSelectShed: (selectedShedId: string) => void;
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
@@ -45,6 +46,7 @@
 		{address}
 		{postalCode}
 		{initialDeliveryDate}
+		{dateMode}
 		{onSelectDeliveryDate}
 		description={strings.homeDeliveryDescription}
 	/>

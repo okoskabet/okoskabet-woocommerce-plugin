@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { callApi } from './api';
 	import { formatDate } from './format-date';
+	import type { DateMode, HomeDeliveryResponse } from './types';
 
 	export let locale: string;
 	export let description: string;
 	export let address: string;
 	export let postalCode: string;
 	export let initialDeliveryDate: string | undefined = undefined;
+	export let dateMode: DateMode = 'required';
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
 
 	// Starting from the date the customer already chose, rather than from
@@ -21,7 +23,21 @@
 		}
 	}
 
-	$: apiResponse = callApi('home-delivery', address, postalCode);
+	// With no date at checkout there is nothing to ask Økoskabet; the order is
+	// given a day by hand after it has been placed.
+	$: apiResponse =
+		dateMode === 'never'
+			? Promise.resolve<HomeDeliveryResponse>({
+					type: 'home-delivery',
+					origin: null,
+					delivery_dates: [],
+				})
+			: callApi('home-delivery', address, postalCode);
+
+	$: if (dateMode === 'never') {
+		selectedDeliveryDate = undefined;
+		onSelectDeliveryDate('');
+	}
 
 	// A date that was on offer before the recalculation may not be any more —
 	// a new postcode, a different cart. Keep it only while it still is, and
@@ -62,7 +78,11 @@
 	{#await apiResponse}
 		<span class="skeleton-loader"></span>
 	{:then response}
-		{#if response.delivery_dates.length === 0}
+		{#if response.delivery_dates.length === 0 && dateMode !== 'required'}
+			<p class="oko-without-date">
+				Leveringsdagen aftales efter bestillingen – vi kontakter dig.
+			</p>
+		{:else if response.delivery_dates.length === 0}
 			{#if response.exceptions_explanation && response.exceptions_explanation.has_exceptions}
 				<div class="oko-no-dates-explained">
 					<p class="oko-no-dates-headline">{response.exceptions_explanation.summary}</p>
@@ -103,6 +123,10 @@
 		line-height: 1.1;
 		font-size: 80%;
 		margin-bottom: 20px;
+	}
+
+	.oko-without-date {
+		margin: 8px 0 16px;
 	}
 
 	.oko-no-dates-explained {
