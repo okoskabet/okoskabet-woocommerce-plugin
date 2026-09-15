@@ -340,7 +340,7 @@ function custom_content_for_custom_shipping_checkout(): void
 		$notice = $pre_order ? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_notice() : '';
 		printf(
 			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s%s</div></td></tr>',
-			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="flex-basis:100%;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
+			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="grid-column:1/-1;width:0;min-width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
 			sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label())),
 			sprintf($button, $pre_order ? ' alt' : '', '1', $pre_order ? 'true' : 'false', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label()))
 		);
@@ -676,7 +676,9 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		th.style.position='relative';
 		th.style.paddingBottom='72px';
 		var pad=getComputedStyle(th).paddingLeft;
-		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:flex;flex-wrap:wrap;gap:8px;';
+		// A grid as wide as the two buttons; the note spans both and wraps
+		// within that width (width 0 keeps it from widening the columns).
+		choice.style.cssText='position:absolute;left:'+pad+';bottom:16px;max-width:calc(100% - 2 * '+pad+');display:grid;grid-template-columns:auto auto;gap:8px;';
 		th.appendChild(choice);
 		th.style.paddingBottom=(choice.offsetHeight+32)+'px';
 	}
