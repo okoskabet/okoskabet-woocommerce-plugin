@@ -1177,3 +1177,27 @@ msgstr "Ingen dato i kassen – alle ordrer planlægges manuelt"
 
 msgid "without delivery date"
 msgstr "uden leveringsdato"
+
+msgid "Pre-order"
+msgstr "Forudbestilling"
+
+msgid "Normal order"
+msgstr "Normal bestilling"
+
+msgid "Pre-order button"
+msgstr "Knap til forudbestilling"
+
+msgid "Back to normal order"
+msgstr "Knap tilbage til normal bestilling"
+
+msgid "A day marked as a pre-order is not offered in the normal checkout. The customer presses the pre-order button under Shipping and then sees only the pre-order days."
+msgstr "En dag markeret som forudbestilling vises ikke ved normal bestilling. Kunden trykker på forudbestillingsknappen under Forsendelse og ser så kun forudbestillingsdagene."
+
+msgid "Postcodes without delivery days"
+msgstr "Postnumre uden leveringsdage"
+
+msgid "Can still be ordered — without a date, landing among unprocessed orders at Økoskabet"
+msgstr "Kan stadig bestilles – uden dato, og lander blandt ubehandlede ordrer hos Økoskabet"
+
+msgid "For island deliveries. Areas Økoskabet delivers to are booked on their days as usual."
+msgstr "Til ø-leveringer. Områder som Økoskabet leverer til bookes på deres dage som normalt."

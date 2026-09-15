@@ -281,6 +281,11 @@ class OkoRest extends Base
 		return Merchant_Router::shipping_zone_id_for_destination($country, $state, $zip);
 	}
 
+	/** Whether the checkout asked for pre-order days rather than normal ones. */
+	private static function is_pre_order_request(\WP_REST_Request $request): bool {
+		return (string) $request->get_param('pre_order') === '1';
+	}
+
 	/**
 	 * Parse a comma-separated list of integers into a sanitised array of
 	 * positive product IDs. Defensive against any input shape.
@@ -352,7 +357,7 @@ class OkoRest extends Base
 		$product_ids  = self::parse_product_ids($params['product_ids'] ?? '');
 
 		if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
-			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids);
+			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids, self::is_pre_order_request($request));
 		} else {
 			$maximum_days_in_future = $default_days;
 		}
@@ -385,7 +390,8 @@ class OkoRest extends Base
 					$shed['delivery_dates'] = apply_filters(
 						'okoskabet_filtered_delivery_dates',
 						$shed['delivery_dates'],
-						$product_ids
+						$product_ids,
+						self::is_pre_order_request($request)
 					);
 					if (!empty($shed['delivery_dates'])) {
 						$any_dates_left = true;
@@ -443,7 +449,7 @@ class OkoRest extends Base
 		$product_ids  = self::parse_product_ids($params['product_ids'] ?? '');
 
 		if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
-			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids);
+			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids, self::is_pre_order_request($request));
 		} else {
 			$maximum_days_in_future = $default_days;
 		}
@@ -471,7 +477,8 @@ class OkoRest extends Base
 			$output_content['delivery_dates'] = apply_filters(
 				'okoskabet_filtered_delivery_dates',
 				$output_content['delivery_dates'],
-				$product_ids
+				$product_ids,
+				self::is_pre_order_request($request)
 			);
 		}
 
@@ -523,7 +530,7 @@ class OkoRest extends Base
 		$product_ids  = self::parse_product_ids($params['product_ids'] ?? '');
 
 		if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
-			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids);
+			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids, self::is_pre_order_request($request));
 		} else {
 			$maximum_days_in_future = $default_days;
 		}
@@ -565,7 +572,8 @@ class OkoRest extends Base
 					$location['delivery_dates'] = apply_filters(
 						'okoskabet_filtered_delivery_dates',
 						$location['delivery_dates'],
-						$product_ids
+						$product_ids,
+						self::is_pre_order_request($request)
 					);
 					if (!empty($location['delivery_dates'])) {
 						$any_dates_left = true;
@@ -665,7 +673,7 @@ class OkoRest extends Base
 		$raw_dates = array_map('sanitize_text_field', (array) $raw_dates);
 
 		$product_ids = self::parse_product_ids($params['product_ids'] ?? '');
-		$filtered    = apply_filters('okoskabet_filtered_delivery_dates', $raw_dates, $product_ids);
+		$filtered    = apply_filters('okoskabet_filtered_delivery_dates', $raw_dates, $product_ids, self::is_pre_order_request($request));
 
 		return new \WP_REST_Response(array('dates' => array_values($filtered)), 200);
 	}

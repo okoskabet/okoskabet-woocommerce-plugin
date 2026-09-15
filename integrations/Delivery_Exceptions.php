@@ -93,7 +93,7 @@ class Delivery_Exceptions extends Base {
 
 		// Hook into the date-filter pipeline that already exists in OkoRest.
 		// Filter signature: ($dates, $product_ids).
-		add_filter( 'okoskabet_filtered_delivery_dates', array( $this, 'filter_dates_for_cart' ), 10, 2 );
+		add_filter( 'okoskabet_filtered_delivery_dates', array( $this, 'filter_dates_for_cart' ), 10, 3 );
 
 		// One-time upgrade notice: after the delivery-rules change, remind
 		// merchants to double-check their delivery-day setup in BOTH the
@@ -208,8 +208,13 @@ class Delivery_Exceptions extends Base {
 				6 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Sat
 			),
 
-			// only_on: list of {label, date, enabled, categories, tags}.
+			// only_on: list of {label, date, enabled, extend, categories, tags}.
 			'only_on'   => array(),
+
+			// What the checkout's pre-order button says, in each direction.
+			// Empty means the built-in wording.
+			'pre_order_label'    => '',
+			'normal_order_label' => '',
 
 			// from_until: list of {label, from, until, enabled, categories, tags}.
 			'from_until' => array(),
@@ -255,6 +260,12 @@ class Delivery_Exceptions extends Base {
 		foreach ( array( 'weekdays_enabled', 'only_on_enabled', 'from_until_enabled' ) as $k ) {
 			if ( isset( $stored[ $k ] ) ) {
 				$defaults[ $k ] = (bool) $stored[ $k ];
+			}
+		}
+
+		foreach ( array( 'pre_order_label', 'normal_order_label' ) as $k ) {
+			if ( isset( $stored[ $k ] ) ) {
+				$defaults[ $k ] = sanitize_text_field( (string) $stored[ $k ] );
 			}
 		}
 
@@ -717,6 +728,17 @@ class Delivery_Exceptions extends Base {
 				<?php esc_html_e( 'Create one or more exceptions where specific categories/tags can ONLY be delivered on a specific date. Each exception can be enabled/disabled individually.', O_TEXTDOMAIN ); ?>
 			</p>
 			<div class="oko-section-body">
+				<p class="oko-help">
+					<?php esc_html_e( 'A day marked as a pre-order is not offered in the normal checkout. The customer presses the pre-order button under Shipping and then sees only the pre-order days.', O_TEXTDOMAIN ); ?>
+				</p>
+				<div class="oko-row-row" style="margin-bottom:12px;">
+					<label><?php esc_html_e( 'Pre-order button', O_TEXTDOMAIN ); ?>:
+						<input type="text" name="pre_order_label" value="<?php echo esc_attr( $config['pre_order_label'] ); ?>" placeholder="<?php echo esc_attr( self::pre_order_label( array() ) ); ?>" style="width:200px;" />
+					</label>
+					<label><?php esc_html_e( 'Back to normal order', O_TEXTDOMAIN ); ?>:
+						<input type="text" name="normal_order_label" value="<?php echo esc_attr( $config['normal_order_label'] ); ?>" placeholder="<?php echo esc_attr( self::normal_order_label( array() ) ); ?>" style="width:200px;" />
+					</label>
+				</div>
 				<?php $this->render_section_limit_control( $config, 'only_on' ); ?>
 				<div id="only_on_rows">
 					<?php foreach ( $rows as $i => $row ) : ?>
@@ -869,6 +891,11 @@ class Delivery_Exceptions extends Base {
 		$config['only_on_enabled']    = ! empty( $_POST['only_on_enabled'] );
 		$config['from_until_enabled'] = ! empty( $_POST['from_until_enabled'] );
 
+		// Pre-order button wording.
+		foreach ( array( 'pre_order_label', 'normal_order_label' ) as $k ) {
+			$config[ $k ] = isset( $_POST[ $k ] ) ? sanitize_text_field( (string) wp_unslash( $_POST[ $k ] ) ) : ''; // phpcs:ignore
+		}
+
 		// Display settings.
 		$posted_display_mode = isset( $_POST['display_mode'] ) ? sanitize_text_field( (string) wp_unslash( $_POST['display_mode'] ) ) : ''; // phpcs:ignore
 		$config['display_mode']  = ( $posted_display_mode === 'count' ) ? 'count' : 'window';
@@ -1018,7 +1045,7 @@ class Delivery_Exceptions extends Base {
 	 *                              and return the input untouched.
 	 * @return string[]
 	 */
-	public function filter_dates_for_cart( array $dates, $product_ids = array() ): array {
+	public function filter_dates_for_cart( array $dates, $product_ids = array(), $pre_order = false ): array {
 		$product_ids = is_array( $product_ids ) ? array_map( 'intval', $product_ids ) : array();
 		$product_ids = array_values( array_filter( $product_ids, function ( $id ) { return $id > 0; } ) );
 
@@ -1055,9 +1082,19 @@ class Delivery_Exceptions extends Base {
 		// than normal, drop the soonest dates it can no longer make.
 		$result = self::apply_cutoff( $result, $product_ids, $config );
 
-		// Apply the configured display limit (a number of delivery days, or a
-		// calendar horizon) now that the cart's available dates are known.
-		$result = self::apply_display_limit( $result, $applicable_rules, $config );
+		// A pre-order shows its own days and nothing else; a normal order shows
+		// the normal days and nothing else. Mixing them put two months of
+		// dates in front of a customer who only wanted next week.
+		if ( $pre_order ) {
+			$ranges = self::pre_order_ranges( $applicable_rules );
+			$result = array_values( array_filter( $result, function ( string $date ) use ( $ranges ): bool {
+				return self::date_in_ranges( $date, $ranges );
+			} ) );
+		} else {
+			// Apply the configured display limit (a number of delivery days, or
+			// a calendar horizon) now that the cart's available dates are known.
+			$result = self::apply_display_limit( $result, $applicable_rules, $config );
+		}
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			// De-duplicate the log line per unique product-set per request.
@@ -1188,20 +1225,8 @@ class Delivery_Exceptions extends Base {
 			return $dates; // not configured → no display trimming (legacy behaviour).
 		}
 
-		// A pre-order rule's own days are the one thing allowed past the limit.
-		// Without this the limit cut away the very dates the rule exists to
-		// offer — ice cream for Christmas vanished at day ten — and a merchant's
-		// only way round it was to raise the limit for every product in the shop.
-		$pre_order_ranges = self::pre_order_ranges( $applicable_rules );
-
 		if ( $limit['mode'] === 'count' ) {
-			$shown = array_slice( $dates, 0, $limit['value'] );
-			foreach ( array_slice( $dates, $limit['value'] ) as $date ) {
-				if ( self::date_in_ranges( $date, $pre_order_ranges ) ) {
-					$shown[] = $date;
-				}
-			}
-			return $shown;
+			return array_slice( $dates, 0, $limit['value'] );
 		}
 
 		// 'window': keep dates on/before today + value days. Y-m-d sorts
@@ -1209,8 +1234,8 @@ class Delivery_Exceptions extends Base {
 		$horizon = self::wp_datetime( 'today' );
 		$horizon->modify( sprintf( '+%d days', (int) $limit['value'] ) );
 		$horizon_ymd = $horizon->format( 'Y-m-d' );
-		return array_values( array_filter( $dates, function ( string $date ) use ( $horizon_ymd, $pre_order_ranges ): bool {
-			return ( $date !== '' && $date <= $horizon_ymd ) || self::date_in_ranges( $date, $pre_order_ranges );
+		return array_values( array_filter( $dates, function ( $date ) use ( $horizon_ymd ): bool {
+			return is_string( $date ) && $date !== '' && $date <= $horizon_ymd;
 		} ) );
 	}
 
@@ -1598,6 +1623,34 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
+	 * Whether anything in this cart can be pre-ordered — which is when the
+	 * checkout offers the pre-order button at all.
+	 *
+	 * @param int[] $product_ids
+	 */
+	public static function cart_has_pre_order_days( array $product_ids ): bool {
+		$product_ids = array_values( array_filter( array_map( 'intval', $product_ids ) ) );
+		if ( empty( $product_ids ) ) {
+			return false;
+		}
+		$instance = new self();
+
+		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, self::get_config() ) ) );
+	}
+
+	/** The pre-order button's wording, as the shop set it or built in. */
+	public static function pre_order_label( ?array $config = null ): string {
+		$config = $config ?? self::get_config();
+		return ( $config['pre_order_label'] ?? '' ) !== '' ? (string) $config['pre_order_label'] : __( 'Pre-order', O_TEXTDOMAIN );
+	}
+
+	/** The wording of the button back to a normal order. */
+	public static function normal_order_label( ?array $config = null ): string {
+		$config = $config ?? self::get_config();
+		return ( $config['normal_order_label'] ?? '' ) !== '' ? (string) $config['normal_order_label'] : __( 'Normal order', O_TEXTDOMAIN );
+	}
+
+	/**
 	 * Tell the caller how many days into the future Økoskabet's API needs to
 	 * be queried for, so the customer sees every date the cart's rules might
 	 * keep — without over-fetching. The API is the source of truth; we only
@@ -1615,7 +1668,7 @@ class Delivery_Exceptions extends Base {
 	 * Capped at 365 days so a mistyped far-future date can't trigger an
 	 * unbounded query.
 	 */
-	public static function effective_query_window( int $default_days, array $product_ids ): int {
+	public static function effective_query_window( int $default_days, array $product_ids, bool $pre_order = false ): int {
 		$config        = self::get_config();
 		$display_value = (int) ( $config['display_value'] ?? 0 );
 		$mode          = $config['display_mode'] ?? 'window'; // normalised by get_config()
@@ -1641,6 +1694,10 @@ class Delivery_Exceptions extends Base {
 		// cut off by a day (the API counts its window from the first deliverable
 		// day, not from today).
 		foreach ( $rules as $rule ) {
+			// A normal order never shows pre-order days, so it needn't fetch them.
+			if ( ! empty( $rule['extend'] ) && ! $pre_order ) {
+				continue;
+			}
 			$candidates = self::extension_candidates_for_rule( $rule );
 			foreach ( $candidates as $date ) {
 				try {

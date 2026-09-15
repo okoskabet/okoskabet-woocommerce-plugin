@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { callApi } from './api';
 	import { formatDate } from './format-date';
-	import type { DateMode, HomeDeliveryResponse } from './types';
+	import type { DateMode } from './types';
 
 	export let locale: string;
 	export let description: string;
@@ -23,21 +23,7 @@
 		}
 	}
 
-	// With no date at checkout there is nothing to ask Økoskabet; the order is
-	// given a day by hand after it has been placed.
-	$: apiResponse =
-		dateMode === 'never'
-			? Promise.resolve<HomeDeliveryResponse>({
-					type: 'home-delivery',
-					origin: null,
-					delivery_dates: [],
-				})
-			: callApi('home-delivery', address, postalCode);
-
-	$: if (dateMode === 'never') {
-		selectedDeliveryDate = undefined;
-		onSelectDeliveryDate('');
-	}
+	$: apiResponse = callApi('home-delivery', address, postalCode);
 
 	// A date that was on offer before the recalculation may not be any more —
 	// a new postcode, a different cart. Keep it only while it still is, and

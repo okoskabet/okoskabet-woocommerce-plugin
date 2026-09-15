@@ -36,6 +36,11 @@ export async function callApi(shippingMethod: ShippingMethod, address: string, p
   if (productIds) {
     params.product_ids = productIds;
   }
+  // A pre-order is offered its own days, a normal order the normal ones.
+  const preOrder = document.getElementById('billing_okoskabet_pre_order') as HTMLInputElement | null;
+  if (preOrder?.value === '1') {
+    params.pre_order = '1';
+  }
   const queryParams = new URLSearchParams(params).toString();
 
   const myHeaders = new Headers();

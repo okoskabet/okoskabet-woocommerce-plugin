@@ -331,6 +331,24 @@ function custom_content_for_custom_shipping_checkout(): void
 	}
 	echo '<input type="hidden" id="okoskabet-cart-product-ids" value="' . esc_attr(implode(',', array_unique($product_ids))) . '" />';
 
+	// The way into a pre-order, and back out of it — only for a cart holding
+	// something that can be pre-ordered. The dates the pickers then offer come
+	// from the same switch, sent along with each date lookup.
+	if (
+		class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')
+		&& \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days($product_ids)
+	) {
+		$pre_order = oko_is_pre_order_checkout();
+		$label     = $pre_order
+			? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label()
+			: \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label();
+		printf(
+			'<tr class="okoskabet-pre-order-row"><th></th><td><button type="button" class="button okoskabet-pre-order-toggle" data-pre-order="%s">%s</button></td></tr>',
+			$pre_order ? '1' : '',
+			esc_html($label)
+		);
+	}
+
 	// CSS: hide WooCommerce-rendered billing input fields — our JS injects
 	// the visible UI dynamically. We hide only the labels and inputs, not the
 	// wrapper, so our injected UI inside the wrapper remains visible.
@@ -338,6 +356,8 @@ function custom_content_for_custom_shipping_checkout(): void
 		/* The pickup-location field is written by the checkout JS, never typed
 		   into, so the raw WooCommerce input must not be shown. */
 		#billing_okoskabet_pickup_location_id_field { display: none !important; }
+		#billing_okoskabet_pre_order_field { display: none !important; }
+		.okoskabet-pre-order-row td { padding-top: 0; }
 		.okoskabet-delivery-location > label,
 		.okoskabet-delivery-location > .woocommerce-input-wrapper > input,
 		.okoskabet-delivery-note > label,
@@ -430,37 +450,29 @@ function oko_shipping_instance_fields(string $default_title, string $default_cos
 
 /** The customer picks a delivery date, as always. */
 const OKO_DATE_MODE_REQUIRED = 'required';
-/** A date when the area has delivery days; otherwise the order goes in without one. */
+/** A date where Økoskabet delivers; a postcode it doesn't is ordered without one. */
 const OKO_DATE_MODE_WHEN_AVAILABLE = 'when_available';
-/** No date at checkout at all; every order is scheduled by hand. */
-const OKO_DATE_MODE_NEVER = 'never';
 
 /** Meta marking an order placed, on purpose, without a delivery date. */
 const OKO_WITHOUT_DATE_META = '_okoskabet_without_delivery_date';
 
 /**
- * The "delivery date" setting on a home-delivery method.
+ * The "postcodes Økoskabet doesn't cover" setting on a home-delivery method.
  *
- * Made for island deliveries: one area has fixed days (Bornholm every
- * Monday) and the customer picks one, another has none (Samsø) and the order
- * is scheduled by hand. Which areas have days is set on the delivery zones in
- * Økoskabet's back office, so one method covers both. An order without a date
- * reaches Økoskabet as an unprocessable shipment, which is where a date is
- * given to it.
+ * Made for island deliveries: an area Økoskabet delivers to (Bornholm every
+ * Monday) is booked on its days as usual, and a postcode it doesn't (Samsø)
+ * can still be ordered — without a date. Such an order reaches Økoskabet as
+ * an unprocessable shipment, which is where a date is given to it by hand.
  */
-function oko_delivery_date_mode_field(): array
+function oko_allow_without_date_field(): array
 {
 	return array(
-		'title'       => esc_html__('Delivery date', O_TEXTDOMAIN),
-		'type'        => 'select',
-		'description' => esc_html__('For island deliveries. Orders without a date reach Økoskabet as unprocessable shipments and are given a date by hand.', O_TEXTDOMAIN),
-		'default'     => OKO_DATE_MODE_REQUIRED,
+		'title'       => esc_html__('Postcodes without delivery days', O_TEXTDOMAIN),
+		'type'        => 'checkbox',
+		'label'       => esc_html__('Can still be ordered — without a date, landing among unprocessed orders at Økoskabet', O_TEXTDOMAIN),
+		'description' => esc_html__('For island deliveries. Areas Økoskabet delivers to are booked on their days as usual.', O_TEXTDOMAIN),
+		'default'     => 'no',
 		'desc_tip'    => false,
-		'options'     => array(
-			OKO_DATE_MODE_REQUIRED       => esc_html__('The customer picks a date', O_TEXTDOMAIN),
-			OKO_DATE_MODE_WHEN_AVAILABLE => esc_html__('A date if the area has delivery days — otherwise the order is placed without one', O_TEXTDOMAIN),
-			OKO_DATE_MODE_NEVER          => esc_html__('No date at checkout — every order is scheduled by hand', O_TEXTDOMAIN),
-		),
 	);
 }
 
@@ -475,9 +487,8 @@ function oko_delivery_date_mode_for_rate($rate): string
 	}
 	$instance_id = (int) $rate->get_instance_id();
 	$method      = $instance_id > 0 && class_exists('WC_Shipping_Zones') ? \WC_Shipping_Zones::get_shipping_method($instance_id) : false;
-	$mode        = $method ? (string) $method->get_option('delivery_date_mode', OKO_DATE_MODE_REQUIRED) : OKO_DATE_MODE_REQUIRED;
 
-	return in_array($mode, array(OKO_DATE_MODE_WHEN_AVAILABLE, OKO_DATE_MODE_NEVER), true) ? $mode : OKO_DATE_MODE_REQUIRED;
+	return $method && $method->get_option('allow_without_date', 'no') === 'yes' ? OKO_DATE_MODE_WHEN_AVAILABLE : OKO_DATE_MODE_REQUIRED;
 }
 
 /** The delivery-date setting of the home delivery the customer has chosen. */
@@ -802,7 +813,7 @@ function hey_okoskabet_shipping_method_home_init(): void
 					'instance-settings-modal',
 				);
 				$this->instance_form_fields = oko_shipping_instance_fields($this->method_title)
-					+ array('delivery_date_mode' => oko_delivery_date_mode_field());
+					+ array('allow_without_date' => oko_allow_without_date_field());
 
 				$this->cost_value          = $this->get_option('cost');
 				$this->cost_discount       = $this->get_option('costDiscount');
@@ -1052,6 +1063,26 @@ add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
 add_filter('woocommerce_checkout_get_value', 'oko_checkout_starts_without_last_orders_choice', 10, 2);
 
 /**
+ * Whether the customer is placing a pre-order, as the checkout form says:
+ * the submitted form when the order is placed, the recalculation's copy of
+ * it before that.
+ */
+function oko_is_pre_order_checkout(): bool
+{
+	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
+	if (isset($_POST['billing_okoskabet_pre_order'])) {
+		return (string) wp_unslash($_POST['billing_okoskabet_pre_order']) === '1';
+	}
+	if (isset($_POST['post_data']) && is_string($_POST['post_data'])) {
+		$fields = array();
+		parse_str(wp_unslash($_POST['post_data']), $fields);
+		return (string) ($fields['billing_okoskabet_pre_order'] ?? '') === '1';
+	}
+	// phpcs:enable WordPress.Security.NonceVerification
+	return false;
+}
+
+/**
  * Start every checkout without the date, shed and pickup place of the
  * customer's last order.
  *
@@ -1072,6 +1103,7 @@ function oko_checkout_starts_without_last_orders_choice($value, $input)
 		'billing_okoskabet_delivery_date',
 		'billing_okoskabet_shed_id',
 		'billing_okoskabet_pickup_location_id',
+		'billing_okoskabet_pre_order',
 	);
 	// phpcs:ignore WordPress.Security.NonceVerification -- only checks presence; WooCommerce verifies the checkout.
 	if (in_array($input, $fresh_every_time, true) && !isset($_POST[$input])) {
@@ -1119,6 +1151,17 @@ function custom_override_checkout_fields(array $fields): array
 		'placeholder' => '',
 		'required'    => false,
 		'class'       => array('okoskabet-delivery-note form-row-wide'),
+		'clear'       => true,
+	);
+
+	// "1" while the customer is placing a pre-order. Kept in the billing form
+	// rather than the order review, which WooCommerce rebuilds on every
+	// recalculation and would forget it in.
+	$fields['billing']['billing_okoskabet_pre_order'] = array(
+		'label'       => __('Pre-order', O_TEXTDOMAIN),
+		'placeholder' => '',
+		'required'    => false,
+		'class'       => array('okoskabet-pre-order form-row-wide'),
 		'clear'       => true,
 	);
 
@@ -1792,11 +1835,7 @@ function okoskabet_woocommerce_plugin_after_checkout_validation(array $fields): 
  */
 function oko_home_delivery_may_go_without_date(array $fields): bool
 {
-	$mode = oko_chosen_delivery_date_mode();
-	if ($mode === OKO_DATE_MODE_NEVER) {
-		return true;
-	}
-	if ($mode !== OKO_DATE_MODE_WHEN_AVAILABLE) {
+	if (oko_chosen_delivery_date_mode() !== OKO_DATE_MODE_WHEN_AVAILABLE) {
 		return false;
 	}
 
@@ -1820,19 +1859,14 @@ add_action('woocommerce_checkout_create_order', 'oko_mark_order_without_date', 1
 
 /**
  * Record that an order goes without a delivery date on purpose, so it is
- * still sent to Økoskabet. With "no date at checkout" any date left in the
- * form from an earlier choice is dropped as well.
+ * still sent to Økoskabet.
  */
 function oko_mark_order_without_date($order, $data): void
 {
 	if (! in_array('hey_okoskabet_shipping_home', (array) ($data['shipping_method'] ?? array()), true)) {
 		return;
 	}
-	$mode = oko_chosen_delivery_date_mode();
-	if ($mode === OKO_DATE_MODE_NEVER) {
-		$order->update_meta_data('_billing_okoskabet_delivery_date', '');
-	}
-	if ($mode !== OKO_DATE_MODE_REQUIRED && empty($order->get_meta('_billing_okoskabet_delivery_date', true))) {
+	if (oko_chosen_delivery_date_mode() === OKO_DATE_MODE_WHEN_AVAILABLE && empty($order->get_meta('_billing_okoskabet_delivery_date', true))) {
 		$order->update_meta_data(OKO_WITHOUT_DATE_META, 'yes');
 	}
 }

@@ -13,6 +13,7 @@ const ADDRESS_1_SELECTOR = '#billing_address_1';
 const ADDRESS_2_SELECTOR = '#billing_address_2';
 
 const DELIVERY_DATE_INPUT_SELECTOR = '#billing_okoskabet_delivery_date';
+const PRE_ORDER_INPUT_SELECTOR = '#billing_okoskabet_pre_order';
 const SHED_ID_INPUT_SELECTOR = '#billing_okoskabet_shed_id';
 
 class OkoskabetCheckout {
@@ -83,6 +84,22 @@ class OkoskabetCheckout {
 				}
 			}, 200 );
 		} );
+
+		// Between a pre-order and a normal order. The date goes with the switch:
+		// the two offer different days, and the pickers start again from the
+		// first one on offer. Recalculating rebuilds them, and the button with
+		// its new wording.
+		$( document ).on(
+			'click',
+			'.okoskabet-pre-order-toggle',
+			function ( e ) {
+				e.preventDefault();
+				const preOrder = $( PRE_ORDER_INPUT_SELECTOR ).val() === '1';
+				$( PRE_ORDER_INPUT_SELECTOR ).val( preOrder ? '' : '1' );
+				$( DELIVERY_DATE_INPUT_SELECTOR ).val( '' );
+				$( document.body ).trigger( 'update_checkout' );
+			}
+		);
 
 		$( document ).on( 'change', 'input.shipping_method', function () {
 			that.deliveryOptions?.$destroy();
@@ -227,9 +244,7 @@ class OkoskabetCheckout {
 			?.closest( 'li' )
 			?.querySelector< HTMLElement >( '.okoskabet-date-mode' )
 			?.dataset.dateMode;
-		return mode === 'when_available' || mode === 'never'
-			? mode
-			: 'required';
+		return mode === 'when_available' ? mode : 'required';
 	}
 
 	private getSelectedShippingMethodElement(): HTMLInputElement | undefined {

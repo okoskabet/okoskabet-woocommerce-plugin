@@ -654,7 +654,13 @@
 
 		function cartKey() {
 			var ids = document.getElementById("okoskabet-cart-product-ids");
-			return ids ? ids.value : "";
+			return (ids ? ids.value : "") + "|" + (isPreOrder() ? "pre" : "");
+		}
+
+		// A pre-order is offered its own days, a normal order the normal ones.
+		function isPreOrder() {
+			var f = document.getElementById("billing_okoskabet_pre_order");
+			return !!f && f.value === "1";
 		}
 
 		function fetchAndRender() {
@@ -666,8 +672,10 @@
 			}
 			var ep = endpoint();
 			if (!ep || inFlight) { return; }
+			var ids = document.getElementById("okoskabet-cart-product-ids");
 			var url = ep + (ep.indexOf("?") === -1 ? "?" : "&")
-				+ "product_ids=" + encodeURIComponent(key);
+				+ "product_ids=" + encodeURIComponent(ids ? ids.value : "")
+				+ (isPreOrder() ? "&pre_order=1" : "");
 			inFlight = true;
 			locationsCacheKey = key;
 			fetch(url, { credentials: "same-origin" })
