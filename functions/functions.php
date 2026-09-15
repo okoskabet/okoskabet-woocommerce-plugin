@@ -229,10 +229,6 @@ function custom_content_for_custom_shipping_checkout(): void
 	$config = wp_json_encode(array(
 		'locale'        => get_locale(),
 		'displayOption' => $settings['_display_option'] ?? '',
-		// Recalculate the totals when the delivery date changes — only needed,
-		// and only done, when the date can put a pre-order fee on the order.
-		'dateAffectsTotals' => class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Packaging_Fee')
-			&& \okoskabet_woocommerce_plugin\Integrations\Packaging_Fee::date_can_change_fee(),
 		'descriptions'  => array(
 			'homeDelivery' => $local_description,
 			'shedDelivery' => $shed_description,
@@ -342,11 +338,32 @@ function custom_content_for_custom_shipping_checkout(): void
 		$label     = $pre_order
 			? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label()
 			: \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label();
+		// The button belongs under "Shipping" in the left-hand column, which
+		// WooCommerce's template gives no hook for; the row it arrives in is
+		// hidden and the button moved across. The script travels with the
+		// button, so it runs every time the order review is rebuilt — and
+		// cannot be served stale by a page cache that keeps an old script
+		// file around.
 		printf(
-			'<tr class="okoskabet-pre-order-row"><th></th><td><button type="button" class="button okoskabet-pre-order-toggle" data-pre-order="%s">%s</button></td></tr>',
+			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><button type="button" class="button okoskabet-pre-order-toggle" data-pre-order="%s">%s</button></td></tr>',
 			$pre_order ? '1' : '',
 			esc_html($label)
 		);
+		echo "<script>(function(){"
+			. "var b=document.querySelector('.okoskabet-pre-order-row .okoskabet-pre-order-toggle');"
+			. "var th=document.querySelector('tr.woocommerce-shipping-totals > th, tr.shipping > th');"
+			. "if(b&&th){th.appendChild(b);}"
+			. "if(window.okoskabetPreOrderBound){return;}"
+			. "window.okoskabetPreOrderBound=true;"
+			. "document.addEventListener('click',function(e){"
+			. "var t=e.target.closest&&e.target.closest('.okoskabet-pre-order-toggle');if(!t){return;}"
+			. "e.preventDefault();"
+			. "var f=document.getElementById('billing_okoskabet_pre_order');if(!f){return;}"
+			. "f.value=f.value==='1'?'':'1';"
+			. "var d=document.getElementById('billing_okoskabet_delivery_date');if(d){d.value='';}"
+			. "if(window.jQuery){window.jQuery(document.body).trigger('update_checkout');}"
+			. "});"
+			. "})();</script>";
 	}
 
 	// CSS: hide WooCommerce-rendered billing input fields — our JS injects
@@ -357,7 +374,7 @@ function custom_content_for_custom_shipping_checkout(): void
 		   into, so the raw WooCommerce input must not be shown. */
 		#billing_okoskabet_pickup_location_id_field { display: none !important; }
 		#billing_okoskabet_pre_order_field { display: none !important; }
-		.okoskabet-pre-order-row td { padding-top: 0; }
+		.okoskabet-pre-order-toggle { display: block; margin-top: 16px; }
 		.okoskabet-delivery-location > label,
 		.okoskabet-delivery-location > .woocommerce-input-wrapper > input,
 		.okoskabet-delivery-note > label,

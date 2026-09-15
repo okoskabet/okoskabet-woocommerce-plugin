@@ -1201,3 +1201,9 @@ msgstr "Kan stadig bestilles – uden dato, og lander blandt ubehandlede ordrer 
 
 msgid "For island deliveries. Areas Økoskabet delivers to are booked on their days as usual."
 msgstr "Til ø-leveringer. Områder som Økoskabet leverer til bookes på deres dage som normalt."
+
+msgid "Pre-orders only"
+msgstr "Kun forudbestilling"
+
+msgid "Charged only when the customer has pressed the pre-order button at checkout."
+msgstr "Opkræves kun når kunden har trykket på forudbestillingsknappen i kassen."

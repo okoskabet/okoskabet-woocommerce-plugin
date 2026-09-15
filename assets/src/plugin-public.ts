@@ -13,7 +13,6 @@ const ADDRESS_1_SELECTOR = '#billing_address_1';
 const ADDRESS_2_SELECTOR = '#billing_address_2';
 
 const DELIVERY_DATE_INPUT_SELECTOR = '#billing_okoskabet_delivery_date';
-const PRE_ORDER_INPUT_SELECTOR = '#billing_okoskabet_pre_order';
 const SHED_ID_INPUT_SELECTOR = '#billing_okoskabet_shed_id';
 
 class OkoskabetCheckout {
@@ -21,7 +20,6 @@ class OkoskabetCheckout {
 	private displayOption: 'inline' | 'modal';
 	private shedDeliveryDescription: string;
 	private homeDeliveryDescription: string;
-	private dateAffectsTotals: boolean;
 
 	// Whether the customer has the shed picker open in modal mode. The picker
 	// is rebuilt on every recalculation of the checkout, and without this a
@@ -33,12 +31,10 @@ class OkoskabetCheckout {
 	constructor(
 		locale: string,
 		displayOption: 'inline' | 'modal',
-		descriptions: { homeDelivery: string; shedDelivery: string },
-		dateAffectsTotals: boolean
+		descriptions: { homeDelivery: string; shedDelivery: string }
 	) {
 		this.locale = locale;
 		this.displayOption = displayOption;
-		this.dateAffectsTotals = dateAffectsTotals;
 		this.homeDeliveryDescription = descriptions.homeDelivery;
 		this.shedDeliveryDescription = descriptions.shedDelivery;
 
@@ -84,22 +80,6 @@ class OkoskabetCheckout {
 				}
 			}, 200 );
 		} );
-
-		// Between a pre-order and a normal order. The date goes with the switch:
-		// the two offer different days, and the pickers start again from the
-		// first one on offer. Recalculating rebuilds them, and the button with
-		// its new wording.
-		$( document ).on(
-			'click',
-			'.okoskabet-pre-order-toggle',
-			function ( e ) {
-				e.preventDefault();
-				const preOrder = $( PRE_ORDER_INPUT_SELECTOR ).val() === '1';
-				$( PRE_ORDER_INPUT_SELECTOR ).val( preOrder ? '' : '1' );
-				$( DELIVERY_DATE_INPUT_SELECTOR ).val( '' );
-				$( document.body ).trigger( 'update_checkout' );
-			}
-		);
 
 		$( document ).on( 'change', 'input.shipping_method', function () {
 			that.deliveryOptions?.$destroy();
@@ -292,33 +272,11 @@ class OkoskabetCheckout {
 
 	private clearInputs() {
 		this.setLocationInput( '' );
-		// Set directly: this runs on a change of shipping method, which
-		// recalculates the checkout on its own.
-		jQuery( DELIVERY_DATE_INPUT_SELECTOR ).val( '' );
+		this.setDeliveryDateInput( '' );
 	}
 
 	private setDeliveryDateInput( value: string ): void {
-		const $input = jQuery( DELIVERY_DATE_INPUT_SELECTOR );
-
-		// Only an actual change goes any further. The picker reports its date
-		// again every time it is rebuilt, and recalculating the checkout is what
-		// rebuilds it — so without this, putting the same date back would ask
-		// for another recalculation, forever.
-		if ( $input.val() === value ) {
-			return;
-		}
-
-		$input.val( value );
-
-		// The date can change what the order costs: a date far enough ahead is
-		// a pre-order, and a pre-order can carry its own fee. WooCommerce only
-		// recalculates when told to, and a total that changes after the customer
-		// has pressed pay is not a price they were shown. Only shops with such a
-		// fee ask for it. A date being cleared counts too — a new postcode with
-		// no delivery days left the pre-order fee of the old date on screen.
-		if ( this.dateAffectsTotals ) {
-			jQuery( document.body ).trigger( 'update_checkout' );
-		}
+		jQuery( DELIVERY_DATE_INPUT_SELECTOR ).val( value );
 	}
 
 	private setLocationInput( value: string ): void {
@@ -335,15 +293,9 @@ window.addEventListener( 'DOMContentLoaded', function () {
 		locale: locale,
 		displayOption: displayOption,
 		descriptions: descriptions,
-		dateAffectsTotals: dateAffectsTotals,
 	} = ( window as any )._okoskabet_checkout;
 
-	new OkoskabetCheckout(
-		locale,
-		displayOption,
-		descriptions,
-		Boolean( dateAffectsTotals )
-	);
+	new OkoskabetCheckout( locale, displayOption, descriptions );
 
 	window.mapboxgl.accessToken =
 		'pk.eyJ1IjoiZGFub2tvc2thYmV0IiwiYSI6ImNsOTN5enc5eDF0OXgzcW10ejgyMDI3ZHIifQ.Yy_h5jy-F0E2t0EvnElFag';
