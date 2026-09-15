@@ -300,6 +300,9 @@ class Delivery_Exceptions extends Base {
 					'label'      => sanitize_text_field( (string) ( $item['label']   ?? '' ) ),
 					'date'       => sanitize_text_field( (string) ( $item['date']    ?? '' ) ),
 					'enabled'    => (bool) ( $item['enabled'] ?? true ),
+					// Off unless ticked, as for from/until: a rule saved before
+					// this existed means "only on this day", and stays that.
+					'extend'     => (bool) ( $item['extend'] ?? false ),
 					'categories' => array_map( 'intval', (array) ( $item['categories'] ?? array() ) ),
 					'tags'       => array_map( 'intval', (array) ( $item['tags']       ?? array() ) ),
 				);
@@ -511,7 +514,7 @@ class Delivery_Exceptions extends Base {
 		<?php
 		// JS templates for new rows (uses __INDEX__ placeholder).
 		echo '<script type="text/template" id="oko-template-only-on">';
-		$this->render_only_on_row( '__INDEX__', array( 'label' => '', 'date' => '', 'enabled' => true, 'categories' => array(), 'tags' => array() ), $categories, $tags );
+		$this->render_only_on_row( '__INDEX__', array( 'label' => '', 'date' => '', 'enabled' => true, 'extend' => false, 'categories' => array(), 'tags' => array() ), $categories, $tags );
 		echo '</script>';
 
 		echo '<script type="text/template" id="oko-template-from-until">';
@@ -742,6 +745,10 @@ class Delivery_Exceptions extends Base {
 					<input type="checkbox" name="only_on[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
 					<?php esc_html_e( 'Active', O_TEXTDOMAIN ); ?>
 				</label>
+				<label title="<?php esc_attr_e( 'Offers this date for these products even past the normal number of days, while the normal days stay open. For pre-orders: the soonest days as usual, and this day as well.', O_TEXTDOMAIN ); ?>">
+					<input type="checkbox" name="only_on[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
+					<?php esc_html_e( 'Pre-order: offer this date on top of the normal ones', O_TEXTDOMAIN ); ?>
+				</label>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
 					<?php esc_html_e( 'Remove', O_TEXTDOMAIN ); ?>
 				</button>
@@ -900,6 +907,7 @@ class Delivery_Exceptions extends Base {
 				'label'      => $label,
 				'date'       => $date,
 				'enabled'    => ! empty( $row['enabled'] ),
+				'extend'     => ! empty( $row['extend'] ),
 				'categories' => $this->sanitize_id_list( $row['categories'] ?? array() ),
 				'tags'       => $this->sanitize_id_list( $row['tags'] ?? array() ),
 			);
@@ -1339,7 +1347,7 @@ class Delivery_Exceptions extends Base {
 			// only_on
 			if ( ! empty( $config['only_on_enabled'] ) ) {
 				foreach ( $config['only_on'] as $row ) {
-					if ( empty( $row['enabled'] ) || empty( $row['date'] ) ) { continue; }
+					if ( empty( $row['enabled'] ) || empty( $row['date'] ) || ! empty( $row['extend'] ) ) { continue; }
 					if ( self::rule_matches_terms( $row, $cat_ids, $tag_ids ) ) {
 						$descriptions[] = sprintf(
 							__( 'can only be delivered on %s', O_TEXTDOMAIN ),
@@ -1352,7 +1360,7 @@ class Delivery_Exceptions extends Base {
 			// from_until
 			if ( ! empty( $config['from_until_enabled'] ) ) {
 				foreach ( $config['from_until'] as $row ) {
-					if ( empty( $row['enabled'] ) || empty( $row['from'] ) ) { continue; }
+					if ( empty( $row['enabled'] ) || empty( $row['from'] ) || ! empty( $row['extend'] ) ) { continue; }
 					if ( self::rule_matches_terms( $row, $cat_ids, $tag_ids ) ) {
 						if ( ! empty( $row['until'] ) ) {
 							$descriptions[] = sprintf(
@@ -1550,9 +1558,9 @@ class Delivery_Exceptions extends Base {
 
 	/**
 	 * The days pre-order rules open for this cart, as [from, until] pairs of
-	 * Y-m-d strings. A rule without a from date opens everything up to its
-	 * until date; one without an until date opens nothing, since there would
-	 * be no end to it.
+	 * Y-m-d strings. A single-day rule opens that day. A from/until rule
+	 * without a from date opens everything up to its until date; one without
+	 * an until date opens nothing, since there would be no end to it.
 	 *
 	 * @param array $applicable_rules As collect_applicable_rules() returns them.
 	 * @return array<int,array{0:string,1:string}>
@@ -1561,10 +1569,14 @@ class Delivery_Exceptions extends Base {
 		$ranges = array();
 
 		foreach ( $applicable_rules as $rule ) {
-			if ( ( $rule['type'] ?? '' ) !== 'from_until' || empty( $rule['extend'] ) || empty( $rule['until'] ) ) {
+			if ( empty( $rule['extend'] ) ) {
 				continue;
 			}
-			$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) $rule['until'] );
+			if ( ( $rule['type'] ?? '' ) === 'only_on' && ! empty( $rule['date'] ) ) {
+				$ranges[] = array( (string) $rule['date'], (string) $rule['date'] );
+			} elseif ( ( $rule['type'] ?? '' ) === 'from_until' && ! empty( $rule['until'] ) ) {
+				$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) $rule['until'] );
+			}
 		}
 
 		return $ranges;
@@ -1773,8 +1785,9 @@ class Delivery_Exceptions extends Base {
 					continue;
 				}
 				$applicable[] = array(
-					'type' => 'only_on',
-					'date' => $row['date'],
+					'type'   => 'only_on',
+					'date'   => $row['date'],
+					'extend' => ! empty( $row['extend'] ),
 				);
 			}
 		}
@@ -1852,6 +1865,11 @@ class Delivery_Exceptions extends Base {
 				return in_array( (int) $dt->format( 'w' ), $allowed, true );
 
 			case 'only_on':
+				// A pre-order day is offered on top of the normal days, never
+				// instead of them; apply_display_limit() lets it through.
+				if ( ! empty( $rule['extend'] ) ) {
+					return true;
+				}
 				return $dt->format( 'Y-m-d' ) === ( $rule['date'] ?? '' );
 
 			case 'from_until':

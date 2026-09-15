@@ -1153,3 +1153,9 @@ msgstr "Kun forudbestilling: dato mere end"
 
 msgid "days ahead"
 msgstr "dage frem"
+
+msgid "Pre-order: offer this date on top of the normal ones"
+msgstr "Forudbestilling: tilbyd denne dato ud over de normale"
+
+msgid "Offers this date for these products even past the normal number of days, while the normal days stay open. For pre-orders: the soonest days as usual, and this day as well."
+msgstr "Tilbyder denne dato for varerne, også ud over det normale antal dage, mens de normale dage stadig kan vælges. Til forudbestilling: de nærmeste dage som altid, og denne dag også."
