@@ -1,6 +1,7 @@
 import './styles/public.scss';
 
 import App from './App.svelte';
+import { callApi } from './api';
 import type { DateMode, ShippingMethod } from './types';
 
 const SELECTED_SHIPPING_METHOD_SELECTOR =
@@ -39,6 +40,11 @@ class OkoskabetCheckout {
 		this.shedDeliveryDescription = descriptions.shedDelivery;
 
 		this.attachEventListeners();
+
+		// For the pre-order buttons, whose script arrives inline with the
+		// order review and switches which days are asked for.
+		( window as any ).okoskabetWarmDeliveryDates = () =>
+			this.warmDeliveryDates();
 	}
 
 	private attachEventListeners() {
@@ -86,7 +92,42 @@ class OkoskabetCheckout {
 			that.deliveryOptions = undefined;
 			that.optionsOpen = false;
 			that.clearInputs();
+			that.warmDeliveryDates();
 		} );
+	}
+
+	// Ask for the dates of every Økoskabet method on offer now, rather than
+	// when a picker appears. WooCommerce first recalculates the checkout and
+	// only then rebuilds the picker, so the lookup used to wait on that whole
+	// round trip before it even began; started here the two run side by side,
+	// and a customer switching between Økoskab and home delivery finds the
+	// other one's dates already there. The answers are remembered, so asking
+	// again costs nothing.
+	private warmDeliveryDates() {
+		const postalCode =
+			this.getFormFieldValue( POSTAL_CODE_SELECTOR )?.trim();
+		if ( ! postalCode ) {
+			return;
+		}
+		const address = [
+			this.getFormFieldValue( ADDRESS_1_SELECTOR )?.trim(),
+			this.getFormFieldValue( ADDRESS_2_SELECTOR )?.trim(),
+		]
+			.filter( ( val ) => val && val !== '' )
+			.join( ', ' );
+
+		const offered = Array.from(
+			document.querySelectorAll< HTMLInputElement >(
+				'input[name="shipping_method[0]"]'
+			),
+			( input ) => input.value
+		);
+		if ( offered.includes( 'hey_okoskabet_shipping_shed' ) ) {
+			callApi( 'shed-delivery', address, postalCode ).catch( () => {} );
+		}
+		if ( offered.includes( 'hey_okoskabet_shipping_home' ) ) {
+			callApi( 'home-delivery', address, postalCode ).catch( () => {} );
+		}
 	}
 
 	private populateShippingOptions() {
@@ -150,6 +191,8 @@ class OkoskabetCheckout {
 				},
 			},
 		} );
+
+		this.warmDeliveryDates();
 	}
 
 	private updateShippingOptions() {

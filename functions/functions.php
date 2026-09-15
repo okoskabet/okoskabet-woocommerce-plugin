@@ -626,6 +626,7 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		document.cookie='okoskabet_pre_order='+f.value+';path=/;SameSite=Lax';
 		var d=document.getElementById('billing_okoskabet_delivery_date');
 		if(d){d.value='';}
+		if(window.okoskabetWarmDeliveryDates){window.okoskabetWarmDeliveryDates();}
 		if(window.jQuery){window.jQuery(document.body).trigger('update_checkout');}
 	},true);
 })();</script>
