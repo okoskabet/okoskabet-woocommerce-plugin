@@ -702,6 +702,35 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		for(var j=0;j<bs.length;j++){bs[j].style.margin='0';bs[j].style.whiteSpace='normal';}
 		th.appendChild(choice);
 		th.style.paddingBottom=(choice.offsetHeight+32)+'px';
+
+		// In line with the date picker next to it, once there is one: the
+		// buttons as tall as the date box, their bottom edge on its bottom
+		// edge. Measured from the top of the row, which the buttons' own
+		// position cannot move. The picker arrives after this runs and is
+		// rebuilt at will, so it is re-measured whenever the row changes.
+		window.okoskabetAlignOrderType=function(){
+			if(!choice.isConnected){return;}
+			var sel=shipping.querySelector('select[name="okoDeliveryDates"], #okoskabet_pickup_date');
+			var j;
+			if(!sel||!sel.offsetParent){
+				for(j=0;j<bs.length;j++){bs[j].style.minHeight='';}
+				choice.style.top='auto';choice.style.bottom='16px';
+				return;
+			}
+			var row=shipping.getBoundingClientRect(), box=sel.getBoundingClientRect();
+			for(j=0;j<bs.length;j++){bs[j].style.minHeight=Math.round(box.height)+'px';}
+			var top=Math.round(box.bottom-row.top)-choice.offsetHeight;
+			choice.style.bottom='auto';
+			choice.style.top=Math.max(48,top)+'px';
+		};
+		window.okoskabetAlignOrderType();
+		if(window.MutationObserver){
+			new MutationObserver(function(){window.okoskabetAlignOrderType();}).observe(shipping,{childList:true,subtree:true});
+		}
+		if(!window.okoskabetAlignBound){
+			window.okoskabetAlignBound=true;
+			window.addEventListener('resize',function(){if(window.okoskabetAlignOrderType){window.okoskabetAlignOrderType();}});
+		}
 	}
 
 	var marks=shipping?shipping.querySelectorAll('.okoskabet-separate-rate'):[];
