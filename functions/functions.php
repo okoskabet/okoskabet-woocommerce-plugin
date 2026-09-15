@@ -743,7 +743,18 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		var list=document.createElement('ul');
 		list.className='woocommerce-shipping-methods';
 		list.style.cssText='list-style:none;margin:0;padding:0;';
-		for(var i=0;i<marks.length;i++){var li=marks[i].closest('li');if(li){list.appendChild(li);}}
+		// Out of WooCommerce's own list, the theme's spacing between radio and
+		// label no longer reaches these, so they bring their own.
+		for(var i=0;i<marks.length;i++){
+			var li=marks[i].closest('li');
+			if(!li){continue;}
+			li.style.cssText='display:flex;align-items:center;gap:10px;margin:0;';
+			var radio=li.querySelector('input');
+			if(radio){radio.style.margin='0';radio.style.flex='none';}
+			var text=li.querySelector('label');
+			if(text){text.style.margin='0';text.style.padding='0';text.style.textIndent='0';}
+			list.appendChild(li);
+		}
 		cell.appendChild(list);row.appendChild(head);row.appendChild(cell);
 		shipping.parentNode.insertBefore(row,shipping.nextSibling);
 	}
