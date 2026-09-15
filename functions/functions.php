@@ -293,8 +293,8 @@ function custom_content_for_custom_shipping_checkout(): void
 	// Strings for the store-pickup UI. Opening hours are deliberately not
 	// fetched from the API — Økoskabet holds the collection *days*, and what
 	// time the shop is open is the shop's own business. A merchant writes it
-	// in the shipping method's Description field, which WooCommerce already
-	// renders under the method at checkout.
+	// in the shipping method's Description field, shown under the method at
+	// checkout by oko_print_store_pickup_description().
 	$pickup_strings = wp_json_encode(array(
 		'place'    => __('Pickup location', O_TEXTDOMAIN),
 		'date'     => __('Pickup date', O_TEXTDOMAIN),
@@ -517,6 +517,29 @@ function oko_print_delivery_date_mode($rate): void
 		return;
 	}
 	printf('<span class="okoskabet-date-mode" data-date-mode="%s" hidden></span>', esc_attr(oko_delivery_date_mode_for_rate($rate)));
+}
+
+add_action('woocommerce_after_shipping_rate', 'oko_print_store_pickup_description');
+
+/**
+ * Show a store pickup's Description — the opening hours, say — under it once
+ * it is chosen. WooCommerce keeps a method's description to itself, and home
+ * delivery and Økoskab have theirs shown by the date picker instead.
+ */
+function oko_print_store_pickup_description($rate): void
+{
+	if (! $rate instanceof \WC_Shipping_Rate || $rate->get_method_id() !== 'hey_okoskabet_shipping_store_pickup') {
+		return;
+	}
+	$chosen = function_exists('WC') && WC()->session ? (array) WC()->session->get('chosen_shipping_methods', array()) : array();
+	if (! in_array($rate->get_id(), $chosen, true)) {
+		return;
+	}
+	$method      = class_exists('WC_Shipping_Zones') ? \WC_Shipping_Zones::get_shipping_method((int) $rate->get_instance_id()) : false;
+	$description = $method ? trim((string) $method->get_option('description', '')) : '';
+	if ($description !== '') {
+		echo '<div class="okoskabet-method-description" style="font-weight:normal;line-height:1.1;font-size:80%;margin:8px 0 4px;">' . nl2br(esc_html($description)) . '</div>';
+	}
 }
 
 add_action('woocommerce_after_shipping_rate', 'oko_mark_separate_shipping_rate');
