@@ -333,13 +333,14 @@ function custom_content_for_custom_shipping_checkout(): void
 		class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')
 		&& \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days($product_ids)
 	) {
+		// Both choices side by side, the current one marked with the theme's
+		// primary button style.
 		$pre_order = oko_is_pre_order_checkout();
-		$label     = $pre_order
-			? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label()
-			: \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label();
+		$button    = '<button type="button" class="button okoskabet-pre-order-toggle%s" data-pre-order="%s" aria-pressed="%s">%s</button>';
 		printf(
-			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><button type="button" class="button okoskabet-pre-order-toggle">%s</button></td></tr>',
-			esc_html($label)
+			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s</div></td></tr>',
+			sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label())),
+			sprintf($button, $pre_order ? ' alt' : '', '1', $pre_order ? 'true' : 'false', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label()))
 		);
 	}
 
@@ -565,8 +566,8 @@ function oko_all_shipping_method_choices(): array
  * Arrange the shipping part of the order review, every time WooCommerce
  * rebuilds it:
  *
- *   - the pre-order button goes to the bottom of the "Shipping" cell, which
- *     WooCommerce's template gives no hook for;
+ *   - the normal-order and pre-order buttons go to the bottom of the
+ *     "Shipping" cell, which WooCommerce's template gives no hook for;
  *   - rates the shop marked for a row of their own move into one, under
  *     "Shipping";
  *   - the pre-order switch is mirrored into a cookie, so the date lookups
@@ -588,12 +589,13 @@ function oko_print_checkout_layout_script(string $separate_label): void
 	var field=document.getElementById('billing_okoskabet_pre_order');
 	document.cookie='okoskabet_pre_order='+(field&&field.value==='1'?'1':'')+';path=/;SameSite=Lax';
 
-	var button=document.querySelector('.okoskabet-pre-order-row .okoskabet-pre-order-toggle');
-	if(button&&th){
+	var choice=document.querySelector('.okoskabet-pre-order-row .okoskabet-order-type');
+	if(choice&&th){
 		th.style.position='relative';
 		th.style.paddingBottom='72px';
-		button.style.cssText='position:absolute;left:'+getComputedStyle(th).paddingLeft+';bottom:16px;margin:0;';
-		th.appendChild(button);
+		var pad=getComputedStyle(th).paddingLeft;
+		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:flex;flex-wrap:wrap;gap:8px;';
+		th.appendChild(choice);
 	}
 
 	var marks=shipping?shipping.querySelectorAll('.okoskabet-separate-rate'):[];
@@ -618,8 +620,9 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		if(!t){return;}
 		e.preventDefault();e.stopImmediatePropagation();
 		var f=document.getElementById('billing_okoskabet_pre_order');
-		if(!f){return;}
-		f.value=f.value==='1'?'':'1';
+		var wanted=t.getAttribute('data-pre-order')==='1'?'1':'';
+		if(!f||f.value===wanted){return;}
+		f.value=wanted;
 		document.cookie='okoskabet_pre_order='+f.value+';path=/;SameSite=Lax';
 		var d=document.getElementById('billing_okoskabet_delivery_date');
 		if(d){d.value='';}
