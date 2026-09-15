@@ -281,9 +281,15 @@ class OkoRest extends Base
 		return Merchant_Router::shipping_zone_id_for_destination($country, $state, $zip);
 	}
 
-	/** Whether the checkout asked for pre-order days rather than normal ones. */
+	/**
+	 * Whether the checkout asked for pre-order days rather than normal ones.
+	 * The checkout script says so in the request; the cookie the pre-order
+	 * button sets says it too, for a checkout script a page cache is still
+	 * serving from before the button existed.
+	 */
 	private static function is_pre_order_request(\WP_REST_Request $request): bool {
-		return (string) $request->get_param('pre_order') === '1';
+		return (string) $request->get_param('pre_order') === '1'
+			|| (string) ($_COOKIE['okoskabet_pre_order'] ?? '') === '1'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared, never output.
 	}
 
 	/**

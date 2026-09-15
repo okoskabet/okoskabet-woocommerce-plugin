@@ -1207,3 +1207,15 @@ msgstr "Kun forudbestilling"
 
 msgid "Charged only when the customer has pressed the pre-order button at checkout."
 msgstr "Opkræves kun når kunden har trykket på forudbestillingsknappen i kassen."
+
+msgid "Other options"
+msgstr "Andre muligheder"
+
+msgid "Shipping in a row of its own"
+msgstr "Fragt i egen række"
+
+msgid "Shipping methods shown in their own row under Shipping at checkout, e.g. an add-on to an earlier order."
+msgstr "Fragtmetoder der vises i deres egen række under Forsendelse i kassen, fx tillæg til en tidligere ordre."
+
+msgid "Heading of that row"
+msgstr "Overskrift på rækken"

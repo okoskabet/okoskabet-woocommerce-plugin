@@ -328,8 +328,7 @@ function custom_content_for_custom_shipping_checkout(): void
 	echo '<input type="hidden" id="okoskabet-cart-product-ids" value="' . esc_attr(implode(',', array_unique($product_ids))) . '" />';
 
 	// The way into a pre-order, and back out of it — only for a cart holding
-	// something that can be pre-ordered. The dates the pickers then offer come
-	// from the same switch, sent along with each date lookup.
+	// something that can be pre-ordered.
 	if (
 		class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')
 		&& \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days($product_ids)
@@ -338,36 +337,13 @@ function custom_content_for_custom_shipping_checkout(): void
 		$label     = $pre_order
 			? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label()
 			: \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label();
-		// The button belongs under "Shipping" in the left-hand column, which
-		// WooCommerce's template gives no hook for; the row it arrives in is
-		// hidden and the button moved across. The script travels with the
-		// button, so it runs every time the order review is rebuilt — and
-		// cannot be served stale by a page cache that keeps an old script
-		// file around. It is bound in capture before anything else, and stops
-		// the click there: an earlier build's cached script also toggled on
-		// this button, and two toggles cancel out.
 		printf(
-			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><button type="button" class="button okoskabet-pre-order-toggle" data-pre-order="%s">%s</button></td></tr>',
-			$pre_order ? '1' : '',
+			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><button type="button" class="button okoskabet-pre-order-toggle">%s</button></td></tr>',
 			esc_html($label)
 		);
-		echo "<script>(function(){"
-			. "var b=document.querySelector('.okoskabet-pre-order-row .okoskabet-pre-order-toggle');"
-			. "var th=document.querySelector('tr.woocommerce-shipping-totals > th, tr.shipping > th');"
-			. "if(b&&th){th.appendChild(b);}"
-			. "if(window.okoskabetPreOrderBound){return;}"
-			. "window.okoskabetPreOrderBound=true;"
-			. "document.addEventListener('click',function(e){"
-			. "var t=e.target.closest&&e.target.closest('.okoskabet-pre-order-toggle');if(!t){return;}"
-			. "e.preventDefault();e.stopImmediatePropagation();"
-			. "var f=document.getElementById('billing_okoskabet_pre_order');if(!f){return;}"
-			. "f.value=f.value==='1'?'':'1';"
-			. "var d=document.getElementById('billing_okoskabet_delivery_date');if(d){d.value='';}"
-			. "if(window.jQuery){window.jQuery(document.body).trigger('update_checkout');}"
-			. "},true);"
-			. "})();</script>";
 	}
 
+	oko_print_checkout_layout_script((string) ($settings['_separate_shipping_label'] ?? ''));
 	// CSS: hide WooCommerce-rendered billing input fields — our JS injects
 	// the visible UI dynamically. We hide only the labels and inputs, not the
 	// wrapper, so our injected UI inside the wrapper remains visible.
@@ -376,7 +352,6 @@ function custom_content_for_custom_shipping_checkout(): void
 		   into, so the raw WooCommerce input must not be shown. */
 		#billing_okoskabet_pickup_location_id_field { display: none !important; }
 		#billing_okoskabet_pre_order_field { display: none !important; }
-		.okoskabet-pre-order-toggle { display: block; margin-top: 16px; }
 		.okoskabet-delivery-location > label,
 		.okoskabet-delivery-location > .woocommerce-input-wrapper > input,
 		.okoskabet-delivery-note > label,
@@ -539,6 +514,119 @@ function oko_print_delivery_date_mode($rate): void
 		return;
 	}
 	printf('<span class="okoskabet-date-mode" data-date-mode="%s" hidden></span>', esc_attr(oko_delivery_date_mode_for_rate($rate)));
+}
+
+add_action('woocommerce_after_shipping_rate', 'oko_mark_separate_shipping_rate');
+
+/**
+ * Mark a rate the shop has chosen to show in a row of its own at checkout —
+ * an add-on to an earlier order, say, which reads as a way of shipping this
+ * one when it sits in the same list.
+ */
+function oko_mark_separate_shipping_rate($rate): void
+{
+	if (! $rate instanceof \WC_Shipping_Rate) {
+		return;
+	}
+	$chosen = (array) (o_get_settings()['_separate_shipping_methods'] ?? array());
+	$key    = $rate->get_method_id() . ':' . (int) $rate->get_instance_id();
+	if (in_array($key, $chosen, true)) {
+		echo '<span class="okoskabet-separate-rate" hidden></span>';
+	}
+}
+
+/**
+ * Every shipping method in every zone, for the "own row" setting.
+ *
+ * @return array<string,string> Keyed "method_id:instance_id".
+ */
+function oko_all_shipping_method_choices(): array
+{
+	if (! class_exists('WC_Shipping_Zones')) {
+		return array();
+	}
+	$zones   = \WC_Shipping_Zones::get_zones();
+	$zones[] = array('zone_id' => 0);
+	$choices = array();
+	foreach ($zones as $zone_row) {
+		$zone = new \WC_Shipping_Zone((int) $zone_row['zone_id']);
+		foreach ($zone->get_shipping_methods() as $method) {
+			$choices[$method->id . ':' . (int) $method->get_instance_id()] = sprintf(
+				'%s — %s',
+				$zone->get_zone_name(),
+				wp_strip_all_tags((string) $method->get_title())
+			);
+		}
+	}
+	return $choices;
+}
+
+/**
+ * Arrange the shipping part of the order review, every time WooCommerce
+ * rebuilds it:
+ *
+ *   - the pre-order button goes to the bottom of the "Shipping" cell, which
+ *     WooCommerce's template gives no hook for;
+ *   - rates the shop marked for a row of their own move into one, under
+ *     "Shipping";
+ *   - the pre-order switch is mirrored into a cookie, so the date lookups
+ *     honour it even from a checkout script a page cache is still serving
+ *     from before the switch existed.
+ *
+ * Inline on purpose: it arrives with the markup it arranges, so it cannot be
+ * a stale copy of itself. The click is taken in the capture phase and
+ * stopped there, because an earlier build's cached script also toggled on
+ * the button, and two toggles cancel out.
+ */
+function oko_print_checkout_layout_script(string $separate_label): void
+{
+	$label = wp_json_encode($separate_label !== '' ? $separate_label : __('Other options', O_TEXTDOMAIN));
+	echo <<<HTML
+<script>(function(){
+	var shipping=document.querySelector('tr.woocommerce-shipping-totals, tr.shipping');
+	var th=shipping&&shipping.querySelector(':scope > th');
+	var field=document.getElementById('billing_okoskabet_pre_order');
+	document.cookie='okoskabet_pre_order='+(field&&field.value==='1'?'1':'')+';path=/;SameSite=Lax';
+
+	var button=document.querySelector('.okoskabet-pre-order-row .okoskabet-pre-order-toggle');
+	if(button&&th){
+		th.style.position='relative';
+		th.style.paddingBottom='72px';
+		button.style.cssText='position:absolute;left:'+getComputedStyle(th).paddingLeft+';bottom:16px;margin:0;';
+		th.appendChild(button);
+	}
+
+	var marks=shipping?shipping.querySelectorAll('.okoskabet-separate-rate'):[];
+	if(marks.length){
+		var row=document.createElement('tr');
+		row.className='okoskabet-separate-shipping';
+		var head=document.createElement('th');
+		head.textContent={$label};
+		var cell=document.createElement('td');
+		var list=document.createElement('ul');
+		list.className='woocommerce-shipping-methods';
+		list.style.cssText='list-style:none;margin:0;padding:0;';
+		for(var i=0;i<marks.length;i++){var li=marks[i].closest('li');if(li){list.appendChild(li);}}
+		cell.appendChild(list);row.appendChild(head);row.appendChild(cell);
+		shipping.parentNode.insertBefore(row,shipping.nextSibling);
+	}
+
+	if(window.okoskabetPreOrderBound){return;}
+	window.okoskabetPreOrderBound=true;
+	document.addEventListener('click',function(e){
+		var t=e.target.closest&&e.target.closest('.okoskabet-pre-order-toggle');
+		if(!t){return;}
+		e.preventDefault();e.stopImmediatePropagation();
+		var f=document.getElementById('billing_okoskabet_pre_order');
+		if(!f){return;}
+		f.value=f.value==='1'?'':'1';
+		document.cookie='okoskabet_pre_order='+f.value+';path=/;SameSite=Lax';
+		var d=document.getElementById('billing_okoskabet_delivery_date');
+		if(d){d.value='';}
+		if(window.jQuery){window.jQuery(document.body).trigger('update_checkout');}
+	},true);
+})();</script>
+HTML;
 }
 
 /**
