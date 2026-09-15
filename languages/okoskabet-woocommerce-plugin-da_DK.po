@@ -1228,3 +1228,24 @@ msgstr "Vis en tekst over knapperne, når forudbestilling er valgt"
 
 msgid "e.g. Fresh vegetables and dairy cannot be pre-ordered."
 msgstr "fx Frisk grønt og mælkeprodukter kan ikke forudbestilles."
+
+msgid "Pre-order: customers choose between a normal order and a pre-order at checkout, with its own days, note and fee."
+msgstr "Forudbestilling: kunderne vælger mellem normal bestilling og forudbestilling i kassen, med egne dage, egen tekst og eget gebyr."
+
+msgid "Packaging fee by product category and delivery method."
+msgstr "Emballagegebyr efter varegruppe og leveringsmetode."
+
+msgid "Store pickup as a delivery method."
+msgstr "Butiksafhentning som leveringsmetode."
+
+msgid "Island delivery: postcodes without delivery days can still be ordered and land among unprocessed orders."
+msgstr "Ø-levering: postnumre uden leveringsdage kan stadig bestilles og lander blandt ubehandlede ordrer."
+
+msgid "Shipping methods in a row of their own at checkout."
+msgstr "Fragtmetoder i deres egen række i kassen."
+
+msgid "New in this version. You don't need to do anything — everything new stays off until you turn it on."
+msgstr "Nyt i denne version. Du behøver ikke gøre noget – alt nyt er slået fra, indtil du selv slår det til."
+
+msgid "See the settings"
+msgstr "Se indstillingerne"

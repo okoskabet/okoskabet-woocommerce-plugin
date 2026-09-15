@@ -519,6 +519,63 @@ function oko_print_delivery_date_mode($rate): void
 	printf('<span class="okoskabet-date-mode" data-date-mode="%s" hidden></span>', esc_attr(oko_delivery_date_mode_for_rate($rate)));
 }
 
+/** Which "what's new" notice a shop has dismissed. */
+const OKO_WHATS_NEW_OPTION = 'okoskabet_whats_new_dismissed';
+/** Bumped when there is something new to tell shops about. */
+const OKO_WHATS_NEW_KEY = 'pre-order-packaging-pickup-v1';
+
+add_action('admin_notices', 'oko_render_whats_new_notice');
+add_action('admin_init', 'oko_dismiss_whats_new_notice');
+
+/**
+ * Tell a shop what the plugin can do now. Deliberately not a warning: every
+ * one of these is off until the shop turns it on, and the notice says so, so
+ * nobody reads it as work to be done.
+ */
+function oko_render_whats_new_notice(): void
+{
+	if (! current_user_can('manage_woocommerce') || get_option(OKO_WHATS_NEW_OPTION) === OKO_WHATS_NEW_KEY) {
+		return;
+	}
+	$settings_url = admin_url('admin.php?page=' . O_TEXTDOMAIN);
+	$dismiss_url  = wp_nonce_url(add_query_arg('okoskabet_dismiss_whats_new', '1'), 'okoskabet_dismiss_whats_new');
+	$items        = array(
+		__('Pre-order: customers choose between a normal order and a pre-order at checkout, with its own days, note and fee.', O_TEXTDOMAIN),
+		__('Packaging fee by product category and delivery method.', O_TEXTDOMAIN),
+		__('Store pickup as a delivery method.', O_TEXTDOMAIN),
+		__('Island delivery: postcodes without delivery days can still be ordered and land among unprocessed orders.', O_TEXTDOMAIN),
+		__('Shipping methods in a row of their own at checkout.', O_TEXTDOMAIN),
+	);
+	?>
+	<div class="notice notice-info">
+		<p>
+			<strong><?php echo esc_html(O_NAME); ?>:</strong>
+			<?php esc_html_e('New in this version. You don\'t need to do anything — everything new stays off until you turn it on.', O_TEXTDOMAIN); ?>
+		</p>
+		<ul style="list-style:disc;margin-left:20px;">
+			<?php foreach ($items as $item) : ?>
+				<li><?php echo esc_html($item); ?></li>
+			<?php endforeach; ?>
+		</ul>
+		<p>
+			<a href="<?php echo esc_url($settings_url); ?>" class="button button-primary"><?php esc_html_e('See the settings', O_TEXTDOMAIN); ?></a>
+			<a href="<?php echo esc_url($dismiss_url); ?>" class="button"><?php esc_html_e('Got it, dismiss', O_TEXTDOMAIN); ?></a>
+		</p>
+	</div>
+	<?php
+}
+
+function oko_dismiss_whats_new_notice(): void
+{
+	if (empty($_GET['okoskabet_dismiss_whats_new']) || ! current_user_can('manage_woocommerce')) {
+		return;
+	}
+	check_admin_referer('okoskabet_dismiss_whats_new');
+	update_option(OKO_WHATS_NEW_OPTION, OKO_WHATS_NEW_KEY);
+	wp_safe_redirect(remove_query_arg(array('okoskabet_dismiss_whats_new', '_wpnonce')));
+	exit;
+}
+
 add_action('woocommerce_after_shipping_rate', 'oko_print_store_pickup_description');
 
 /**

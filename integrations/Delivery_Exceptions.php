@@ -119,6 +119,11 @@ class Delivery_Exceptions extends Base {
 		if ( get_option( self::UPGRADE_NOTICE_OPTION ) === self::UPGRADE_NOTICE_KEY ) {
 			return;
 		}
+		// Only a shop that has delivery rules set up has anything to review.
+		// Everyone else would read "please review" as a job they don't have.
+		if ( ! self::is_in_use() ) {
+			return;
+		}
 
 		$settings_url = admin_url( 'admin.php?page=' . O_TEXTDOMAIN . '#okoskabet-delivery-exceptions' );
 		$dismiss_url  = wp_nonce_url(
@@ -141,6 +146,25 @@ class Delivery_Exceptions extends Base {
 			</p>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Whether the shop has set up any delivery rules at all: a section or the
+	 * cutoff switched on, a display limit, or the old cutoff tag list that is
+	 * carried over into rules. Read from what is stored, not the defaults.
+	 */
+	public static function is_in_use(): bool {
+		$stored = get_option( self::OPTION_KEY, array() );
+		if ( ! is_array( $stored ) || empty( $stored ) ) {
+			return false;
+		}
+		foreach ( array( 'weekdays_enabled', 'only_on_enabled', 'from_until_enabled', 'cutoff_enabled' ) as $k ) {
+			if ( ! empty( $stored[ $k ] ) ) {
+				return true;
+			}
+		}
+
+		return (int) ( $stored['display_value'] ?? 0 ) > 0 || ! empty( $stored['cutoff_tags'] );
 	}
 
 	/**
