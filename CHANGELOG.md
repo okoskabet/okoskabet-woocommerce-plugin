@@ -38,6 +38,23 @@ nok — og svaret skiftede med den rækkefølge, varerne lå i kurven.
 Opdelingen tager nu også højde for bestillingsfrister, så den dag, kunden bliver
 lovet, er en dag der stadig kan nås.
 
+= Leveringsinfo i kassen ligner igen et felt =
+
+Feltet til leveringsinfo og "Besked til chaufføren" ligger inde i kassens
+ordreoversigt, og den tabel er i de fleste temaer sat op til det, den plejer at
+indeholde: priser. Centreret, fed, højrestillet. Teksten over dropdownen fik den
+formatering, dropdownen stod smal og venstrestillet under den, og resultatet så
+i stedet ud som om noget var gået i stykker.
+
+Nu står etiketten på sin egen række, og feltet fylder tabellens fulde bredde.
+Dropdown og notefelt er ens: samme bredde, samme ramme, samme afrunding, samme
+afstand. På mobil er skriften stor nok til, at iOS ikke zoomer ind, når kunden
+trykker i feltet.
+
+Det er ren præsentation — hvad der sendes med ordren, og hvordan "Andet" folder
+notefeltet ud, er uændret. Rettelsen ligger ét sted i stedet for spredt ud i
+opbygningen af felterne, og den overlever WooCommerces genberegning af kassen.
+
 = Leveringsundtagelser kan vendes om =
 
 Hver regel — faste ugedage, en enkelt dag, fra/til og bestillingsfrister — har
