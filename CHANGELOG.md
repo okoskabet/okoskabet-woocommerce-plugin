@@ -4,6 +4,18 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 ## Unreleased
 
+= Fortryder man opdelingen, får man sin kurv tilbage =
+
+"Annullér opdelt levering og start forfra" tømte kurven og sendte kunden ud i
+shoppen. Opdelingen havde selv taget den anden leverings varer ud af kurven, så
+den eneste vej ud af forløbet kostede kunden alt, hun havde lagt i.
+
+Nu lægges varerne tilbage — både dem, der stod i kurven, og dem, opdelingen
+havde gemt til næste trin — og kunden lander i kassen med hele kurven foran sig.
+Har hun allerede betalt den første levering, kommer kun resten tilbage; en
+betalt ordre må ikke kunne købes igen. Advarslen inden ("tøm din kurv?") er
+væk, for der er ikke længere noget at advare om.
+
 = Banneret lover ikke en bestemt dag, det ikke kan holde =
 
 Listen over leveringer viste en dato ud for hver del: "Levering 1 (23. september

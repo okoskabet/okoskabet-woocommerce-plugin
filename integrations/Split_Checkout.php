@@ -1139,7 +1139,6 @@ class Split_Checkout extends Base {
 		$nonce        = wp_create_nonce( $this->nonce_action() );
 		$ajax_url     = admin_url( 'admin-ajax.php' );
 		$cancel_label = __( 'Cancel split delivery and start over', O_TEXTDOMAIN );
-		$confirm_msg  = __( "Cancel the split delivery and clear your cart? You'll be sent back to the shop and can start a fresh order.", O_TEXTDOMAIN );
 
 		echo '<div class="oko-split-active-banner" style="background:#eaf5ea;border:1px solid #b3d8b3;border-left:4px solid #4a8;padding:14px;margin:0 0 24px;border-radius:4px;">';
 		echo '<strong>'
@@ -1168,7 +1167,6 @@ class Split_Checkout extends Base {
 				links.forEach(function (link) {
 					link.addEventListener('click', function (ev) {
 						ev.preventDefault();
-						if (!window.confirm(<?php echo wp_json_encode( $confirm_msg ); ?>)) { return; }
 						var formData = new FormData();
 						formData.append('action', 'oko_cancel_split');
 						formData.append('_wpnonce', <?php echo wp_json_encode( $nonce ); ?>);
@@ -1408,10 +1406,31 @@ class Split_Checkout extends Base {
 
 		$this->apply_order_mode( (string) ( $group['mode'] ?? self::MODE_NORMAL ) );
 
+		$added_count = $this->fill_cart_with( $group['items'], sprintf( 'split step %d', $step ) );
+
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf(
+				'okoskabet_woocommerce_plugin: loaded cart for split step %d — %d/%d items added, cart count now %d',
+				$step,
+				$added_count,
+				count( $group['items'] ),
+				WC()->cart->get_cart_contents_count()
+			) );
+		}
+	}
+
+	/**
+	 * Replace the cart with the items these recipes describe, and make sure the
+	 * change survives to the next page load.
+	 *
+	 * Returns how many of the recipes made it in: a product that has gone out
+	 * of stock since the snapshot was taken is skipped, not fatal.
+	 */
+	private function fill_cart_with( array $recipes, string $context ): int {
 		WC()->cart->empty_cart( false );
 
 		$added_count = 0;
-		foreach ( $group['items'] as $recipe ) {
+		foreach ( $recipes as $recipe ) {
 			$result = WC()->cart->add_to_cart(
 				$recipe['product_id'],
 				$recipe['quantity'],
@@ -1423,17 +1442,17 @@ class Split_Checkout extends Base {
 				$added_count++;
 			} else {
 				error_log( sprintf(
-					'okoskabet_woocommerce_plugin: failed to add product %d (qty %d) when loading split step %d',
+					'okoskabet_woocommerce_plugin: failed to add product %d (qty %d) when loading %s',
 					(int) $recipe['product_id'],
 					(int) $recipe['quantity'],
-					$step
+					$context
 				) );
 			}
 		}
 		WC()->cart->calculate_totals();
 
 		// Force-persist the cart to session so the page reload sees the
-		// reduced cart. WC's cart auto-saves on shutdown, but in AJAX we
+		// changed cart. WC's cart auto-saves on shutdown, but in AJAX we
 		// can't always rely on shutdown firing predictably.
 		if ( method_exists( WC()->cart, 'persistent_cart_update' ) ) {
 			WC()->cart->persistent_cart_update();
@@ -1443,15 +1462,7 @@ class Split_Checkout extends Base {
 			WC()->session->save_data();
 		}
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf(
-				'okoskabet_woocommerce_plugin: loaded cart for split step %d — %d/%d items added, cart count now %d',
-				$step,
-				$added_count,
-				count( $group['items'] ),
-				WC()->cart->get_cart_contents_count()
-			) );
-		}
+		return $added_count;
 	}
 
 	// ---------------------------------------------------------------------
@@ -1467,21 +1478,48 @@ class Split_Checkout extends Base {
 	 * (typically 48 hours), and any subsequent visit to checkout keeps
 	 * surfacing the "you're ordering delivery N of N" banner.
 	 *
-	 * We just drop the state and empty the cart so the next page load is
-	 * a clean slate. The customer is redirected to the shop page.
+	 * Starting over means starting over with the same basket, not with an empty
+	 * one: the split took items out of the cart, and giving up on it has to put
+	 * them back, or the way out of the flow costs the customer everything they
+	 * had picked. We restore the steps that have not been ordered yet — a group
+	 * already paid for is a placed order and must not come back — put the
+	 * checkout into an ordinary order again, and send the customer back to the
+	 * checkout with the whole remaining basket in front of them.
 	 */
 	public function ajax_cancel_split(): void {
 		// Bootstrap session BEFORE nonce check — see ajax_start_split().
 		$this->ensure_wc_session();
 		check_ajax_referer( $this->nonce_action(), '_wpnonce' );
 
+		$state   = $this->get_state();
+		$current = max( 1, (int) ( $state['current_step'] ?? 1 ) );
+		$groups  = is_array( $state['groups'] ?? null ) ? $state['groups'] : array();
+
 		$this->clear_state();
 
+		$restored = 0;
 		if ( function_exists( 'WC' ) && WC()->cart ) {
-			WC()->cart->empty_cart( true );
+			$recipes = array();
+			foreach ( array_slice( $groups, $current - 1 ) as $group ) {
+				foreach ( (array) ( $group['items'] ?? array() ) as $recipe ) {
+					$recipes[] = $recipe;
+				}
+			}
+
+			$this->apply_order_mode( self::MODE_NORMAL );
+			$restored = $this->fill_cart_with( $recipes, 'cancelled split' );
 		}
 
-		wp_send_json_success( array( 'redirect' => wc_get_page_permalink( 'shop' ) ) );
+		if ( $restored === 0 ) {
+			wp_send_json_success( array( 'redirect' => wc_get_page_permalink( 'shop' ) ) );
+		}
+
+		wc_add_notice(
+			__( 'The split delivery is cancelled, and your basket is back as it was.', O_TEXTDOMAIN ),
+			'notice'
+		);
+
+		wp_send_json_success( array( 'redirect' => wc_get_checkout_url() ) );
 	}
 
 	/**

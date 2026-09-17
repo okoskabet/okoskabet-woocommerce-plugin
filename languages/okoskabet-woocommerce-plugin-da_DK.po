@@ -416,8 +416,8 @@ msgstr "Du kan også scrolle ned for at se din ordrebekræftelse først."
 msgid "Cancel split delivery and start over"
 msgstr "Annullér opdelt levering og start forfra"
 
-msgid "Cancel the split delivery and clear your cart? You'll be sent back to the shop and can start a fresh order."
-msgstr "Annullér den opdelte levering og tøm din kurv? Du sendes tilbage til shoppen og kan starte en ny ordre."
+msgid "The split delivery is cancelled, and your basket is back as it was."
+msgstr "Den opdelte levering er annulleret, og din kurv er som før."
 
 # Merchant form — secret-field controls and hints
 msgid "Show/hide API key"

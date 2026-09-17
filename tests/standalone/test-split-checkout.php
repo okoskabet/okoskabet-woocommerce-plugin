@@ -765,6 +765,85 @@ it( 'starts the split with the right items and the right kind in each step', fun
 	assert_same( $expected, $in_cart, 'the cart holds step one and nothing else' );
 } );
 
+it( 'gives the whole basket back when the customer gives up on the split', function () {
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	$split = oko_split();
+	try {
+		$split->ajax_start_split();
+		fail( 'the handler should have answered' );
+	} catch ( Oko_Test_Json_Response $answer ) {
+		assert_true( $answer->success, 'the split started' );
+	}
+
+	// The split took the other step's items out of the cart. Backing out has
+	// to put them back: a way out that costs the customer their basket is not
+	// a way out, it is a punishment for changing their mind.
+	try {
+		$split->ajax_cancel_split();
+		fail( 'the handler should have answered' );
+	} catch ( Oko_Test_Json_Response $answer ) {
+		assert_true( $answer->success, 'the split was cancelled' );
+		assert_contains( 'kassen', (string) ( $answer->payload['redirect'] ?? '' ), 'back to the checkout' );
+	}
+
+	$in_cart = array();
+	foreach ( WC()->cart->get_cart() as $line ) {
+		$in_cart[] = (int) $line['product_id'];
+	}
+	sort( $in_cart );
+
+	$expected = array( OKO_SPLIT_CORNFLAKES, OKO_SPLIT_ICE, OKO_SPLIT_PAK_CHOI );
+	sort( $expected );
+	assert_same( $expected, $in_cart, 'everything the customer had picked is back' );
+
+	assert_same( null, WC()->session->get( 'oko_split_state' ), 'and the flow is over' );
+} );
+
+it( 'leaves an already ordered step out of the basket it gives back', function () {
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	$split = oko_split();
+	try {
+		$split->ajax_start_split();
+		fail( 'the handler should have answered' );
+	} catch ( Oko_Test_Json_Response $answer ) {
+		assert_true( $answer->success, 'the split started' );
+	}
+
+	// Step one has been paid for and the customer is standing on step two.
+	$state = WC()->session->get( 'oko_split_state' );
+	$state['current_step'] = 2;
+	WC()->session->set( 'oko_split_state', $state );
+
+	try {
+		$split->ajax_cancel_split();
+		fail( 'the handler should have answered' );
+	} catch ( Oko_Test_Json_Response $answer ) {
+		assert_true( $answer->success, 'the split was cancelled' );
+	}
+
+	$in_cart = array();
+	foreach ( WC()->cart->get_cart() as $line ) {
+		$in_cart[] = (int) $line['product_id'];
+	}
+	sort( $in_cart );
+
+	$expected = array();
+	foreach ( $state['groups'][1]['items'] as $recipe ) {
+		$expected[] = (int) $recipe['product_id'];
+	}
+	sort( $expected );
+
+	// A group that is already a placed order must not come back into the cart
+	// and be bought a second time.
+	assert_same( $expected, $in_cart, 'only what was never ordered comes back' );
+} );
+
 describe( 'Split checkout: a pre-order is a choice about this visit' );
 
 it( 'starts a returning visitor in an ordinary order, whatever the old cookie says', function () {
