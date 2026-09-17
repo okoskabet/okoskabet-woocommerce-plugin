@@ -396,6 +396,14 @@ function oko_render_delivery_ui(string $context = 'table'): void
 	}
 	echo '<input type="hidden" id="okoskabet-cart-product-ids" value="' . esc_attr(implode(',', array_unique($product_ids))) . '" />';
 
+	// Outside the review-order table there is no shipping row to sit beside,
+	// so the shop's chosen spot is the anchor instead: the script puts the
+	// delivery-location and store-pickup rows in here. Empty in a classic
+	// checkout, where the table is a better anchor and is found first.
+	if ($context !== 'table') {
+		echo '<div class="okoskabet-delivery-mount"></div>';
+	}
+
 	// The way into a pre-order, and back out of it — only for a cart holding
 	// something that can be pre-ordered.
 	if (

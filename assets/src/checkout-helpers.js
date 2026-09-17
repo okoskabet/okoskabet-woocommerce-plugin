@@ -32,6 +32,138 @@
 	"use strict";
 
 	// =========================================================================
+	// Where the delivery rows go — and what shape they have to be
+	// =========================================================================
+
+	// Both modules below add rows to the checkout, and both used to assume
+	// WooCommerce's review-order table: they built <tr>/<th>/<td> and looked
+	// for tr.shipping or .woocommerce-shipping-totals to sit beside. A
+	// checkout that renders its own markup — a page builder's, or the block
+	// checkout — has none of that, so the rows were built and then dropped on
+	// the floor by the HTML parser, because a <tr> outside a table is not
+	// allowed to exist.
+	//
+	// okoAnchor() answers both questions at once: where to insert, and whether
+	// we are inside a table. The classic selectors are tried first and in the
+	// order they were tried before, so a shop on WooCommerce's own templates
+	// gets the same node it has always got and never reaches the rest of this
+	// function.
+	function okoAnchor() {
+		var shippingRow =
+			document.querySelector("tr.shipping") ||
+			document.querySelector(".woocommerce-shipping-totals");
+		if (shippingRow && shippingRow.parentNode) {
+			return { node: shippingRow, mode: "table", how: "after" };
+		}
+
+		var totalRow = document.querySelector("tr.order-total");
+		if (totalRow && totalRow.parentNode) {
+			return { node: totalRow, mode: "table", how: "before" };
+		}
+
+		var review = document.getElementById("order_review");
+		if (review) {
+			return { node: review, mode: "table", how: "append" };
+		}
+
+		// Past here we are not in a review-order table at all.
+
+		// A mount the shop placed itself, via [okoskabet_levering].
+		var mount = document.querySelector(".okoskabet-delivery-mount");
+		if (mount) {
+			return { node: mount, mode: "block", how: "append" };
+		}
+
+		// Otherwise sit under whatever holds the shipping choices.
+		var group = okoShippingGroup();
+		if (group) {
+			return { node: group, mode: "block", how: "after" };
+		}
+
+		return null;
+	}
+
+	// The smallest element that contains every shipping choice.
+	//
+	// Guessing at the wrapper's tag does not survive contact with a builder:
+	// Bricks nests the radio in label > div > div > div and there is no ul,
+	// fieldset or table anywhere above it, so a tag guess lands on the label
+	// and the delivery rows end up wedged between two shipping methods.
+	//
+	// Climbing until one node holds them all finds the list itself, whatever
+	// it is built from, and the rows land after the whole list where they
+	// read as the next decision rather than as part of one of the options.
+	function okoShippingGroup() {
+		var radios = document.querySelectorAll(
+			"input[name='shipping_method[0]']"
+		);
+		if (!radios.length) {
+			return null;
+		}
+
+		var node = radios[0].parentElement;
+		while (node && node !== document.body) {
+			var holdsAll = true;
+			for (var i = 0; i < radios.length; i++) {
+				if (!node.contains(radios[i])) {
+					holdsAll = false;
+					break;
+				}
+			}
+			if (holdsAll) {
+				// One method means the "group" is that method's own line, which
+				// is too tight to sit after. One step out gives the rows a home
+				// that is not inside the option itself.
+				return radios.length === 1 && node.parentElement
+					? node.parentElement
+					: node;
+			}
+			node = node.parentElement;
+		}
+
+		return null;
+	}
+
+	// A row and its two cells, in whichever shape the anchor calls for.
+	function okoRow(mode) {
+		return document.createElement(mode === "table" ? "tr" : "div");
+	}
+	function okoLabelCell(mode) {
+		return document.createElement(mode === "table" ? "th" : "div");
+	}
+	function okoContentCell(mode) {
+		return document.createElement(mode === "table" ? "td" : "div");
+	}
+
+	// Put an element where the anchor says, however that anchor wants it.
+	function okoPlace(anchor, element) {
+		if (!anchor || !anchor.node) {
+			return false;
+		}
+
+		if (anchor.how === "append") {
+			anchor.node.appendChild(element);
+			return true;
+		}
+
+		if (!anchor.node.parentNode) {
+			return false;
+		}
+
+		if (anchor.how === "before") {
+			anchor.node.parentNode.insertBefore(element, anchor.node);
+			return true;
+		}
+
+		if (anchor.node.nextSibling) {
+			anchor.node.parentNode.insertBefore(element, anchor.node.nextSibling);
+		} else {
+			anchor.node.parentNode.appendChild(element);
+		}
+		return true;
+	}
+
+	// =========================================================================
 	// Module 1: delivery exceptions overlay
 	// =========================================================================
 
@@ -288,13 +420,17 @@
 			if (!isHomeDelivery()) { return; }
 			var locationField = document.getElementById(FIELD_LOCATION_ID);
 
-			// Render as a table row inside the order review table.
-			var wrapper = document.createElement("tr");
+			// Shaped for wherever it is going: a table row inside the review
+			// table, a plain block anywhere else.
+			var anchor = okoAnchor();
+			var mode = anchor ? anchor.mode : "table";
+
+			var wrapper = okoRow(mode);
 			wrapper.id = WRAPPER_ID;
 			wrapper.className = "okoskabet-location-row";
-			var cellLabel = document.createElement("th");
+			var cellLabel = okoLabelCell(mode);
 			cellLabel.textContent = LABEL_DROPDOWN;
-			var cellContent = document.createElement("td");
+			var cellContent = okoContentCell(mode);
 			wrapper.appendChild(cellLabel);
 			wrapper.appendChild(cellContent);
 
@@ -380,24 +516,10 @@
 
 			cellContent.appendChild(noteWrapper);
 
-			// Insert the row inside the order review table — after shipping
-			// row, before total.
-			var shippingRow = document.querySelector("tr.shipping");
-			var totalRow = document.querySelector("tr.order-total");
-			if (shippingRow && shippingRow.parentNode) {
-				if (shippingRow.nextSibling) {
-					shippingRow.parentNode.insertBefore(wrapper, shippingRow.nextSibling);
-				} else {
-					shippingRow.parentNode.appendChild(wrapper);
-				}
-			} else if (totalRow && totalRow.parentNode) {
-				totalRow.parentNode.insertBefore(wrapper, totalRow);
-			} else {
-				// Fallback — append wherever
-				// woocommerce_review_order_after_shipping puts us.
-				var fallback = document.getElementById("order_review");
-				if (fallback) { fallback.appendChild(wrapper); }
-			}
+			// Next to the shipping choice, wherever that turned out to be.
+			// okoAnchor() tries the review-order table first, so on a classic
+			// checkout this lands exactly where it always did.
+			okoPlace(anchor, wrapper);
 			// Only once the row is in the page: refreshNoteVisibility() looks
 			// the select up by id, and before this it found nothing — so a
 			// restored "Andet" came back with its note box hidden.
@@ -492,8 +614,10 @@
 
 		function isStorePickup() { return selectedMethod() === PICKUP_METHOD; }
 
+		// Matched on the class alone. The rows are <tr> in a review-order
+		// table and <div> anywhere else, and both have to be cleared.
 		function removeUI() {
-			var rows = document.querySelectorAll("tr." + WRAPPER_ID);
+			var rows = document.querySelectorAll("." + WRAPPER_ID);
 			Array.prototype.forEach.call(rows, function (r) {
 				if (r.parentNode) { r.parentNode.removeChild(r); }
 			});
@@ -534,12 +658,16 @@
 			return parts.join(", ");
 		}
 
+		// Set by buildUI() before it builds any rows, so every row in one
+		// pass comes out the same shape as the place it is going.
+		var placementMode = "table";
+
 		function row(labelText, contentNode) {
-			var tr = document.createElement("tr");
+			var tr = okoRow(placementMode);
 			tr.className = WRAPPER_ID;
-			var th = document.createElement("th");
+			var th = okoLabelCell(placementMode);
 			th.textContent = labelText;
-			var td = document.createElement("td");
+			var td = okoContentCell(placementMode);
 			td.appendChild(contentNode);
 			tr.appendChild(th);
 			tr.appendChild(td);
@@ -550,6 +678,11 @@
 			removeUI();
 			if (!isStorePickup()) { return; }
 			var t = strings();
+
+			// Decided once, before a single row is built: both the shape of
+			// the rows and where they end up come from the same answer.
+			var anchor = okoAnchor();
+			placementMode = anchor ? anchor.mode : "table";
 
 			// Two <tr> rows, appended next to the shipping row. A <tbody>
 			// inserted as a sibling of a <tr> is invalid nesting and renders
@@ -627,24 +760,10 @@
 			if (placeSel) { placeSel.addEventListener("change", fillDates); }
 			dateSel.addEventListener("change", syncHiddenFields);
 
-			place(wrapper);
+			// Next to the shipping choice, so the rows read as part of the
+			// delivery decision rather than as loose fields further down.
+			okoPlace(anchor, wrapper);
 			fillDates();
-		}
-
-		// Drop the rows into the order review table, next to the shipping row
-		// so they read as part of the delivery choice.
-		function place(wrapper) {
-			var shippingRow = document.querySelector(".woocommerce-shipping-totals");
-			if (shippingRow && shippingRow.parentNode) {
-				if (shippingRow.nextSibling) {
-					shippingRow.parentNode.insertBefore(wrapper, shippingRow.nextSibling);
-				} else {
-					shippingRow.parentNode.appendChild(wrapper);
-				}
-				return;
-			}
-			var review = document.getElementById("order_review");
-			if (review) { review.appendChild(wrapper); }
 		}
 
 		function endpoint() {
