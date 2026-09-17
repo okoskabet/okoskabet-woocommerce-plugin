@@ -362,8 +362,9 @@ class Split_Checkout extends Base {
 	 * "remove" list as short as it honestly can be.
 	 *
 	 * Options are sorted by how much they cost the customer: fewest items
-	 * removed first, then the earliest delivery. Two days that require removing
-	 * exactly the same items are one option, shown under the earlier day.
+	 * removed first, then the earliest delivery. No two of them can ask for the
+	 * same items: each day keeps at least its own group, the groups share no
+	 * lines, so the lists differ by construction.
 	 *
 	 * Each option has shape:
 	 *   [
@@ -392,7 +393,6 @@ class Split_Checkout extends Base {
 		}
 
 		$options = array();
-		$seen    = array();
 		foreach ( array_keys( $candidate_dates ) as $date ) {
 			$keep   = array();
 			$remove = array();
@@ -410,13 +410,6 @@ class Split_Checkout extends Base {
 			if ( empty( $remove ) || empty( $keep ) ) {
 				continue;
 			}
-
-			// Two days that cost the same items are the same offer.
-			$signature = implode( '|', $remove );
-			if ( isset( $seen[ $signature ] ) ) {
-				continue;
-			}
-			$seen[ $signature ] = true;
 
 			$options[] = array(
 				'date'         => (string) $date,
