@@ -540,7 +540,7 @@ function oko_print_delivery_date_mode($rate): void
 /** Which "what's new" notice a shop has dismissed. */
 const OKO_WHATS_NEW_OPTION = 'okoskabet_whats_new_dismissed';
 /** Bumped when there is something new to tell shops about. */
-const OKO_WHATS_NEW_KEY = 'pre-order-packaging-pickup-v1';
+const OKO_WHATS_NEW_KEY = 'pre-order-packaging-pickup-address-v1';
 
 add_action('admin_notices', 'oko_render_whats_new_notice');
 add_action('admin_init', 'oko_dismiss_whats_new_notice');
@@ -563,6 +563,7 @@ function oko_render_whats_new_notice(): void
 		__('Store pickup as a delivery method.', O_TEXTDOMAIN),
 		__('Island delivery: postcodes without delivery days can still be ordered and land among unprocessed orders.', O_TEXTDOMAIN),
 		__('Shipping methods in a row of their own at checkout.', O_TEXTDOMAIN),
+		__('Address suggestions: the checkout suggests addresses from the address register while the customer types, including floor and door.', O_TEXTDOMAIN),
 	);
 	?>
 	<div class="notice notice-info">

@@ -8,7 +8,7 @@ function getPath(...pathParts) {
 }
 
 const entry = {};
-[{ path: 'plugin-admin' }, { path: 'plugin-public', ext: 'ts' }, { path: 'plugin-settings' }, { path: 'checkout-helpers' }].forEach(
+[{ path: 'plugin-admin' }, { path: 'plugin-public', ext: 'ts' }, { path: 'plugin-settings' }, { path: 'checkout-helpers' }, { path: 'address-autocomplete' }].forEach(
   (script) =>
   (entry[script.path] = path.resolve(
     process.cwd(),
@@ -21,7 +21,7 @@ const entry = {};
 // fixed name kept serving customers the previous release's script for as long
 // as their browser cared to keep it. PHP finds the current name in the build
 // folder (oko_build_asset_url).
-const HASHED = ['plugin-public', 'checkout-helpers'];
+const HASHED = ['plugin-public', 'checkout-helpers', 'address-autocomplete'];
 const hashedName = (ext) => (pathData) =>
   HASHED.includes(pathData.chunk && pathData.chunk.name)
     ? `[name].[contenthash:8].${ext}`
