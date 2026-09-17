@@ -58,6 +58,38 @@ forudbestillingsdag har. Et gebyr for at gemme varer til en dato kræver en dato
 Kun et klart "der er ingen dag" fjerner det — kan spørgsmålet ikke besvares,
 opkræves gebyret som hidtil, så butikken ikke mister det til en timeout.
 
+= En forudbestilling gælder det besøg, den blev valgt på =
+
+Hver visning af kassen starter som en almindelig ordre. Det er ikke nyt — feltet
+til forudbestilling nulstilles ved hver sideindlæsning, netop så sidste års
+juleforudbestilling ikke kommer igen af sig selv. Men banneret tegnes, før
+checkout-scriptet når at rydde cookien, og læste derfor en cookie, som siden var
+ved at kassere.
+
+En kunde, der kom tilbage med en helt anden kurv, blev mødt af "Kun en del af din
+kurv kan forudbestilles" om et valg fra et tidligere besøg — med
+checkout-formularen gemt bag banneret og dermed uden vej tilbage.
+
+Nu gælder en forudbestilling kun, når kunden beder om den på denne side, og aldrig
+når kurven ikke indeholder noget, der kan forudbestilles. Valget følger adressen i
+browseren, fordi det er en oplysning om den side, man står på.
+
+Trykker man Forudbestilling, genindlæses siden nu (i butikker med opdelt
+checkout). Det er nødvendigt: om kurven skal deles op kan ændre sig med
+ordretypen, og banneret ligger over formularen, uden for alt det, WooCommerce
+tegner om ved en genberegning. Før skete der ganske enkelt ingenting, når man
+trykkede.
+
+Banneret har desuden fået sin egen vej ud: **"Vælg normal bestilling i stedet"** —
+et link frem for en tredje larmende knap, og et almindeligt link, så det virker
+uanset om siden har JavaScript kørende.
+
+Vælger man en mulighed under "Tøm fra kurven", som ikke længere findes — fordi
+kurven eller reglerne har ændret sig, mens siden stod åben — afvises valget
+stadig, men man ender ikke længere i en blindgyde med "prøv igen" på en side, der
+stadig viser de gamle muligheder. Man sendes tilbage til banneret, som det ser ud
+nu, med en linje om hvorfor det har ændret sig.
+
 = Datoerne i banneret kommer nu fra Økoskabet =
 
 Grupperingen byggede sin egen kalender på 365 dage og kørte undtagelsesreglerne
