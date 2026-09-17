@@ -209,7 +209,16 @@ it( 'the same floor holds for a flipped cutoff rule with nothing chosen', functi
 
 // ---------------------------------------------------------- the cart-wide trap
 
-it( 'a flipped rule applies when the cart holds ONE product outside the selection', function () {
+/** A fortnight of candidate dates. */
+function oko_flip_window(): array {
+	$window = array();
+	for ( $i = 0; $i < 14; $i++ ) {
+		$window[] = oko_test_date( $i );
+	}
+	return $window;
+}
+
+it( 'a flipped weekday rule bites when the cart holds ONE product outside the selection', function () {
 	oko_flip_catalogue();
 	oko_test_set_exceptions( array(
 		'weekdays_enabled' => true,
@@ -220,17 +229,56 @@ it( 'a flipped rule applies when the cart holds ONE product outside the selectio
 
 	// Asked about the pair, the flipped rule must still bite: the bread is
 	// covered by it, and the frost in the basket does not buy the bread out.
-	// Pooling the cart's categories before matching is what used to.
-	$window = array();
-	for ( $i = 0; $i < 14; $i++ ) {
-		$window[] = oko_test_date( $i );
-	}
 	$both = Delivery_Exceptions::deliverable_dates_for_products(
-		$window,
+		oko_flip_window(),
 		array( OKO_PRODUCT_FROZEN_PEAS, OKO_PRODUCT_RYE_BREAD )
 	);
 
 	assert_true( oko_flip_all_wednesday( $both ), 'the basket is Wednesday-only' );
+} );
+
+it( 'a flipped single-day rule bites on a mixed cart, rather than being pooled away', function () {
+	oko_flip_catalogue();
+	$the_day = oko_test_date( 5 );
+	oko_test_set_exceptions( array(
+		'only_on_enabled' => true,
+		'only_on'         => array(
+			array( 'label' => 'Julelevering', 'date' => $the_day, 'enabled' => true, 'flip' => true, 'categories' => array( OKO_CAT_FROST ), 'tags' => array() ),
+		),
+	) );
+
+	// The single-day and from/until families ask whether a rule touches the
+	// cart at all. Answering that from the cart's pooled categories — "does
+	// this basket carry the frost category?" — inverts to "no product here is
+	// outside frost", which is a different and wrong question: the frost in
+	// the basket would buy the bread out of a rule aimed squarely at it.
+	assert_same(
+		array( $the_day ),
+		Delivery_Exceptions::deliverable_dates_for_products(
+			oko_flip_window(),
+			array( OKO_PRODUCT_FROZEN_PEAS, OKO_PRODUCT_RYE_BREAD )
+		),
+		'the basket is pinned to the day'
+	);
+} );
+
+it( 'a flipped from/until rule bites on a mixed cart too', function () {
+	oko_flip_catalogue();
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'from' => oko_test_date( 3 ), 'until' => oko_test_date( 6 ), 'enabled' => true, 'extend' => false, 'flip' => true, 'categories' => array( OKO_CAT_FROST ), 'tags' => array() ),
+		),
+	) );
+
+	assert_same(
+		array( oko_test_date( 3 ), oko_test_date( 4 ), oko_test_date( 5 ), oko_test_date( 6 ) ),
+		Delivery_Exceptions::deliverable_dates_for_products(
+			oko_flip_window(),
+			array( OKO_PRODUCT_FROZEN_PEAS, OKO_PRODUCT_RYE_BREAD )
+		),
+		'the basket is held to the window'
+	);
 } );
 
 // ------------------------------------------------------------ saved and reread

@@ -462,25 +462,30 @@ class DeliveryExceptionsTest extends \Codeception\TestCase\WPTestCase {
 	}
 
 	public function test_flipped_rule_bites_when_the_cart_mixes_both_sides(): void {
-		$frost = $this->make_term( 'product_cat', 'frost' );
+		$frost  = $this->make_term( 'product_cat', 'frost' );
+		$the_day = $this->date_offset( 5 );
 
+		// Deliberately a single-day rule rather than a weekday one. Weekday
+		// availability is worked out per product anyway, so it would pass
+		// whichever way this rule was matched; the single-day and from/until
+		// families are the ones that ask "does this rule touch the cart at
+		// all", and pooling the cart's categories to answer it inverts into a
+		// different question — the frost would buy the other product out of a
+		// rule aimed squarely at it.
 		update_option( Delivery_Exceptions::OPTION_KEY, array(
-			'weekdays_enabled' => true,
-			'weekdays' => array(
-				3 => array( 'enabled' => true, 'flip' => true, 'categories' => array( $frost ), 'tags' => array() ),
+			'only_on_enabled' => true,
+			'only_on' => array(
+				array( 'date' => $the_day, 'enabled' => true, 'flip' => true, 'categories' => array( $frost ), 'tags' => array() ),
 			),
 		) );
 
 		$in_frost  = $this->make_product( 'product_cat', $frost );
 		$elsewhere = $this->factory()->post->create();
 
-		$dates = array( $this->next_weekday( 3 ), $this->next_weekday( 4 ) );
-		sort( $dates );
+		$dates = array( $this->date_offset( 4 ), $the_day, $this->date_offset( 6 ) );
 
-		// The frost in the basket must not buy the other product out of the
-		// rule — which is exactly what pooling the cart's categories would do.
 		$this->assertSame(
-			array( $this->next_weekday( 3 ) ),
+			array( $the_day ),
 			$this->sut->filter_dates_for_cart( $dates, array( $in_frost, $elsewhere ) )
 		);
 	}
