@@ -216,8 +216,52 @@ add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
 
 
 add_action('woocommerce_review_order_after_shipping', 'custom_content_for_custom_shipping_checkout', 10);
+
+/**
+ * WooCommerce's own review-order hook — the way every shop has rendered
+ * until now, and still the default.
+ *
+ * A checkout built on WooCommerce's stock templates reaches the delivery UI
+ * through here and through nothing else, and gets exactly the markup it got
+ * before. A theme that renders the UI itself turns this off with the filter
+ * rather than by unhooking, so the two can never both run.
+ */
 function custom_content_for_custom_shipping_checkout(): void
 {
+	if (! apply_filters('oko_auto_render_delivery_ui', true)) {
+		return;
+	}
+
+	oko_render_delivery_ui('table');
+}
+
+/**
+ * Draw the delivery UI's mount point, wherever this checkout keeps it.
+ *
+ * The Svelte app that draws the date picker, the shed list and the map does
+ * not care what the checkout is built with; it needs a place to mount and
+ * the cart's product ids. Only this function knows about the surrounding
+ * markup, which is why it is the one thing a builder has to be able to call.
+ *
+ * `$context` decides the wrapper, and nothing else:
+ *   - `table` — inside WooCommerce's review-order table, so the pre-order
+ *     buttons come out as a `<tr>`. The default, and what the hook above asks
+ *     for, so the classic checkout is unchanged.
+ *   - `block` — anywhere else: Bricks, Elementor, a theme template. Same
+ *     content in a plain `<div>`, because a `<tr>` outside a table is dropped
+ *     by the HTML parser before any of our JS ever sees it.
+ *
+ * Renders once per request. A shop that both leaves the hook on and places
+ * the shortcode gets one UI, not two.
+ */
+function oko_render_delivery_ui(string $context = 'table'): void
+{
+	static $rendered = false;
+
+	if ($rendered) {
+		return;
+	}
+
 	$settings = o_get_settings();
 
 	// Resolve which merchant the current cart routes to so the JS-rendered
@@ -240,6 +284,11 @@ function custom_content_for_custom_shipping_checkout(): void
 	if (empty($merchant['api_key'])) {
 		return;
 	}
+
+	// Latched only once we are certain we are drawing. A shop without a key
+	// renders nothing and stays free to render later in the same request, if
+	// a key arrives — which is what a settings save inside checkout does.
+	$rendered = true;
 
 	$shed_description  = ! empty($merchant['description_shipping_okoskabet']) ? $merchant['description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
 	$local_description = ! empty($merchant['description_shipping_private'])   ? $merchant['description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
@@ -356,12 +405,23 @@ function custom_content_for_custom_shipping_checkout(): void
 		$pre_order = oko_is_pre_order_checkout();
 		$button    = '<button type="button" class="button okoskabet-pre-order-toggle%s" data-pre-order="%s" aria-pressed="%s">%s</button>';
 		$notice = $pre_order ? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_notice() : '';
-		printf(
-			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s%s</div></td></tr>',
+
+		// Same row, two wrappers. Inside the review-order table it has to be a
+		// `<tr>`; anywhere else a `<tr>` is thrown away by the parser before
+		// the script can find it, so there it is a `<div>` carrying the same
+		// class. The class is what the JS looks for, never the tag.
+		$inner = sprintf(
+			'<div class="okoskabet-order-type">%s%s%s</div>',
 			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="grid-column:1/-1;box-sizing:border-box;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
 			sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label())),
 			sprintf($button, $pre_order ? ' alt' : '', '1', $pre_order ? 'true' : 'false', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label()))
 		);
+
+		if ($context === 'table') {
+			printf('<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2">%s</td></tr>', $inner);
+		} else {
+			printf('<div class="okoskabet-pre-order-row" style="display:none">%s</div>', $inner);
+		}
 	}
 
 	oko_print_checkout_layout_script((string) ($settings['_separate_shipping_label'] ?? ''));
@@ -380,6 +440,44 @@ function custom_content_for_custom_shipping_checkout(): void
 			display: none !important;
 		}
 	</style>';
+}
+
+/**
+ * `[okoskabet_levering]` — the delivery UI, placed by the shop.
+ *
+ * A checkout that does not render WooCommerce's review-order template never
+ * fires the hook above, and until now that meant no date picker, no shed
+ * list and no explanation of why: the shipping methods still appeared, so
+ * the checkout looked finished. Bricks' Checkout v2 is the case that found
+ * this, but any builder that draws its own checkout has the same hole, and
+ * so does WooCommerce's own block checkout.
+ *
+ * The shortcode is the way out that costs an existing shop nothing: it is
+ * new, it is opt-in, and a shop that never places it keeps rendering through
+ * the hook exactly as before.
+ */
+add_shortcode('okoskabet_levering', 'oko_delivery_ui_shortcode');
+function oko_delivery_ui_shortcode($atts = array()): string
+{
+	$atts = shortcode_atts(array('context' => 'block'), (array) $atts, 'okoskabet_levering');
+
+	ob_start();
+	oko_render_delivery_ui($atts['context'] === 'table' ? 'table' : 'block');
+
+	return (string) ob_get_clean();
+}
+
+/**
+ * The same thing for a theme or a builder element that would rather call PHP
+ * than place a shortcode: `oko_delivery_ui();` in the template.
+ *
+ * Pair it with `add_filter('oko_auto_render_delivery_ui', '__return_false')`
+ * when the theme also leaves WooCommerce's review-order table in place, so
+ * the UI is drawn where the theme wants it and nowhere else.
+ */
+function oko_delivery_ui(string $context = 'block'): void
+{
+	oko_render_delivery_ui($context === 'table' ? 'table' : 'block');
 }
 
 
