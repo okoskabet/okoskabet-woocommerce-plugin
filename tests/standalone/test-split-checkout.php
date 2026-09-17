@@ -271,6 +271,32 @@ it( 'offers a way out even when a group can never be delivered', function () {
 	assert_same( array( 'Brød' ), $options[0]['remove_names'], 'the undeliverable item is what goes' );
 } );
 
+it( 'sends the customer back to fresh options when the basket moved underneath them', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	// A day that is no longer one of the options — the basket or the shop's
+	// rules changed under an open checkout. Refusing the stale choice is right:
+	// those are not the items the customer agreed to give up any more.
+	$_POST['date'] = oko_test_date( 300 );
+
+	try {
+		oko_split()->ajax_reduce_split();
+		fail( 'the handler should have answered' );
+	} catch ( Oko_Test_Json_Response $answer ) {
+		// But refusing it with "prøv igen" on a page still showing the old
+		// options is a dead end: trying again does the very same thing. Send
+		// them back to the banner as it stands now, so "again" means something.
+		assert_true( $answer->success, 'the customer is sent somewhere, not stopped' );
+		assert_contains( 'kassen', (string) ( $answer->payload['redirect'] ?? '' ), 'back to the checkout' );
+	}
+
+	assert_same( array(), WC()->cart->removed, 'and nothing was taken out of the basket' );
+	assert_true( count( $GLOBALS['oko_test_notices'] ) > 0, 'with a word about why it changed' );
+
+	unset( $_POST['date'] );
+} );
+
 it( 'takes exactly the chosen option out of the basket', function () {
 	oko_split_weekday_shop();
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD, 'c' => OKO_SPLIT_APPLES ) );
@@ -658,6 +684,83 @@ it( 'starts the split with the right items and the right kind in each step', fun
 	sort( $expected );
 
 	assert_same( $expected, $in_cart, 'the cart holds step one and nothing else' );
+} );
+
+describe( 'Split checkout: a pre-order is a choice about this visit' );
+
+it( 'starts a returning visitor in an ordinary order, whatever the old cookie says', function () {
+	// Gaardmester, staging. The customer had chosen Forudbestilling on some
+	// earlier visit and the cookie was still set. They came back with a
+	// different basket — a galia melon and some rabarber isvafler — went to the
+	// checkout, and landed straight in "kun en del af din kurv kan
+	// forudbestilles", with the form hidden behind the banner and no way back.
+	oko_split_pre_order_shop();
+	oko_test_add_product( 214, 'Galia melon', array() );
+	oko_test_set_cart( array( 'a' => 214, 'b' => OKO_SPLIT_ICE ) );
+
+	oko_test_set_stale_pre_order_cookie();
+
+	assert_false( oko_pre_order_checkout_requested(), 'a remembered cookie starts nothing' );
+	assert_same( array(), oko_split()->compute_split_groups(), 'and so there is no banner' );
+
+	// The same basket still splits when the customer asks on this page.
+	oko_test_set_pre_order( true );
+	assert_same( 2, count( oko_split()->compute_split_groups() ), 'asking on this page still works' );
+} );
+
+it( 'ignores a pre-order for a basket that has nothing to pre-order', function () {
+	oko_split_pre_order_shop();
+	// No ice: nothing here can be held, so the button is not even offered.
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_PAK_CHOI ) );
+
+	oko_test_set_pre_order( true );
+
+	assert_false( oko_pre_order_checkout_requested(), 'not a state this basket can be in' );
+	assert_same( array(), oko_split()->compute_split_groups(), 'and no banner about it' );
+} );
+
+it( 'offers a way back out of the pre-order, to a checkout that needs no split', function () {
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+
+	oko_test_set_pre_order( true );
+	assert_same( 2, count( oko_split()->compute_split_groups() ), 'the banner is up' );
+
+	// The link the banner shows goes to the checkout without the pre-order.
+	$way_back = oko_checkout_url_for_mode( false );
+	assert_false( strpos( $way_back, 'oko_pre_order' ) !== false, 'it carries no pre-order' );
+
+	// Following it: an ordinary order, and this basket fits one day, so the
+	// banner is gone and the customer has their checkout form back.
+	oko_test_set_pre_order( false );
+	assert_false( oko_pre_order_checkout_requested(), 'out of the pre-order' );
+	assert_same( array(), oko_split()->compute_split_groups(), 'and no banner left' );
+	assert_same( 1, count( oko_split()->compute_delivery_groups() ), 'one ordinary delivery covers it' );
+} );
+
+it( 'puts that way back in the banner itself, where the form is hidden', function () {
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	// The banner hides the checkout form, and the ordinary-order button lives
+	// inside it. If the banner does not carry the way out, there is none.
+	$banner = oko_split_render_banner();
+
+	// The wording, not the class name: the stylesheet mentions the class on
+	// every render, so looking for that would pass without any link at all.
+	assert_contains( 'Choose an ordinary order instead', $banner, 'the banner offers a way out' );
+	assert_contains( 'href="' . oko_checkout_url_for_mode( false ) . '"', $banner, 'pointing at an ordinary order' );
+} );
+
+it( 'does not offer that way out of an ordinary order it was never in', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	$banner = oko_split_render_banner();
+
+	assert_contains( 'oko-split-banner', $banner, 'the banner is there' );
+	assert_false( strpos( $banner, 'Choose an ordinary order instead' ) !== false, 'but nothing to leave' );
 } );
 
 describe( 'Split checkout: the wording on the buttons' );

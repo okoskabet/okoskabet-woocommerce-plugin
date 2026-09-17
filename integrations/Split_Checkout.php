@@ -821,6 +821,12 @@ class Split_Checkout extends Base {
 				color: #c44; font-weight: 600; margin: 0;
 				min-height: 1.2em;
 			}
+			.oko-split-banner .oko-split-leave {
+				margin: 12px 0 0; font-size: 0.95em;
+			}
+			.oko-split-banner .oko-split-leave a {
+				color: #6a4a4a; text-decoration: underline;
+			}
 		</style>';
 
 		echo '<div class="oko-split-banner" id="oko-split-banner" style="background:#fff5f5;border:1px solid #f0c0c0;border-left:4px solid #c44;padding:20px;margin:0 0 24px;border-radius:4px;">';
@@ -888,6 +894,20 @@ class Split_Checkout extends Base {
 			// Open by default when there is nothing else to click, so the
 			// customer's only way forward isn't hidden behind a toggle.
 			$this->render_removal_options( $options, ! $can_split );
+		}
+
+		// The way back out of a pre-order. The banner hides the checkout form,
+		// and the ordinary-order button lives inside it, so without this the
+		// customer who did not want a pre-order after all is stuck looking at
+		// a choice between two ways of splitting one. Deliberately a link and
+		// deliberately quiet: it is the third thing to consider, not the first,
+		// and it works whether or not any script on the page does.
+		if ( $this->is_pre_order_mode() ) {
+			printf(
+				'<p class="oko-split-leave"><a href="%s">%s</a></p>',
+				esc_url( \oko_checkout_url_for_mode( false ) ),
+				esc_html__( 'Choose an ordinary order instead', O_TEXTDOMAIN )
+			);
 		}
 
 		echo '<p class="oko-split-error" id="oko-split-error" aria-live="polite"></p>';
@@ -1470,9 +1490,18 @@ class Split_Checkout extends Base {
 			}
 		}
 		if ( $chosen === null ) {
-			// The basket moved under the customer's feet; a reload re-renders
-			// the banner against what is actually in it now.
-			wp_send_json_error( array( 'message' => __( 'That option is no longer available. Please try again.', O_TEXTDOMAIN ) ) );
+			// The basket, or the shop's rules, moved under an open checkout.
+			// Refusing the stale choice is right — those are not the items the
+			// customer agreed to give up any more — but refusing it and saying
+			// "prøv igen" on a page still showing the old options is a dead
+			// end: trying again does the same thing. Send them back to the
+			// banner as it stands now, with a word about why it changed, so
+			// "again" means something.
+			wc_add_notice(
+				__( 'Your basket has changed, so we have worked the options out again. Please choose once more.', O_TEXTDOMAIN ),
+				'notice'
+			);
+			wp_send_json_success( array( 'redirect' => wc_get_checkout_url() ) );
 		}
 
 		foreach ( $chosen['remove_keys'] as $key ) {

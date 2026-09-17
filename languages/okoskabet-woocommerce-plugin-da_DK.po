@@ -1371,3 +1371,10 @@ msgstr "Forudbestilling %1$d (%2$s)"
 
 msgid "Remove %1$s, and the rest can be pre-ordered together for %2$s"
 msgstr "Fjern %1$s, så kan resten forudbestilles samlet til %2$s"
+
+# Vejen ud af en forudbestilling, og genberegnede muligheder
+msgid "Choose an ordinary order instead"
+msgstr "Vælg normal bestilling i stedet"
+
+msgid "Your basket has changed, so we have worked the options out again. Please choose once more."
+msgstr "Din kurv har ændret sig, så vi har regnet mulighederne ud igen. Vælg venligst på ny."

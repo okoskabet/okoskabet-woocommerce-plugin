@@ -66,6 +66,10 @@ function oko_test_reset(): void {
 	oko_test_set_pre_order( false );
 	\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::purge_rules_cache();
 	oko_test_set_cart( array() );
+	// A fresh session too. Without this a test that starts a split leaves its
+	// state behind, and every test after it runs as though the customer were
+	// mid-split — which is both wrong and very hard to read in the output.
+	$GLOBALS['oko_test_wc']->session = new Oko_Test_Session();
 }
 
 /**
@@ -400,21 +404,77 @@ function oko_split_heading( array $group, int $number ): string {
 	return ( new Oko_Test_Split_Checkout() )->heading_for( $group, $number );
 }
 
-/** Whether the checkout is currently in pre-order mode, for the stubs below. */
-$GLOBALS['oko_test_pre_order'] = false;
+/** The banner's own HTML, as the customer would be served it. */
+function oko_split_render_banner(): string {
+	ob_start();
+	( new Oko_Test_Split_Checkout() )->maybe_render_banner();
 
-/** Put the test checkout into a pre-order, or back out of it. */
-function oko_test_set_pre_order( bool $on ): void {
-	$GLOBALS['oko_test_pre_order'] = $on;
-	$_COOKIE['okoskabet_pre_order'] = $on ? '1' : '';
+	return (string) ob_get_clean();
 }
 
+/**
+ * The customer asking for a pre-order on this page: they pressed the button and
+ * the page reloaded carrying `oko_pre_order`.
+ */
+function oko_test_set_pre_order( bool $on ): void {
+	unset( $_POST['billing_okoskabet_pre_order'], $_GET['oko_pre_order'], $_COOKIE['okoskabet_pre_order'] );
+	if ( $on ) {
+		$_GET['oko_pre_order'] = '1';
+	}
+}
+
+/**
+ * A pre-order left over from an earlier visit: the cookie is still set, and
+ * nothing on this page asks for one.
+ */
+function oko_test_set_stale_pre_order_cookie(): void {
+	unset( $_POST['billing_okoskabet_pre_order'], $_GET['oko_pre_order'] );
+	$_COOKIE['okoskabet_pre_order'] = '1';
+}
+
+/**
+ * The rule itself, kept here rather than stubbed away.
+ *
+ * What this decides IS which signals count, so a stub that simply answered a
+ * boolean would test nothing — and it was exactly such a stub that let the
+ * stale-cookie bug through the tests and onto Gaardmester's staging. It stays
+ * in step with functions.php by being the same few lines.
+ */
 function oko_pre_order_checkout_requested(): bool {
-	return (bool) $GLOBALS['oko_test_pre_order'];
+	if ( isset( $_POST['billing_okoskabet_pre_order'] ) ) {
+		$wanted = (string) $_POST['billing_okoskabet_pre_order'] === '1';
+	} elseif ( isset( $_GET['oko_pre_order'] ) ) {
+		$wanted = (string) $_GET['oko_pre_order'] === '1';
+	} else {
+		$wanted = false;
+	}
+
+	return $wanted && oko_cart_can_pre_order();
 }
 
 function oko_is_pre_order_checkout(): bool {
-	return (bool) $GLOBALS['oko_test_pre_order'];
+	return isset( $_POST['billing_okoskabet_pre_order'] )
+		&& (string) $_POST['billing_okoskabet_pre_order'] === '1';
+}
+
+/** Whether anything in the basket could be pre-ordered at all. */
+function oko_cart_can_pre_order(): bool {
+	if ( ! WC()->cart ) {
+		return false;
+	}
+	$product_ids = array();
+	foreach ( WC()->cart->get_cart() as $item ) {
+		$pid = (int) ( $item['product_id'] ?? 0 );
+		if ( $pid > 0 ) {
+			$product_ids[] = $pid;
+		}
+	}
+
+	return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days( $product_ids );
+}
+
+function oko_checkout_url_for_mode( bool $pre_order ): string {
+	return 'https://example.test/kassen' . ( $pre_order ? '?oko_pre_order=1' : '' );
 }
 
 // ---------------------------------------------------------------------------
