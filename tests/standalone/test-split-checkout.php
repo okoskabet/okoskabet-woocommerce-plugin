@@ -231,6 +231,16 @@ it( 'puts the offer that costs the customer least first', function () {
 	assert_same( 2, count( $options[1]['remove_names'] ), 'the dearer option second' );
 } );
 
+it( 'has nothing to offer when the basket already fits one day', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_APPLES ) );
+
+	// There is a delivery day here, and it carries everything — so the only
+	// "offer" that could be built would be to remove nothing, which reads as
+	// "Fjern , så kan resten leveres sammen…" and is not a sentence.
+	assert_same( array(), oko_split()->compute_removal_options() );
+} );
+
 it( 'never offers to empty the whole basket', function () {
 	oko_split_weekday_shop();
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
