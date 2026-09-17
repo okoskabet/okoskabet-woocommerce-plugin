@@ -359,11 +359,30 @@ class OkoskabetCheckout {
 		return { postalCode, address };
 	}
 
-	// The delivery-date setting of the chosen rate, printed next to its radio
-	// button by PHP. The rate's id carries no instance, so the setting cannot
-	// be looked up from here.
+	// The delivery-date setting of the chosen rate. The rate's id carries no
+	// instance, so the setting cannot be worked out here and has to come from
+	// PHP — either in the config map, or, on a page rendered before this
+	// version, from the span printed next to the radio button.
 	private getSelectedDateMode(): DateMode {
-		const mode = this.getSelectedShippingMethodElement()
+		const element = this.getSelectedShippingMethodElement();
+
+		// The map is keyed by rate id, which the radio carries in its value.
+		// Nothing about the surrounding markup matters, so this also answers
+		// in a checkout the plugin has never seen — a page builder's own, or
+		// WooCommerce's block checkout.
+		const rateId = element?.value;
+		const mapped = rateId
+			? ( window as any )._okoskabet_checkout?.dateModes?.[ rateId ]
+			: undefined;
+		if ( mapped === 'when_available' || mapped === 'required' ) {
+			return mapped;
+		}
+
+		// Fallback: the hidden span beside the radio. Kept so a page still
+		// served from a cache built before this version keeps working, and
+		// because a rate added by something other than our own shipping
+		// method never appears in the map. Removed a release from now.
+		const mode = element
 			?.closest( 'li' )
 			?.querySelector< HTMLElement >( '.okoskabet-date-mode' )
 			?.dataset.dateMode;

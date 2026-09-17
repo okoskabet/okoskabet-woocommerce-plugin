@@ -316,6 +316,10 @@ function oko_render_delivery_ui(string $context = 'table'): void
 				: __('Note to the driver (optional)', O_TEXTDOMAIN),
 			'hideWcOrderComments' => !empty($settings['_hide_wc_order_comments']),
 		),
+		// Rate id → date setting, so the script can answer "does this rate
+		// need a date?" from the selected radio's value alone, without
+		// walking the markup around it. See oko_delivery_date_modes().
+		'dateModes' => oko_delivery_date_modes(),
 		'endpoints' => array(
 			// Endpoints accept `merchant_id` and/or `product_ids` so the
 			// JS can either rely on cart routing or pin a request.
@@ -602,6 +606,41 @@ function oko_delivery_date_mode_for_rate($rate): string
 	$method      = $instance_id > 0 && class_exists('WC_Shipping_Zones') ? \WC_Shipping_Zones::get_shipping_method($instance_id) : false;
 
 	return $method && $method->get_option('allow_without_date', 'no') === 'yes' ? OKO_DATE_MODE_WHEN_AVAILABLE : OKO_DATE_MODE_REQUIRED;
+}
+
+/**
+ * Every home-delivery rate in this cart, and the date setting behind it,
+ * keyed by rate id.
+ *
+ * The checkout script needs to know the setting of whichever rate the
+ * customer has selected *right now*, and the customer can switch rates
+ * without a page load. Until now the answer travelled as a hidden span
+ * printed next to each radio button, which only works if the script can
+ * walk from the radio to the span — that is, only in markup this plugin
+ * already knows. A map keyed by rate id needs no markup at all: the radio
+ * carries the rate id in its `value`, in every checkout we have seen,
+ * builders included.
+ *
+ * The packages are already calculated by the time a checkout renders, so
+ * this reads what WooCommerce has rather than costing another shipping run.
+ */
+function oko_delivery_date_modes(): array
+{
+	if (! function_exists('WC') || ! WC()->shipping()) {
+		return array();
+	}
+
+	$modes = array();
+
+	foreach ((array) WC()->shipping()->get_packages() as $package) {
+		foreach ((array) ($package['rates'] ?? array()) as $rate_id => $rate) {
+			if ($rate instanceof \WC_Shipping_Rate && $rate->get_method_id() === 'hey_okoskabet_shipping_home') {
+				$modes[(string) $rate_id] = oko_delivery_date_mode_for_rate($rate);
+			}
+		}
+	}
+
+	return $modes;
 }
 
 /** The delivery-date setting of the home delivery the customer has chosen. */
