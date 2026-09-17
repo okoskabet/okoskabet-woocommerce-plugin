@@ -610,6 +610,56 @@ it( 'carries each step\'s kind of order through the split', function () {
 	assert_same( array( 'normal', 'pre_order' ), $modes );
 } );
 
+it( 'starts the split with the right items and the right kind in each step', function () {
+	$shop = oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	$split = oko_split();
+	try {
+		$split->ajax_start_split();
+		fail( 'the handler should have answered' );
+	} catch ( Oko_Test_Json_Response $answer ) {
+		assert_true( $answer->success, 'the split started' );
+	}
+
+	$state = WC()->session->get( 'oko_split_state' );
+	assert_same( 2, (int) $state['total_steps'], 'two steps' );
+	assert_same( 1, (int) $state['current_step'], 'starting at the first' );
+
+	// What is stored is what each step will be rebuilt from, so the kind of
+	// order has to survive the round trip. Without it, step two would render
+	// as whatever step one was and offer the wrong days.
+	$steps = array();
+	foreach ( $state['groups'] as $group ) {
+		$steps[ $group['mode'] ] = $group;
+	}
+
+	assert_true( isset( $steps['pre_order'] ), 'a pre-order step was stored' );
+	assert_true( isset( $steps['normal'] ), 'an ordinary step was stored' );
+	assert_same( array( 'Nougat ispinde' ), $steps['pre_order']['product_names'] );
+	assert_same( $shop['pre_order_day'], $steps['pre_order']['suggested_date'] );
+
+	$ordinary = $steps['normal']['product_names'];
+	sort( $ordinary );
+	assert_same( array( 'Cornflakes', 'Pak Choi' ), $ordinary );
+
+	// And the cart is now only what the first step is for.
+	$in_cart = array();
+	foreach ( WC()->cart->get_cart() as $line ) {
+		$in_cart[] = (int) $line['product_id'];
+	}
+	sort( $in_cart );
+
+	$expected = array();
+	foreach ( $state['groups'][0]['items'] as $recipe ) {
+		$expected[] = (int) $recipe['product_id'];
+	}
+	sort( $expected );
+
+	assert_same( $expected, $in_cart, 'the cart holds step one and nothing else' );
+} );
+
 describe( 'Split checkout: the wording on the buttons' );
 
 it( 'says "i to" for two deliveries and counts honestly beyond that', function () {

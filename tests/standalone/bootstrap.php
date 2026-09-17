@@ -231,6 +231,58 @@ class Oko_Test_Cart {
 		}
 		return true;
 	}
+
+	public function empty_cart( $clear_persistent = true ) {
+		$this->contents = array();
+	}
+
+	/** Enough of WooCommerce's signature for the split to rebuild a cart. */
+	public function add_to_cart( $product_id, $quantity = 1, $variation_id = 0, $variation = array(), $cart_item_data = array() ) {
+		$key = md5( $product_id . '|' . $variation_id . '|' . wp_json_encode( $variation ) );
+		$this->contents[ $key ] = array_merge(
+			array(
+				'key'          => $key,
+				'product_id'   => (int) $product_id,
+				'quantity'     => (int) $quantity,
+				'variation_id' => (int) $variation_id,
+				'variation'    => (array) $variation,
+				'line_total'   => 0.0,
+				'line_tax'     => 0.0,
+			),
+			(array) $cart_item_data
+		);
+		return $key;
+	}
+}
+
+/**
+ * What an AJAX handler answered with. The real ones end the request; here we
+ * unwind to the test with the payload, which is the same thing said politely.
+ */
+class Oko_Test_Json_Response extends Exception {
+
+	/** @var bool */
+	public $success;
+
+	/** @var array */
+	public $payload;
+
+	public function __construct( bool $success, array $payload ) {
+		parent::__construct( $success ? 'success' : 'error' );
+		$this->success = $success;
+		$this->payload = $payload;
+	}
+}
+
+function check_ajax_referer( $action, $field = false, $die = true ) { return true; }
+function wc_load_cart() {}
+
+function wp_send_json_success( $data = array() ) {
+	throw new Oko_Test_Json_Response( true, (array) $data );
+}
+
+function wp_send_json_error( $data = array() ) {
+	throw new Oko_Test_Json_Response( false, (array) $data );
 }
 
 /** A session that remembers what it is given, like the real one. */

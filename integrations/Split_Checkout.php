@@ -552,7 +552,11 @@ class Split_Checkout extends Base {
 		$candidate_dates = array();
 		foreach ( $this->compute_delivery_groups() as $group ) {
 			$date = (string) ( $group['suggested_date'] ?? '' );
-			if ( $date !== '' && ( $group['mode'] ?? self::MODE_NORMAL ) === $wanted_mode ) {
+			// A day belonging to the other kind of order needs no filtering out
+			// here: a line only counts as kept below if it travels as the kind
+			// the customer chose, so such a day keeps nothing and falls out as
+			// an empty offer. Two guards for one rule is how the two drift.
+			if ( $date !== '' ) {
 				$candidate_dates[ $date ] = true;
 			}
 		}
