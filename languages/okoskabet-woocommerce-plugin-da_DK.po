@@ -1378,3 +1378,19 @@ msgstr "Vælg normal bestilling i stedet"
 
 msgid "Your basket has changed, so we have worked the options out again. Please choose once more."
 msgstr "Din kurv har ændret sig, så vi har regnet mulighederne ud igen. Vælg venligst på ny."
+
+# Ingen dato hvor flere dage er mulige
+msgid "Your items cannot all be delivered on the same day"
+msgstr "Varerne i din kurv kan ikke leveres på samme dag"
+
+msgid "Delivery %d"
+msgstr "Levering %d"
+
+msgid "Pre-order %d"
+msgstr "Forudbestilling %d"
+
+msgid "Remove %s, and the rest can be delivered together"
+msgstr "Fjern %s, så kan resten leveres sammen"
+
+msgid "Remove %s, and the rest can be pre-ordered together"
+msgstr "Fjern %s, så kan resten forudbestilles samlet"

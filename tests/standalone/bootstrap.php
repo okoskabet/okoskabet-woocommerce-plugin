@@ -131,6 +131,12 @@ function checked( $a, $b = true, $echo = true ) { return ''; }
 function admin_url( $path = '' ) { return 'https://example.test/wp-admin/' . ltrim( $path, '/' ); }
 function wp_create_nonce( $action ) { return 'nonce'; }
 
+/** WordPress own date formatter, so headings format as they do live. */
+function wp_date( $format, $timestamp = null, $timezone = null ) {
+	$dt = new DateTimeImmutable( "@" . (int) $timestamp );
+	return $dt->setTimezone( $timezone instanceof DateTimeZone ? $timezone : wp_timezone() )->format( $format );
+}
+
 function wp_timezone(): DateTimeZone {
 	return new DateTimeZone( 'Europe/Copenhagen' );
 }

@@ -4,6 +4,24 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 ## Unreleased
 
+= Banneret lover ikke en bestemt dag, det ikke kan holde =
+
+Listen over leveringer viste en dato ud for hver del: "Levering 1 (23. september
+2026)". Men den dato var bare den første af flere dage, der ville fungere, og
+kunden vælger selv den rigtige i datovælgeren et øjeblik senere. At skrive den
+læste som en beslutning, ingen havde taget.
+
+Nu står der "Levering 1 — Økologiske galia melon". Nummereringen og varenavnene
+er der stadig; det er datoen, der er væk. Overskriften siger i stedet det, sagen
+drejer sig om: **"Varerne i din kurv kan ikke leveres på samme dag"**.
+
+Det samme gælder mulighederne under "Tøm fra kurven": "Fjern X, så kan resten
+leveres sammen" — uden at udpege en dag.
+
+Én undtagelse: har en del kun **én** mulig dag, står datoen der stadig, for så er
+den en kendsgerning og ikke ét bud blandt flere. En forudbestilling er det
+tydeligste tilfælde: "Forudbestilling 2 (10. december 2026)".
+
 = Opdelt levering: kunden får to veje videre =
 
 Når en kurv ikke kan leveres på én dag, viste kassen før kun en besked. Nu får

@@ -316,6 +316,7 @@ class Split_Checkout extends Base {
 	 *     'product_ids'    => [ id, id, ... ],
 	 *     'product_names'  => [ 'Mælk', 'Brød', ... ],
 	 *     'suggested_date' => 'YYYY-MM-DD',  // '' when nothing can carry it
+	 *     'possible_dates' => [ 'YYYY-MM-DD', ... ],  // every day that would do
 	 *     'mode'           => 'pre_order' | 'normal' | '',
 	 *   ]
 	 *
@@ -344,9 +345,10 @@ class Split_Checkout extends Base {
 		foreach ( $by_mode as $mode => $remaining ) {
 			foreach ( $this->group_by_coverage( $remaining ) as $group ) {
 				$groups[] = array(
-					'keys' => $group['keys'],
-					'date' => $group['date'],
-					'mode' => (string) $mode,
+					'keys'  => $group['keys'],
+					'date'  => $group['date'],
+					'dates' => $group['dates'],
+					'mode'  => (string) $mode,
 				);
 			}
 		}
@@ -357,11 +359,11 @@ class Split_Checkout extends Base {
 		} );
 
 		if ( ! empty( $undeliverable ) ) {
-			$groups[] = array( 'keys' => $undeliverable, 'date' => '', 'mode' => '' );
+			$groups[] = array( 'keys' => $undeliverable, 'date' => '', 'dates' => array(), 'mode' => '' );
 		}
 
 		return array_map( function ( array $group ): array {
-			return $this->decorate_group( $group['keys'], (string) $group['date'], (string) $group['mode'] );
+			return $this->decorate_group( $group['keys'], (string) $group['date'], (string) $group['mode'], (array) $group['dates'] );
 		}, $groups );
 	}
 
@@ -400,15 +402,20 @@ class Split_Checkout extends Base {
 				}
 			}
 
-			$keys = array();
+			$keys   = array();
+			$shared = null;
 			foreach ( $remaining as $key => $dates ) {
 				if ( in_array( $best, $dates, true ) ) {
 					$keys[] = $key;
+					// Every day this whole group could go out on, not only the
+					// one we picked. What the customer may be told about the
+					// group depends on how many there turn out to be.
+					$shared = $shared === null ? $dates : array_values( array_intersect( $shared, $dates ) );
 					unset( $remaining[ $key ] );
 				}
 			}
 
-			$groups[] = array( 'keys' => $keys, 'date' => $best );
+			$groups[] = array( 'keys' => $keys, 'date' => $best, 'dates' => (array) $shared );
 		}
 
 		return $groups;
@@ -420,8 +427,9 @@ class Split_Checkout extends Base {
 	 * @param string[] $keys Cart item keys.
 	 * @param string   $date Y-m-d, or '' when the group has no deliverable day.
 	 * @param string   $mode Which kind of order this group would be.
+	 * @param string[] $dates Every day the whole group could go out on.
 	 */
-	private function decorate_group( array $keys, string $date, string $mode = self::MODE_NORMAL ): array {
+	private function decorate_group( array $keys, string $date, string $mode = self::MODE_NORMAL, array $dates = array() ): array {
 		$cart_items    = ( function_exists( 'WC' ) && WC()->cart ) ? WC()->cart->get_cart() : array();
 		$items_full    = array();
 		$product_ids   = array();
@@ -448,6 +456,7 @@ class Split_Checkout extends Base {
 			'product_ids'    => array_values( array_unique( $product_ids ) ),
 			'product_names'  => array_values( array_unique( $product_names ) ),
 			'suggested_date' => $date,
+			'possible_dates' => array_values( $dates ),
 			'mode'           => $mode,
 		);
 	}
@@ -583,13 +592,23 @@ class Split_Checkout extends Base {
 				continue;
 			}
 
+			// Every day the kept items could go out on together, so the offer
+			// can promise a day only where there is exactly one to promise.
+			$shared = null;
+			foreach ( $keep as $key ) {
+				$shared = $shared === null
+					? $lines[ $key ]['dates']
+					: array_values( array_intersect( $shared, $lines[ $key ]['dates'] ) );
+			}
+
 			$options[] = array(
-				'date'         => (string) $date,
-				'date_label'   => \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::format_date_human( (string) $date ),
-				'mode'         => $wanted_mode,
-				'remove_keys'  => $remove,
-				'remove_names' => $this->names_for_keys( $remove ),
-				'keep_names'   => $this->names_for_keys( $keep ),
+				'date'           => (string) $date,
+				'date_label'     => \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::format_date_human( (string) $date ),
+				'possible_dates' => array_values( (array) $shared ),
+				'mode'           => $wanted_mode,
+				'remove_keys'    => $remove,
+				'remove_names'   => $this->names_for_keys( $remove ),
+				'keep_names'     => $this->names_for_keys( $keep ),
 			);
 		}
 
@@ -600,17 +619,34 @@ class Split_Checkout extends Base {
 		} );
 
 		foreach ( $options as $i => $option ) {
-			$options[ $i ]['text'] = $option['mode'] === self::MODE_PRE_ORDER
+			$names     = self::format_name_list( $option['remove_names'] );
+			$pre_order = $option['mode'] === self::MODE_PRE_ORDER;
+			// What the offer can honestly promise is that the rest travels
+			// together. Naming a day on top of that is only true when the kept
+			// items have exactly one day left between them; otherwise the day
+			// printed was the soonest of several and the customer still chooses.
+			$one_day = count( $option['possible_dates'] ) === 1;
+
+			if ( ! $one_day ) {
+				$options[ $i ]['text'] = $pre_order
+					/* translators: %s = product names ("Mælk og Brød") */
+					? sprintf( __( 'Remove %s, and the rest can be pre-ordered together', O_TEXTDOMAIN ), $names )
+					/* translators: %s = product names ("Mælk og Brød") */
+					: sprintf( __( 'Remove %s, and the rest can be delivered together', O_TEXTDOMAIN ), $names );
+				continue;
+			}
+
+			$options[ $i ]['text'] = $pre_order
 				? sprintf(
 					/* translators: 1 = product names ("Mælk og Brød"), 2 = date ("den 10. december 2026") */
 					__( 'Remove %1$s, and the rest can be pre-ordered together for %2$s', O_TEXTDOMAIN ),
-					self::format_name_list( $option['remove_names'] ),
+					$names,
 					$option['date_label']
 				)
 				: sprintf(
 					/* translators: 1 = product names ("Mælk og Brød"), 2 = date ("den 22. september 2026") */
 					__( 'Remove %1$s, and the rest can be delivered together on %2$s', O_TEXTDOMAIN ),
-					self::format_name_list( $option['remove_names'] ),
+					$names,
 					$option['date_label']
 				);
 		}
@@ -840,16 +876,9 @@ class Split_Checkout extends Base {
 			. esc_html(
 				$mixes_modes
 					? __( 'Only part of your basket can be pre-ordered', O_TEXTDOMAIN )
-					: sprintf(
-						/* translators: %d = number of separate deliveries */
-						_n(
-							'Your items must be delivered on %d separate day',
-							'Your items must be delivered on %d separate days',
-							count( $groups ),
-							O_TEXTDOMAIN
-						),
-						count( $groups )
-					)
+					// The whole of it, in one line, and true without naming a
+					// single day — which is what the list below no longer does.
+					: __( 'Your items cannot all be delivered on the same day', O_TEXTDOMAIN )
 			)
 			. '</h3>';
 
@@ -1811,9 +1840,28 @@ class Split_Checkout extends Base {
 			return __( 'No delivery day available', O_TEXTDOMAIN );
 		}
 
+		$pre_order = ( $group['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER;
+
+		// A day is named only when it is the ONLY day this part could go out
+		// on. Where several would do, the one shown was merely the soonest of
+		// them, and printing it read as a decision — one the customer had not
+		// made and we had not taken, since they pick the real day in the date
+		// picker a moment later. What the banner is for is that the basket
+		// cannot travel together, and that needs no date to say.
+		//
+		// A pre-order day usually is the only one, and there the date is a
+		// fact rather than one option among several, so it stays.
+		if ( count( (array) ( $group['possible_dates'] ?? array() ) ) !== 1 ) {
+			return $pre_order
+				/* translators: %d = its number in the list */
+				? sprintf( __( 'Pre-order %d', O_TEXTDOMAIN ), $number )
+				/* translators: %d = its number in the list */
+				: sprintf( __( 'Delivery %d', O_TEXTDOMAIN ), $number );
+		}
+
 		$formatted = $this->format_date_for_display( $date );
 
-		if ( ( $group['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER ) {
+		if ( $pre_order ) {
 			return sprintf(
 				/* translators: 1 = its number in the list, 2 = formatted date */
 				__( 'Pre-order %1$d (%2$s)', O_TEXTDOMAIN ),

@@ -201,11 +201,68 @@ it( 'writes the offer the way a person would say it', function () {
 			continue;
 		}
 		assert_contains( 'Remove Mælk,', $option['text'] );
-		assert_contains( $option['date_label'], $option['text'], 'the date is in the sentence' );
-		assert_contains( 'den ', $option['date_label'], 'a Danish date' );
+		assert_contains( 'rest can be delivered together', $option['text'], 'it promises what is true' );
+
+		// The bread has every Wednesday to choose from, so the offer must not
+		// pick one of them on the customer's behalf. What it promises is that
+		// the rest travels together, which is the part we actually know.
+		assert_true( count( $option['possible_dates'] ) > 1, 'several days would do' );
+		assert_false( strpos( $option['text'], $option['date_label'] ) !== false, 'so no day is named' );
+		assert_false( strpos( $option['text'], 'den ' ) !== false, 'no Danish date either' );
 		return;
 	}
 	fail( 'no option that gives up the milk' );
+} );
+
+it( 'names the day in an offer only when exactly one day is left', function () {
+	// Each item pinned to a single day, and no other day will do — so the day
+	// the offer names is a fact, not the soonest of several.
+	oko_test_add_product( OKO_SPLIT_MILK, 'Mælk', array( OKO_SPLIT_CAT_MON ) );
+	oko_test_add_product( OKO_SPLIT_BREAD, 'Brød', array( OKO_SPLIT_CAT_WED ) );
+	$milk_day  = oko_test_date( 4 );
+	$bread_day = oko_test_date( 6 );
+	oko_test_set_exceptions( array(
+		'only_on_enabled' => true,
+		'only_on'         => array(
+			array( 'date' => $milk_day, 'enabled' => true, 'extend' => false, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_MON ), 'tags' => array() ),
+			array( 'date' => $bread_day, 'enabled' => true, 'extend' => false, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_WED ), 'tags' => array() ),
+		),
+	) );
+	oko_test_set_delivery_days( array( $milk_day, $bread_day, oko_test_date( 8 ) ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	$options = oko_split()->compute_removal_options();
+	assert_true( count( $options ) > 0, 'there are offers' );
+
+	foreach ( $options as $option ) {
+		assert_same( 1, count( $option['possible_dates'] ), 'exactly one day left' );
+		assert_contains( $option['date_label'], $option['text'], 'so the day is named' );
+	}
+} );
+
+it( 'leaves the day out of a group heading when several days would do', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	// The day printed beside a group was only one of the days that would work,
+	// and printing it read as a decision nobody had made.
+	foreach ( oko_split()->compute_split_groups() as $i => $group ) {
+		assert_true( count( $group['possible_dates'] ) > 1, 'several days would do' );
+
+		// Exactly the dateless form and nothing else. Asking only that some
+		// particular date spelling is absent lets any other spelling through,
+		// and the heading formats dates however the shop has WordPress set up.
+		assert_same( 'Delivery ' . ( $i + 1 ), oko_split_heading( $group, $i + 1 ) );
+	}
+} );
+
+it( 'says the basket cannot travel together, without naming a day', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	// With the days gone from the list, the headline is what has to carry the
+	// meaning — otherwise the banner never says what is actually wrong.
+	assert_contains( 'cannot all be delivered on the same day', oko_split_render_banner() );
 } );
 
 it( 'counts an item that could travel either way as kept, not removed', function () {
@@ -609,6 +666,28 @@ it( 'names which part is a pre-order and which is an ordinary delivery', functio
 
 	assert_contains( 'Pre-order', $headings['pre_order'] ?? '', 'the held part says so' );
 	assert_contains( 'Delivery', $headings['normal'] ?? '', 'the ordinary part says so' );
+} );
+
+it( 'keeps the day in a group heading when that is the only day', function () {
+	// A pre-order is the obvious case: one day, and it is a fact.
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	foreach ( oko_split()->compute_split_groups() as $i => $group ) {
+		if ( $group['mode'] !== 'pre_order' ) {
+			continue;
+		}
+		assert_same( 1, count( $group['possible_dates'] ), 'the one day it can be held for' );
+
+		// The heading formats the day the way the shop has WordPress set up,
+		// so what matters is that it carries one at all, not which wording.
+		$heading = oko_split_heading( $group, $i + 1 );
+		assert_contains( '(', $heading, 'so the heading names it' );
+		assert_false( $heading === 'Pre-order ' . ( $i + 1 ), 'not the dateless form' );
+		return;
+	}
+	fail( 'no pre-order group' );
 } );
 
 it( 'keeps every pre-order date inside the days Økoskabet offered', function () {
