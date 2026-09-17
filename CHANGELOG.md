@@ -28,6 +28,52 @@ Hver delordre er en helt almindelig ordre og betaler sin egen fragt og sit eget
 emballagegebyr. To leveringer er to ture og to kasser, så to gebyrer er det
 rigtige tal — ikke en fejl.
 
+= Forudbestilling: opdeling virker nu også på tværs af de to slags ordrer =
+
+Trykker kunden Forudbestilling, mener de hele kurven — men det er ikke alt, der
+kan forudbestilles. En kurv med cornflakes, Pak Choi og nougat ispinde svarede
+før med ingenting: intet banner, ingen datovælger, ingen forklaring. Og et
+forudbestillingsgebyr på 50 kr oveni.
+
+Nu rejser den de samme to knapper:
+
+  - **Opdel levering i to** — en forudbestilling på de varer, der kan gemmes, og
+    en almindelig ordre på resten. Hver del er sin egen ordre med sin egen slags,
+    sin egen dato og sit eget gebyr, og kunden betaler begge. Det er det rigtige
+    tal: begge dele er virkelige.
+  - **Tøm fra kurven** — muligheden for at fjerne præcis de varer, der ikke kan
+    forudbestilles, så resten kan forudbestilles samlet.
+
+Banneret siger hvad der er hvad — "Forudbestilling 1 (10. december)" ved siden af
+"Levering 2 (23. september)" — for "Levering 2" om en decemberdato læses som en
+meget sen levering i stedet for det, den er.
+
+Mulighederne under "Tøm fra kurven" holder sig inden for den slags ordre, kunden
+har valgt. "Fjern isen, så kan resten leveres på onsdag" ville være sandt og
+ville stille og roligt tage kunden ud af den forudbestilling, de bad om. Vejen
+tilbage er knappen til almindelig ordre.
+
+Forudbestillingsgebyret opkræves ikke længere, mens kurven ingen
+forudbestillingsdag har. Et gebyr for at gemme varer til en dato kræver en dato.
+Kun et klart "der er ingen dag" fjerner det — kan spørgsmålet ikke besvares,
+opkræves gebyret som hidtil, så butikken ikke mister det til en timeout.
+
+= Datoerne i banneret kommer nu fra Økoskabet =
+
+Grupperingen byggede sin egen kalender på 365 dage og kørte undtagelsesreglerne
+hen over den. Reglerne siger, hvilke af butikkens leveringsdage en vare må bruge;
+de kan ikke sige, hvilke dage butikken kører. Hver eneste dato i banneret var
+altså et gæt, der tilfældigvis overlevede reglerne.
+
+På Gaardmesters staging var gættet dags dato. Torsdag den 17. september, is der
+kun må leveres om torsdagen, og altså var den nærmeste tilladte torsdag den dag,
+siden blev åbnet — en dag uden levering overhovedet. Datovælgeren længere nede på
+samme side havde ret, fordi den spørger Økoskabet.
+
+Det gør banneret nu også. Kan Økoskabet ikke spørges — intet postnummer endnu,
+API'et nede — vises der intet banner i stedet for et banner med opdigtede datoer,
+og en gruppe uden en rigtig dag siger det med ord frem for at låne en dato.
+
 = Opdelingen finder færre leveringer end før =
 
 Grupperingen ser nu på hele kurven på én gang og vælger den dag, der kan tage
