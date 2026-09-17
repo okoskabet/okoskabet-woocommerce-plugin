@@ -39,8 +39,8 @@ function oko_split_weekday_shop(): void {
 	) );
 }
 
-function oko_split(): Split_Checkout {
-	return new Split_Checkout();
+function oko_split(): Oko_Test_Split_Checkout {
+	return new Oko_Test_Split_Checkout();
 }
 
 /** The product names in a group, sorted so the assertion does not mind order. */
@@ -292,6 +292,168 @@ it( 'takes exactly the chosen option out of the basket', function () {
 
 	assert_same( array( 'a' ), WC()->cart->removed, 'only the milk left the basket' );
 	assert_same( array(), $split->compute_split_groups(), 'the rest now fits one day' );
+} );
+
+describe( 'Split checkout: every date comes from Økoskabet, none from us' );
+
+/**
+ * Every date the customer would be shown — in the group list and in the
+ * "remove these" offers alike.
+ *
+ * @return string[]
+ */
+function oko_split_shown_dates( $split ): array {
+	$dates = array();
+	foreach ( $split->compute_delivery_groups() as $group ) {
+		if ( (string) $group['suggested_date'] !== '' ) {
+			$dates[] = $group['suggested_date'];
+		}
+	}
+	foreach ( $split->compute_removal_options() as $option ) {
+		$dates[] = $option['date'];
+		// The sentence the customer reads has to carry the same date as the
+		// option behind it, or the banner and the button disagree.
+		assert_contains( $option['date_label'], $option['text'], 'the offer names its own date' );
+	}
+	return $dates;
+}
+
+/** Nothing shown may be a day the delivery-day source did not offer. */
+function oko_split_assert_dates_are_real( $split ): array {
+	$offered = oko_test_delivery_days();
+	$shown   = oko_split_shown_dates( $split );
+
+	foreach ( $shown as $date ) {
+		if ( ! in_array( $date, $offered, true ) ) {
+			fail( sprintf(
+				'the banner shows %s, which Økoskabet did not offer (it offered %s)',
+				$date,
+				implode( ', ', $offered )
+			) );
+		}
+	}
+
+	return $shown;
+}
+
+it( 'shows no date the shop does not actually deliver on', function () {
+	oko_split_weekday_shop();
+
+	// A real shop drives on a handful of days, not every day, and the soonest
+	// day its rules allow is usually not one of them — lead time, a full van,
+	// a holiday. Deliberately a week out, so code that builds its own calendar
+	// and takes the nearest allowed day lands somewhere the van never goes.
+	oko_test_set_delivery_days( array(
+		oko_test_weekday_next_week( 1 ),
+		oko_test_weekday_next_week( 3 ),
+		oko_test_weekday_next_week( 5 ),
+	) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD, 'c' => OKO_SPLIT_CHEESE ) );
+
+	$shown = oko_split_assert_dates_are_real( oko_split() );
+	assert_true( count( $shown ) > 0, 'the banner did show some dates' );
+} );
+
+it( 'never shows today just because no rule forbids it', function () {
+	// Gaardmester's staging, Thursday 17 September 2026. The ice was
+	// Thursday-only, so a rules-only calendar found today allowed and offered
+	// "Levering 1 (17. september)" — a day the shop does not drive on. Pinning
+	// one product's rule to today's own weekday reproduces that whatever day
+	// the tests are run on.
+	$today_weekday = oko_test_today_weekday();
+	$other_weekday = ( $today_weekday + 2 ) % 7;
+
+	oko_test_add_product( OKO_SPLIT_MILK, 'Mælk', array( OKO_SPLIT_CAT_MON ) );
+	oko_test_add_product( OKO_SPLIT_BREAD, 'Brød', array( OKO_SPLIT_CAT_WED ) );
+	oko_test_set_exceptions( array(
+		'weekdays_enabled' => true,
+		'weekdays'         => array(
+			$today_weekday => array( 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_MON ), 'tags' => array() ),
+			$other_weekday => array( 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_WED ), 'tags' => array() ),
+		),
+	) );
+
+	// The shop's own days start next week, so today is allowed by the rules and
+	// still not a delivery day.
+	oko_test_set_delivery_days( array(
+		oko_test_weekday_next_week( $today_weekday ),
+		oko_test_weekday_next_week( $other_weekday ),
+	) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	foreach ( oko_split_shown_dates( oko_split() ) as $date ) {
+		assert_false( $date === oko_test_date( 0 ), 'today is not offered as a delivery day' );
+	}
+	oko_split_assert_dates_are_real( oko_split() );
+} );
+
+it( 'reproduces the Gaardmester basket: grønt on Tuesday, is on Thursday', function () {
+	// Two weekday rules with no day in common, against the shop's real week.
+	oko_test_add_product( OKO_SPLIT_MILK, 'Danske økologiske oxheart gulerødder', array( OKO_SPLIT_CAT_MON ) );
+	oko_test_add_product( OKO_SPLIT_BREAD, 'Økologisk rabarber isvafler', array( OKO_SPLIT_CAT_WED ) );
+	oko_test_set_exceptions( array(
+		'weekdays_enabled' => true,
+		'weekdays'         => array(
+			2 => array( 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_MON ), 'tags' => array() ), // Tue
+			4 => array( 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_WED ), 'tags' => array() ), // Thu
+		),
+	) );
+
+	$tuesday  = oko_test_weekday_next_week( 2 );
+	$thursday = oko_test_weekday_next_week( 4 );
+	oko_test_set_delivery_days( array( $tuesday, oko_test_weekday_next_week( 3 ), $thursday, oko_test_weekday_next_week( 5 ) ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	$groups = oko_split()->compute_split_groups();
+	assert_same( 2, count( $groups ), 'two deliveries' );
+
+	$by_date = array();
+	foreach ( $groups as $group ) {
+		$by_date[ $group['suggested_date'] ] = $group['product_names'];
+	}
+	assert_same( array( 'Danske økologiske oxheart gulerødder' ), $by_date[ $tuesday ] ?? null, 'the veg goes on the Tuesday' );
+	assert_same( array( 'Økologisk rabarber isvafler' ), $by_date[ $thursday ] ?? null, 'the ice goes on the Thursday' );
+
+	oko_split_assert_dates_are_real( oko_split() );
+} );
+
+it( 'draws no banner at all when Økoskabet cannot be asked', function () {
+	oko_split_weekday_shop();
+	oko_test_set_delivery_days( null ); // no postcode yet, or the API is down
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	// Better a checkout with no banner than a banner full of invented dates.
+	assert_same( array(), oko_split()->compute_delivery_groups(), 'no groups' );
+	assert_same( array(), oko_split()->compute_removal_options(), 'no offers' );
+} );
+
+it( 'says a group has no day rather than inventing one', function () {
+	oko_split_weekday_shop();
+	// The shop drives on Mondays and Wednesdays. Nothing the cheese is allowed
+	// on (Fridays) is among them, so its group genuinely has no day.
+	oko_test_set_delivery_days( array( oko_test_weekday_next_week( 1 ), oko_test_weekday_next_week( 3 ) ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_CHEESE ) );
+
+	$groups = oko_split()->compute_split_groups();
+	$last   = $groups[ count( $groups ) - 1 ];
+	assert_same( '', $last['suggested_date'], 'no date is made up for it' );
+	assert_same( array( 'Ost' ), oko_split_names( $last ) );
+
+	oko_split_assert_dates_are_real( oko_split() );
+} );
+
+it( 'asks the delivery-day source once per product, however often it is consulted', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	// Each miss is an HTTP round trip to Økoskabet, and one checkout render
+	// consults this three times over.
+	$split = oko_split();
+	$split->compute_delivery_groups();
+	$split->compute_removal_options();
+	$split->compute_split_groups();
+
+	assert_same( 2, count( array_unique( $split->asked ) ), 'two distinct products' );
 } );
 
 describe( 'Split checkout: the wording on the buttons' );

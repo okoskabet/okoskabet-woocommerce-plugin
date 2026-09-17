@@ -59,8 +59,42 @@ function oko_test_reset(): void {
 	$GLOBALS['oko_test_settings'] = array();
 	$GLOBALS['oko_test_hooks']    = array();
 	$GLOBALS['oko_test_notices']  = array();
+	// A month of daily deliveries unless a test says otherwise. Tests about the
+	// grouping want the rules to be the only thing narrowing the days; tests
+	// about the dates themselves set a sparse, realistic calendar.
+	$GLOBALS['oko_test_delivery_days'] = oko_test_days_ahead( 28 );
 	\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::purge_rules_cache();
 	oko_test_set_cart( array() );
+}
+
+/**
+ * The occurrence of a weekday in the week AFTER the next one.
+ *
+ * Tests about where dates come from use this rather than the next occurrence,
+ * and the difference is the whole test: a shop's delivery days are a subset of
+ * the days its rules allow, never the same set. Code that builds its own
+ * calendar lands on the nearest allowed day, which is usually sooner than any
+ * day the van actually comes — and a test whose offered days start at the
+ * nearest one cannot tell the two apart.
+ */
+function oko_test_weekday_next_week( int $weekday ): string {
+	return ( new DateTimeImmutable( oko_test_next_weekday( $weekday ), wp_timezone() ) )
+		->modify( '+7 days' )
+		->format( 'Y-m-d' );
+}
+
+/** Today's weekday, 0=Sun..6=Sat. */
+function oko_test_today_weekday(): int {
+	return (int) ( new DateTimeImmutable( 'today', wp_timezone() ) )->format( 'w' );
+}
+
+/** Every date from today up to N days out. */
+function oko_test_days_ahead( int $count ): array {
+	$days = array();
+	for ( $i = 0; $i < $count; $i++ ) {
+		$days[] = oko_test_date( $i );
+	}
+	return $days;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +288,54 @@ function oko_test_set_cart( array $items ): void {
 require_once dirname( __DIR__, 2 ) . '/engine/Base.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Delivery_Exceptions.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Split_Checkout.php';
+
+/**
+ * The days the shop drives on, as Økoskabet would answer for this address.
+ *
+ * Null stands for "Økoskabet could not be asked" — no postcode yet, or the API
+ * unreachable. That is a different answer from "no days", and the banner has to
+ * treat it differently.
+ *
+ * @var string[]|null
+ */
+$GLOBALS['oko_test_delivery_days'] = array();
+
+/** Say which days the shop delivers on, or null for "cannot be asked". */
+function oko_test_set_delivery_days( ?array $days ): void {
+	$GLOBALS['oko_test_delivery_days'] = $days;
+}
+
+/** The days the source was told to offer, for tests that check against them. */
+function oko_test_delivery_days(): ?array {
+	return $GLOBALS['oko_test_delivery_days'];
+}
+
+/**
+ * Split checkout with Økoskabet's delivery-day endpoint stood in for.
+ *
+ * The stand-in does what the real endpoint does, in the same order: Økoskabet
+ * names the days it drives on, and the merchant's exception rules narrow that
+ * list. What it will not do — and this is the whole point of it — is invent a
+ * day the shop does not deliver on, so a test can hold every date the banner
+ * shows against the days that were actually offered.
+ */
+class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations\Split_Checkout {
+
+	/** @var int[] Every product the source was asked about. */
+	public $asked = array();
+
+	protected function delivery_days_for_product( int $product_id ): ?array {
+		$this->asked[] = $product_id;
+
+		$days = $GLOBALS['oko_test_delivery_days'];
+		if ( $days === null ) {
+			return null;
+		}
+
+		return ( new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions() )
+			->filter_dates_for_cart( $days, array( $product_id ) );
+	}
+}
 
 // ---------------------------------------------------------------------------
 // A test runner, as small as it can be and still say what broke

@@ -788,7 +788,29 @@ HTML;
  */
 function oko_home_delivery_has_dates(string $postcode, array $product_ids): ?bool
 {
-	if (! class_exists('\\okoskabet_woocommerce_plugin\\Rest\\OkoRest')) {
+	$dates = oko_home_delivery_dates($postcode, $product_ids);
+
+	return $dates === null ? null : ! empty($dates);
+}
+
+/**
+ * The days Økoskabet will deliver these products to this address, asked
+ * exactly the way the date picker asks — so the answer is the days the
+ * customer is about to be offered, no more and no less. Økoskabet decides
+ * which days exist at all; the merchant's exception rules are applied on top,
+ * inside the response.
+ *
+ * Null means the question could not be answered: no postcode yet, no API key,
+ * the API unreachable. Null is not "no days". Callers have to tell the two
+ * apart, because "we don't know yet" and "there is no day" mean opposite
+ * things to a customer standing in the checkout.
+ *
+ * @param  int[] $product_ids
+ * @return string[]|null Sorted Y-m-d dates, or null when unanswerable.
+ */
+function oko_home_delivery_dates(string $postcode, array $product_ids): ?array
+{
+	if ($postcode === '' || ! class_exists('\\okoskabet_woocommerce_plugin\\Rest\\OkoRest')) {
 		return null;
 	}
 	$request = new \WP_REST_Request('GET');
@@ -802,7 +824,16 @@ function oko_home_delivery_has_dates(string $postcode, array $product_ids): ?boo
 	if (! is_array($data['results'] ?? null) || ! array_key_exists('delivery_dates', $data['results'])) {
 		return null;
 	}
-	return ! empty($data['results']['delivery_dates']);
+
+	$dates = array();
+	foreach ((array) $data['results']['delivery_dates'] as $date) {
+		if (is_string($date) && $date !== '') {
+			$dates[] = $date;
+		}
+	}
+	sort($dates);
+
+	return $dates;
 }
 
 /**

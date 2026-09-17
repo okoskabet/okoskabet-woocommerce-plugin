@@ -31,11 +31,8 @@ function oko_flip_catalogue(): void {
 
 /** The dates a single product could be delivered on, over the next fortnight. */
 function oko_flip_dates_for( int $product_id ): array {
-	$window = array();
-	for ( $i = 0; $i < 14; $i++ ) {
-		$window[] = oko_test_date( $i );
-	}
-	return Delivery_Exceptions::deliverable_dates_for_products( $window, array( $product_id ) );
+	$window = oko_test_days_ahead( 14 );
+	return ( new Delivery_Exceptions() )->filter_dates_for_cart( $window, array( $product_id ) );
 }
 
 /** Are all the given dates a Wednesday? */
@@ -212,10 +209,7 @@ it( 'the same floor holds for a flipped cutoff rule with nothing chosen', functi
 /** A fortnight of candidate dates. */
 function oko_flip_window(): array {
 	$window = array();
-	for ( $i = 0; $i < 14; $i++ ) {
-		$window[] = oko_test_date( $i );
-	}
-	return $window;
+	return oko_test_days_ahead( 14 );
 }
 
 it( 'a flipped weekday rule bites when the cart holds ONE product outside the selection', function () {
@@ -229,7 +223,7 @@ it( 'a flipped weekday rule bites when the cart holds ONE product outside the se
 
 	// Asked about the pair, the flipped rule must still bite: the bread is
 	// covered by it, and the frost in the basket does not buy the bread out.
-	$both = Delivery_Exceptions::deliverable_dates_for_products(
+	$both = ( new Delivery_Exceptions() )->filter_dates_for_cart(
 		oko_flip_window(),
 		array( OKO_PRODUCT_FROZEN_PEAS, OKO_PRODUCT_RYE_BREAD )
 	);
@@ -254,7 +248,7 @@ it( 'a flipped single-day rule bites on a mixed cart, rather than being pooled a
 	// the basket would buy the bread out of a rule aimed squarely at it.
 	assert_same(
 		array( $the_day ),
-		Delivery_Exceptions::deliverable_dates_for_products(
+		( new Delivery_Exceptions() )->filter_dates_for_cart(
 			oko_flip_window(),
 			array( OKO_PRODUCT_FROZEN_PEAS, OKO_PRODUCT_RYE_BREAD )
 		),
@@ -273,7 +267,7 @@ it( 'a flipped from/until rule bites on a mixed cart too', function () {
 
 	assert_same(
 		array( oko_test_date( 3 ), oko_test_date( 4 ), oko_test_date( 5 ), oko_test_date( 6 ) ),
-		Delivery_Exceptions::deliverable_dates_for_products(
+		( new Delivery_Exceptions() )->filter_dates_for_cart(
 			oko_flip_window(),
 			array( OKO_PRODUCT_FROZEN_PEAS, OKO_PRODUCT_RYE_BREAD )
 		),

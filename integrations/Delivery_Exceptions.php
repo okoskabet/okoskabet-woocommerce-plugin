@@ -1196,55 +1196,6 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
-	 * Which of the given dates a set of products could actually be delivered on.
-	 *
-	 * The same restrict stage `filter_dates_for_cart()` runs — every applicable
-	 * rule must allow the date, the past is stripped, and any cutoff rule that
-	 * constrains these products closes the dates it has run out of time for —
-	 * but without the display limit or the pre-order split, both of which are
-	 * about what a customer is *shown* rather than what is deliverable.
-	 *
-	 * Split checkout asks this per cart line to work out whether one date can
-	 * carry the whole basket, so it has to be the same answer the date picker
-	 * would give for that line on its own; anything else and the plugin would
-	 * offer a split it cannot then book.
-	 *
-	 * @param string[] $dates       Candidate Y-m-d dates.
-	 * @param int[]    $product_ids The products that must all be deliverable.
-	 * @return string[] Sorted, the subset that works.
-	 */
-	public static function deliverable_dates_for_products( array $dates, array $product_ids ): array {
-		$product_ids = array_values( array_filter( array_map( 'intval', $product_ids ), function ( $id ) { return $id > 0; } ) );
-
-		$result = self::strip_past_dates( $dates );
-		if ( empty( $product_ids ) ) {
-			sort( $result );
-			return $result;
-		}
-
-		$config = self::get_config();
-		$rules  = ( new self() )->collect_applicable_rules( $product_ids, $config );
-
-		if ( ! empty( $rules ) ) {
-			$result = array_values( array_filter( $result, function ( $date ) use ( $rules ): bool {
-				if ( ! is_string( $date ) || $date === '' ) {
-					return false;
-				}
-				foreach ( $rules as $rule ) {
-					if ( ! self::date_passes_rule( $date, $rule ) ) {
-						return false;
-					}
-				}
-				return true;
-			} ) );
-		}
-
-		sort( $result );
-
-		return self::apply_cutoff( $result, $product_ids, $config );
-	}
-
-	/**
 	 * Drop the soonest dates the cart can no longer be ordered for. Each enabled
 	 * cutoff rule closes ordering for its categories/tags `days` before delivery
 	 * at `time`; a rule constrains this cart when any cart product matches it. A

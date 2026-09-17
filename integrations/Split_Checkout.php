@@ -126,15 +126,71 @@ class Split_Checkout extends Base {
 	}
 
 	/**
-	 * How many days ahead split detection looks. The Økoskabet API decides
-	 * which days a shop actually delivers on; here we only need a horizon wide
-	 * enough that a genuinely conflicting cart still finds its dates. A
-	 * once-a-year only_on rule sits inside 365.
+	 * The days Økoskabet will deliver a single product to this customer.
+	 *
+	 * Økoskabet decides which days exist for an address; the merchant's
+	 * exception rules only ever narrow that list. Asking the delivery-day
+	 * endpoint — the same one the date picker asks, through the same function —
+	 * is therefore the only way to get a date this class may put in front of a
+	 * customer.
+	 *
+	 * An earlier version built its own 365-day calendar and ran the exception
+	 * rules over that. Every date it produced was a guess. On Gaardmester's
+	 * staging it offered "Levering 1 (17. september)" — the day the page
+	 * happened to be loaded, and not a day the shop drives on at all — because
+	 * no rule happened to forbid it. The rules say which of the shop's days a
+	 * product may use; they cannot conjure a day the shop does not deliver on,
+	 * and neither may we.
+	 *
+	 * Null when the question cannot be answered at all, which is not the same
+	 * as "no days" — see oko_home_delivery_dates().
+	 *
+	 * Protected so a test can stand in for Økoskabet.
+	 *
+	 * @return string[]|null Sorted Y-m-d dates, or null when unanswerable.
 	 */
-	const DETECTION_WINDOW_DAYS = 365;
+	protected function delivery_days_for_product( int $product_id ): ?array {
+		if ( ! function_exists( 'oko_home_delivery_dates' ) ) {
+			return null;
+		}
+
+		$postcode = $this->customer_postcode();
+		if ( $postcode === '' ) {
+			return null;
+		}
+
+		// One question per product per request. The banner, the removal options
+		// and the submission guard all ask the same thing during a single
+		// checkout render, and every miss is an HTTP round trip to Økoskabet.
+		static $cache = array();
+		$key = $postcode . '|' . $product_id;
+		if ( ! array_key_exists( $key, $cache ) ) {
+			$cache[ $key ] = \oko_home_delivery_dates( $postcode, array( $product_id ) );
+		}
+
+		return $cache[ $key ];
+	}
+
+	/** Where the customer is having this delivered, as far as we know yet. */
+	private function customer_postcode(): string {
+		if ( ! function_exists( 'WC' ) || ! WC()->customer ) {
+			return '';
+		}
+		$postcode = trim( (string) WC()->customer->get_shipping_postcode() );
+		if ( $postcode === '' ) {
+			$postcode = trim( (string) WC()->customer->get_billing_postcode() );
+		}
+
+		return $postcode;
+	}
 
 	/**
-	 * Which delivery dates each cart line could be delivered on.
+	 * Which delivery days each cart line can actually be delivered on.
+	 *
+	 * Empty when there is nothing to work out, and empty too when we cannot
+	 * find out: with no answer from Økoskabet there is no honest banner to
+	 * draw, so we draw none and leave the date picker to tell the customer
+	 * what it finds. A banner full of invented dates is worse than no banner.
 	 *
 	 * @return array<string, string[]> cart_item_key => sorted Y-m-d dates
 	 */
@@ -144,42 +200,28 @@ class Split_Checkout extends Base {
 		}
 
 		// With no delivery rules configured at all, every product can go on
-		// every day the API offers, so the cart never needs splitting. Saying
+		// every day Økoskabet offers, so the cart never needs splitting. Saying
 		// so up front keeps the cost of this feature at zero for the shops that
-		// have not switched any rule on — which is most of them, and they pay
-		// for this on every checkout render otherwise.
+		// have not switched any rule on — which is most of them, and who would
+		// otherwise pay for a round trip per product on every checkout render.
 		if ( ! \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::is_in_use() ) {
 			return array();
 		}
 
-		$window = $this->detection_window();
-		$out    = array();
+		$out = array();
 		foreach ( WC()->cart->get_cart() as $key => $item ) {
 			$pid = (int) ( $item['product_id'] ?? 0 );
 			if ( $pid <= 0 ) {
 				continue;
 			}
-			$out[ $key ] = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::deliverable_dates_for_products(
-				$window,
-				array( $pid )
-			);
+			$days = $this->delivery_days_for_product( $pid );
+			if ( $days === null ) {
+				return array();
+			}
+			$out[ $key ] = $days;
 		}
 
 		return $out;
-	}
-
-	/**
-	 * The candidate dates split detection tests rules against, starting today.
-	 *
-	 * @return string[]
-	 */
-	private function detection_window(): array {
-		$dates = array();
-		$start = new \DateTimeImmutable( 'today', wp_timezone() );
-		for ( $i = 0; $i < self::DETECTION_WINDOW_DAYS; $i++ ) {
-			$dates[] = $start->modify( "+{$i} days" )->format( 'Y-m-d' );
-		}
-		return $dates;
 	}
 
 	/**
