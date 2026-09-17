@@ -256,9 +256,7 @@ function custom_content_for_custom_shipping_checkout(): void
  */
 function oko_render_delivery_ui(string $context = 'table'): void
 {
-	static $rendered = false;
-
-	if ($rendered) {
+	if (oko_delivery_ui_rendered()) {
 		return;
 	}
 
@@ -288,7 +286,7 @@ function oko_render_delivery_ui(string $context = 'table'): void
 	// Latched only once we are certain we are drawing. A shop without a key
 	// renders nothing and stays free to render later in the same request, if
 	// a key arrives — which is what a settings save inside checkout does.
-	$rendered = true;
+	oko_delivery_ui_rendered(true);
 
 	$shed_description  = ! empty($merchant['description_shipping_okoskabet']) ? $merchant['description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
 	$local_description = ! empty($merchant['description_shipping_private'])   ? $merchant['description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
@@ -482,6 +480,102 @@ function oko_delivery_ui_shortcode($atts = array()): string
 function oko_delivery_ui(string $context = 'block'): void
 {
 	oko_render_delivery_ui($context === 'table' ? 'table' : 'block');
+}
+
+/** Whether the delivery UI has been drawn in this request. Latches once. */
+function oko_delivery_ui_rendered(?bool $set = null): bool
+{
+	static $rendered = false;
+
+	if ($set === true) {
+		$rendered = true;
+	}
+
+	return $rendered;
+}
+
+/** Is one of our own shipping methods actually on offer for this cart? */
+function oko_cart_offers_okoskabet_rate(): bool
+{
+	if (! function_exists('WC') || ! WC()->shipping()) {
+		return false;
+	}
+
+	foreach ((array) WC()->shipping()->get_packages() as $package) {
+		foreach ((array) ($package['rates'] ?? array()) as $rate) {
+			if ($rate instanceof \WC_Shipping_Rate && strpos($rate->get_method_id(), 'hey_okoskabet_') === 0) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/** Where we remember that a checkout finished without drawing the UI. */
+const OKO_UI_MISSING_OPTION = 'okoskabet_delivery_ui_missing';
+
+add_action('wp_footer', 'oko_note_whether_delivery_ui_rendered', 99);
+
+/**
+ * Notice, at the end of a checkout, whether the delivery UI ever got drawn.
+ *
+ * This is the check that would have saved an evening. When a checkout does not
+ * fire the review-order hook, nothing breaks loudly: the Økoskabet shipping
+ * methods still appear, priced and selectable, because they are registered
+ * shipping methods and have nothing to do with the hook. The checkout looks
+ * finished. Only a customer reaching the end finds there is no way to choose
+ * a shed or a date — and the shop hears about it from them.
+ *
+ * So the plugin now watches its own rendering and says so in wp-admin.
+ *
+ * The conditions are deliberately narrow, because a false alarm on a shop
+ * where everything is fine is worse than no alarm at all: a real checkout
+ * page, a shop that has an API key, and one of our own rates actually on
+ * offer for the cart in front of the customer.
+ */
+function oko_note_whether_delivery_ui_rendered(): void
+{
+	if (! function_exists('is_checkout') || ! is_checkout()) {
+		return;
+	}
+	if (function_exists('is_order_received_page') && is_order_received_page()) {
+		return;
+	}
+
+	$merchant = o_get_merchant();
+	if (empty($merchant['api_key'])) {
+		return;
+	}
+
+	if (! oko_cart_offers_okoskabet_rate()) {
+		return;
+	}
+
+	$missing = ! oko_delivery_ui_rendered();
+
+	// Written only when the answer changes, so a busy checkout does not
+	// rewrite an option on every page view.
+	if ($missing !== (bool) get_option(OKO_UI_MISSING_OPTION, false)) {
+		update_option(OKO_UI_MISSING_OPTION, $missing, false);
+	}
+}
+
+add_action('admin_notices', 'oko_render_missing_delivery_ui_notice');
+
+/** Tell the shop, in words it can act on, that the picker never drew. */
+function oko_render_missing_delivery_ui_notice(): void
+{
+	if (! current_user_can('manage_woocommerce') || ! get_option(OKO_UI_MISSING_OPTION, false)) {
+		return;
+	}
+
+	printf(
+		'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p>%s</p></div>',
+		esc_html__('Økoskabet: the delivery picker is not showing in your checkout', O_TEXTDOMAIN),
+		esc_html__('Your checkout offers Økoskabet delivery, but the date and locker picker was not drawn on the last checkout a customer opened. They can choose a delivery method and still have no way to choose a day — and the checkout gives them no sign that anything is missing.', O_TEXTDOMAIN),
+		esc_html__('This happens when the checkout is built with something other than WooCommerce\'s own checkout — a page builder, or the block checkout. Place the shortcode [okoskabet_levering] where the delivery options belong, and this notice disappears by itself.', O_TEXTDOMAIN)
+	);
 }
 
 
