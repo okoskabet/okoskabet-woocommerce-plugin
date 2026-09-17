@@ -222,17 +222,18 @@ class Delivery_Exceptions extends Base {
 
 			// Weekdays family: 7 entries (0=Sun…6=Sat in PHP date('w')).
 			// Each entry has its own enabled flag and lists of cat/tag IDs.
+			// `flip` inverts the selection — see rule_matches_terms().
 			'weekdays' => array(
-				0 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Sun
-				1 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Mon
-				2 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Tue
-				3 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Wed
-				4 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Thu
-				5 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Fri
-				6 => array( 'enabled' => false, 'categories' => array(), 'tags' => array() ), // Sat
+				0 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Sun
+				1 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Mon
+				2 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Tue
+				3 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Wed
+				4 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Thu
+				5 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Fri
+				6 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Sat
 			),
 
-			// only_on: list of {label, date, enabled, extend, categories, tags}.
+			// only_on: list of {label, date, enabled, extend, flip, categories, tags}.
 			'only_on'   => array(),
 
 			// What the checkout's pre-order button says, in each direction.
@@ -245,7 +246,7 @@ class Delivery_Exceptions extends Base {
 			'pre_order_notice_enabled' => false,
 			'pre_order_notice'         => '',
 
-			// from_until: list of {label, from, until, enabled, categories, tags}.
+			// from_until: list of {label, from, until, enabled, extend, flip, categories, tags}.
 			'from_until' => array(),
 
 			// Per-rule cutoff. Each rule closes ordering for products carrying a
@@ -256,7 +257,7 @@ class Delivery_Exceptions extends Base {
 			// is enforced here because the API doesn't expose the merchant's cutoff
 			// yet; if it starts to, prefer that source (see backend PR #1412).
 			'cutoff_enabled' => false,
-			// list of { label:string, days:int, time:string, enabled:bool, categories:int[], tags:int[] }
+			// list of { label:string, days:int, time:string, enabled:bool, flip:bool, categories:int[], tags:int[] }
 			'cutoff_rules'   => array(),
 		);
 	}
@@ -326,6 +327,9 @@ class Delivery_Exceptions extends Base {
 				if ( isset( $stored['weekdays'][ $w ] ) && is_array( $stored['weekdays'][ $w ] ) ) {
 					$defaults['weekdays'][ $w ] = array(
 						'enabled'    => (bool) ( $stored['weekdays'][ $w ]['enabled']    ?? false ),
+						// Off unless ticked: a rule saved before the flip existed
+						// means "the chosen products", and must stay that.
+						'flip'       => (bool) ( $stored['weekdays'][ $w ]['flip']       ?? false ),
 						'categories' => array_map( 'intval', (array) ( $stored['weekdays'][ $w ]['categories'] ?? array() ) ),
 						'tags'       => array_map( 'intval', (array) ( $stored['weekdays'][ $w ]['tags']       ?? array() ) ),
 					);
@@ -347,6 +351,7 @@ class Delivery_Exceptions extends Base {
 					// Off unless ticked, as for from/until: a rule saved before
 					// this existed means "only on this day", and stays that.
 					'extend'     => (bool) ( $item['extend'] ?? false ),
+					'flip'       => (bool) ( $item['flip']   ?? false ),
 					'categories' => array_map( 'intval', (array) ( $item['categories'] ?? array() ) ),
 					'tags'       => array_map( 'intval', (array) ( $item['tags']       ?? array() ) ),
 				);
@@ -370,6 +375,7 @@ class Delivery_Exceptions extends Base {
 					// into an extension would, for a year-round rule, put a
 					// year of dates in front of that merchant's customers.
 					'extend'     => (bool) ( $item['extend'] ?? false ),
+					'flip'       => (bool) ( $item['flip']   ?? false ),
 					'categories' => array_map( 'intval', (array) ( $item['categories'] ?? array() ) ),
 					'tags'       => array_map( 'intval', (array) ( $item['tags']       ?? array() ) ),
 				);
@@ -396,6 +402,7 @@ class Delivery_Exceptions extends Base {
 					'days'       => max( 0, (int) ( $item['days'] ?? 1 ) ),
 					'time'       => preg_match( '/^\d{1,2}:\d{2}$/', (string) ( $item['time'] ?? '' ) ) ? (string) $item['time'] : '09:00',
 					'enabled'    => (bool) ( $item['enabled'] ?? true ),
+					'flip'       => (bool) ( $item['flip'] ?? false ),
 					'categories' => $cats,
 					'tags'       => $tags,
 				);
@@ -416,6 +423,7 @@ class Delivery_Exceptions extends Base {
 					'days'       => $legacy_lead + max( 0, (int) ( $item['offset_days'] ?? 0 ) ),
 					'time'       => $legacy_time,
 					'enabled'    => (bool) ( $item['enabled'] ?? true ),
+					'flip'       => false,
 					'categories' => array(),
 					'tags'       => array( (int) $item['tag'] ),
 				);
@@ -451,6 +459,8 @@ class Delivery_Exceptions extends Base {
 				<?php esc_html_e( 'Define exceptions for delivery dates based on categories and tags. The rules are exceptions — products not associated with a rule have no restriction.', O_TEXTDOMAIN ); ?>
 				<br>
 				<?php esc_html_e( 'If a product matches multiple rules, ALL rules must be satisfied for a date to be shown.', O_TEXTDOMAIN ); ?>
+				<br>
+				<?php esc_html_e( 'Every rule has an "Applies to all products other than the chosen ones" tick. Ticked, the rule covers exactly the products that carry none of the categories and tags you picked — so "everything but frost" needs one rule rather than a list of every other category. A rule with nothing picked covers nothing, ticked or not.', O_TEXTDOMAIN ); ?>
 			</p>
 
 			<?php if ( $saved ) : ?>
@@ -617,6 +627,7 @@ class Delivery_Exceptions extends Base {
 					<input type="checkbox" name="cutoff_rules[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
 					<?php esc_html_e( 'Aktiv', O_TEXTDOMAIN ); ?>
 				</label>
+				<?php $this->render_flip_control( "cutoff_rules[$index][flip]", ! empty( $row['flip'] ) ); ?>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
 					<?php esc_html_e( 'Fjern', O_TEXTDOMAIN ); ?>
 				</button>
@@ -730,6 +741,7 @@ class Delivery_Exceptions extends Base {
 								<input type="checkbox" name="weekdays[<?php echo (int) $w; ?>][enabled]" value="1" <?php checked( ! empty( $entry['enabled'] ) ); ?> />
 								<?php echo esc_html( $labels[ $w ] ); ?>
 							</label>
+							<?php $this->render_flip_control( "weekdays[$w][flip]", ! empty( $entry['flip'] ) ); ?>
 						</div>
 						<div class="oko-row-fields">
 							<div>
@@ -811,6 +823,7 @@ class Delivery_Exceptions extends Base {
 					<input type="checkbox" name="only_on[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
 					<?php esc_html_e( 'Pre-order: offer this date on top of the normal ones', O_TEXTDOMAIN ); ?>
 				</label>
+				<?php $this->render_flip_control( "only_on[$index][flip]", ! empty( $row['flip'] ) ); ?>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
 					<?php esc_html_e( 'Remove', O_TEXTDOMAIN ); ?>
 				</button>
@@ -877,6 +890,7 @@ class Delivery_Exceptions extends Base {
 					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
 					<?php esc_html_e( 'Pre-order: offer these dates on top of the normal ones', O_TEXTDOMAIN ); ?>
 				</label>
+				<?php $this->render_flip_control( "from_until[$index][flip]", ! empty( $row['flip'] ) ); ?>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
 					<?php esc_html_e( 'Fjern', O_TEXTDOMAIN ); ?>
 				</button>
@@ -899,6 +913,25 @@ class Delivery_Exceptions extends Base {
 	 * Render a multi-select for categories or tags. Defensive against any
 	 * value type — selected IDs are normalised to strings for comparison.
 	 */
+	/**
+	 * The per-rule "apply to everything else" tick.
+	 *
+	 * One checkbox per rule — not one per field — because a merchant thinks
+	 * about a rule as a whole ("Wednesday is for everything that isn't frost"),
+	 * never about categories and tags pulling in opposite directions.
+	 *
+	 * @param string $name  The input's name attribute.
+	 * @param bool   $value Whether it is currently ticked.
+	 */
+	private function render_flip_control( string $name, bool $value ): void {
+		?>
+		<label title="<?php esc_attr_e( 'Turns the rule around: it then covers every product that carries NONE of the categories and tags chosen below. A rule with nothing chosen still covers nothing.', O_TEXTDOMAIN ); ?>">
+			<input type="checkbox" name="<?php echo esc_attr( $name ); ?>" value="1" <?php checked( $value ); ?> />
+			<?php esc_html_e( 'Applies to all products other than the chosen ones', O_TEXTDOMAIN ); ?>
+		</label>
+		<?php
+	}
+
 	private function render_term_select( string $name, array $terms, array $selected ): void {
 		$selected_str = array_map( 'strval', array_map( 'intval', $selected ) );
 		echo '<select name="' . esc_attr( $name ) . '" multiple class="oko-multi">';
@@ -954,6 +987,7 @@ class Delivery_Exceptions extends Base {
 			$src = $posted_weekdays[ $w ] ?? array();
 			$config['weekdays'][ $w ] = array(
 				'enabled'    => ! empty( $src['enabled'] ),
+				'flip'       => ! empty( $src['flip'] ),
 				'categories' => $this->sanitize_id_list( $src['categories'] ?? array() ),
 				'tags'       => $this->sanitize_id_list( $src['tags'] ?? array() ),
 			);
@@ -977,6 +1011,7 @@ class Delivery_Exceptions extends Base {
 				'date'       => $date,
 				'enabled'    => ! empty( $row['enabled'] ),
 				'extend'     => ! empty( $row['extend'] ),
+				'flip'       => ! empty( $row['flip'] ),
 				'categories' => $this->sanitize_id_list( $row['categories'] ?? array() ),
 				'tags'       => $this->sanitize_id_list( $row['tags'] ?? array() ),
 			);
@@ -1001,6 +1036,7 @@ class Delivery_Exceptions extends Base {
 				'until'      => $until,
 				'enabled'    => ! empty( $row['enabled'] ),
 				'extend'     => ! empty( $row['extend'] ),
+				'flip'       => ! empty( $row['flip'] ),
 				'categories' => $this->sanitize_id_list( $row['categories'] ?? array() ),
 				'tags'       => $this->sanitize_id_list( $row['tags'] ?? array() ),
 			);
@@ -1026,6 +1062,7 @@ class Delivery_Exceptions extends Base {
 				'days'       => max( 0, (int) ( $row['days'] ?? 1 ) ),
 				'time'       => preg_match( '/^\d{1,2}:\d{2}$/', $posted_time ) ? $posted_time : '09:00',
 				'enabled'    => ! empty( $row['enabled'] ),
+				'flip'       => ! empty( $row['flip'] ),
 				'categories' => $cats,
 				'tags'       => $tags,
 			);
@@ -1156,6 +1193,55 @@ class Delivery_Exceptions extends Base {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Which of the given dates a set of products could actually be delivered on.
+	 *
+	 * The same restrict stage `filter_dates_for_cart()` runs — every applicable
+	 * rule must allow the date, the past is stripped, and any cutoff rule that
+	 * constrains these products closes the dates it has run out of time for —
+	 * but without the display limit or the pre-order split, both of which are
+	 * about what a customer is *shown* rather than what is deliverable.
+	 *
+	 * Split checkout asks this per cart line to work out whether one date can
+	 * carry the whole basket, so it has to be the same answer the date picker
+	 * would give for that line on its own; anything else and the plugin would
+	 * offer a split it cannot then book.
+	 *
+	 * @param string[] $dates       Candidate Y-m-d dates.
+	 * @param int[]    $product_ids The products that must all be deliverable.
+	 * @return string[] Sorted, the subset that works.
+	 */
+	public static function deliverable_dates_for_products( array $dates, array $product_ids ): array {
+		$product_ids = array_values( array_filter( array_map( 'intval', $product_ids ), function ( $id ) { return $id > 0; } ) );
+
+		$result = self::strip_past_dates( $dates );
+		if ( empty( $product_ids ) ) {
+			sort( $result );
+			return $result;
+		}
+
+		$config = self::get_config();
+		$rules  = ( new self() )->collect_applicable_rules( $product_ids, $config );
+
+		if ( ! empty( $rules ) ) {
+			$result = array_values( array_filter( $result, function ( $date ) use ( $rules ): bool {
+				if ( ! is_string( $date ) || $date === '' ) {
+					return false;
+				}
+				foreach ( $rules as $rule ) {
+					if ( ! self::date_passes_rule( $date, $rule ) ) {
+						return false;
+					}
+				}
+				return true;
+			} ) );
+		}
+
+		sort( $result );
+
+		return self::apply_cutoff( $result, $product_ids, $config );
 	}
 
 	/**
@@ -1496,20 +1582,51 @@ class Delivery_Exceptions extends Base {
 		return self::$product_terms_cache[ $product_id ];
 	}
 
-	/** Does a single rule's category/tag list overlap with one product? */
+	/**
+	 * Does a single rule apply to ONE product?
+	 *
+	 * Normally: the rule's category/tag list overlaps the product's terms.
+	 *
+	 * With `flip` ticked ("Gælder alle andre varer end de valgte") the answer
+	 * is inverted — the rule applies to exactly those products that carry NONE
+	 * of the chosen categories or tags. That is what lets a shop say "everything
+	 * except frost is Wednesday-only" without listing every other category.
+	 *
+	 * A rule that selects NOTHING applies to nothing, flipped or not. Without
+	 * that floor, ticking the flip before choosing any category would silently
+	 * turn the rule on for every product in the shop — a shop-wide restriction
+	 * from a half-finished rule. An empty selection is an unfinished rule, not
+	 * a statement about the catalogue, so it stays inert either way. The cutoff
+	 * family goes further and drops such rows on save.
+	 *
+	 * @param array                $rule    Rule/entry with categories, tags and flip.
+	 * @param array<int,bool>      $cat_ids The product's category ids, as a lookup map.
+	 * @param array<int,bool>      $tag_ids The product's tag ids, as a lookup map.
+	 */
 	private static function rule_matches_terms( array $rule, array $cat_ids, array $tag_ids ): bool {
 		$rule_cats = (array) ( $rule['categories'] ?? array() );
 		$rule_tags = (array) ( $rule['tags'] ?? array() );
 		if ( empty( $rule_cats ) && empty( $rule_tags ) ) {
 			return false;
 		}
+
+		$hit = false;
 		foreach ( $rule_cats as $cid ) {
-			if ( ! empty( $cat_ids[ (int) $cid ] ) ) { return true; }
+			if ( ! empty( $cat_ids[ (int) $cid ] ) ) {
+				$hit = true;
+				break;
+			}
 		}
-		foreach ( $rule_tags as $tid ) {
-			if ( ! empty( $tag_ids[ (int) $tid ] ) ) { return true; }
+		if ( ! $hit ) {
+			foreach ( $rule_tags as $tid ) {
+				if ( ! empty( $tag_ids[ (int) $tid ] ) ) {
+					$hit = true;
+					break;
+				}
+			}
 		}
-		return false;
+
+		return ! empty( $rule['flip'] ) ? ! $hit : $hit;
 	}
 
 	/** Format weekday numbers (0=Sun…6=Sat) as a Danish phrase. */
@@ -1587,7 +1704,7 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/** Format a Y-m-d date as a Danish "den d. F YYYY" string. */
-	private static function format_date_human( string $date ): string {
+	public static function format_date_human( string $date ): string {
 		try {
 			$dt = self::wp_datetime( $date );
 		} catch ( \Exception $e ) {
@@ -1816,22 +1933,14 @@ class Delivery_Exceptions extends Base {
 			return self::$rules_cache[ $cache_key ];
 		}
 
-		// Pre-collect category and tag IDs per product (and a cart-wide union)
-		// so we don't repeat the term query for each rule. The per-product map
-		// is what lets us compute weekday availability product-by-product
-		// before intersecting across the cart.
+		// Pre-collect category and tag IDs per product so we don't repeat the
+		// term query for each rule. Every rule is asked product by product:
+		// that is what lets us compute weekday availability per product before
+		// intersecting across the cart, and it is what keeps a flipped rule
+		// honest (see rule_applies_to_cart).
 		$product_terms = array();
-		$cart_cat_ids  = array();
-		$cart_tag_ids  = array();
 		foreach ( $normalised as $pid ) {
-			$terms = self::product_terms( (int) $pid );
-			foreach ( array_keys( $terms['cats'] ) as $tid ) {
-				$cart_cat_ids[ (int) $tid ] = true;
-			}
-			foreach ( array_keys( $terms['tags'] ) as $tid ) {
-				$cart_tag_ids[ (int) $tid ] = true;
-			}
-			$product_terms[ $pid ] = $terms;
+			$product_terms[ $pid ] = self::product_terms( (int) $pid );
 		}
 
 		$applicable = array();
@@ -1858,7 +1967,7 @@ class Delivery_Exceptions extends Base {
 					if ( empty( $entry['enabled'] ) ) {
 						continue;
 					}
-					if ( ! $this->terms_intersect( $entry, $pcats, $ptags ) ) {
+					if ( ! self::rule_matches_terms( $entry, $pcats, $ptags ) ) {
 						continue;
 					}
 					$matched   = true;
@@ -1886,7 +1995,7 @@ class Delivery_Exceptions extends Base {
 				if ( empty( $row['enabled'] ) || empty( $row['date'] ) ) {
 					continue;
 				}
-				if ( ! $this->terms_intersect( $row, $cart_cat_ids, $cart_tag_ids ) ) {
+				if ( ! self::rule_applies_to_cart( $row, $product_terms ) ) {
 					continue;
 				}
 				$applicable[] = array(
@@ -1903,7 +2012,7 @@ class Delivery_Exceptions extends Base {
 				if ( empty( $row['enabled'] ) || empty( $row['from'] ) ) {
 					continue;
 				}
-				if ( ! $this->terms_intersect( $row, $cart_cat_ids, $cart_tag_ids ) ) {
+				if ( ! self::rule_applies_to_cart( $row, $product_terms ) ) {
 					continue;
 				}
 				$applicable[] = array(
@@ -1920,23 +2029,21 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
-	 * Does the rule's category or tag list overlap with the cart's
-	 * categories and tags? An empty rule (no cats AND no tags) is treated
-	 * as not matching anything.
+	 * Does a rule apply to a cart — that is, to at least one product in it?
+	 *
+	 * Asked product by product rather than against the cart's pooled
+	 * categories and tags. For a plain rule the two are the same question, but
+	 * for a flipped one they are not: "the cart holds a product that is not
+	 * frost" is not "the cart as a whole carries no frost category". Pooling
+	 * would let one frost item in the basket switch a flipped rule off for
+	 * every other item.
+	 *
+	 * @param array                                            $rule
+	 * @param array<int,array{cats:array<int,bool>,tags:array<int,bool>}> $product_terms
 	 */
-	private function terms_intersect( array $rule, array $cart_cat_ids, array $cart_tag_ids ): bool {
-		$rule_cats = (array) ( $rule['categories'] ?? array() );
-		$rule_tags = (array) ( $rule['tags'] ?? array() );
-		if ( empty( $rule_cats ) && empty( $rule_tags ) ) {
-			return false;
-		}
-		foreach ( $rule_cats as $cid ) {
-			if ( ! empty( $cart_cat_ids[ (int) $cid ] ) ) {
-				return true;
-			}
-		}
-		foreach ( $rule_tags as $tid ) {
-			if ( ! empty( $cart_tag_ids[ (int) $tid ] ) ) {
+	private static function rule_applies_to_cart( array $rule, array $product_terms ): bool {
+		foreach ( $product_terms as $terms ) {
+			if ( self::rule_matches_terms( $rule, $terms['cats'], $terms['tags'] ) ) {
 				return true;
 			}
 		}

@@ -253,6 +253,74 @@ class PackagingFeeTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertTrue( Packaging_Fee::coupon_waives_fee( $this->cart_with_coupons( array( $plain, $free ) ) ) );
 	}
 
+	// ------------------------------------------------------- split deliveries
+
+	/**
+	 * @test
+	 * Split checkout turns one basket into two ordinary orders, and each is
+	 * charged for its own box. That is not a rounding error to be tidied away
+	 * later: two deliveries really are two boxes, two lots of cool packs and
+	 * two trips. So the fee has to be decided from the cart in front of it and
+	 * nothing else — no memory of an earlier order, no "already paid".
+	 */
+	public function each_part_of_a_split_delivery_pays_its_own_packaging_fee() {
+		$frozen = $this->make_category( 'Frost' );
+		$pantry = $this->make_category( 'Tørvarer' );
+
+		$config = Packaging_Fee::normalise_config(
+			array(
+				'enabled' => true,
+				'rules'   => array(
+					$this->rule( array( 'label' => 'Emballage (frost)', 'amount' => '45', 'categories' => array( $frozen ) ) ),
+					$this->rule( array( 'label' => 'Emballage', 'amount' => '28' ) ),
+				),
+			)
+		);
+
+		// Step one goes out with the frozen goods, step two with the dry ones.
+		$step_one = $this->cart_with( array( $this->make_product( array( $frozen ) ) ) );
+		$step_two = $this->cart_with( array( $this->make_product( array( $pantry ) ) ) );
+
+		$first  = Packaging_Fee::matching_rule( $config, $step_one );
+		$second = Packaging_Fee::matching_rule( $config, $step_two );
+
+		$this->assertNotNull( $first, 'the first order is charged' );
+		$this->assertNotNull( $second, 'the second order is charged too' );
+		$this->assertSame( 'Emballage (frost)', $first['label'] );
+		$this->assertSame( 'Emballage', $second['label'] );
+
+		$this->assertSame( 45.0, Packaging_Fee::rule_amount( $first, $config, $step_one ) );
+		$this->assertSame( 28.0, Packaging_Fee::rule_amount( $second, $config, $step_two ) );
+	}
+
+	/**
+	 * @test
+	 * The same basket split down the middle pays the ordinary fee twice, not
+	 * once halved. A shop reading its takings has to see 28 and 28.
+	 */
+	public function splitting_a_basket_charges_the_fee_on_both_halves() {
+		$config = Packaging_Fee::normalise_config(
+			array(
+				'enabled' => true,
+				'rules'   => array( $this->rule( array( 'amount' => '28' ) ) ),
+			)
+		);
+
+		$halves = array(
+			$this->cart_with( array( $this->make_product() ) ),
+			$this->cart_with( array( $this->make_product() ) ),
+		);
+
+		$charged = 0.0;
+		foreach ( $halves as $half ) {
+			$rule = Packaging_Fee::matching_rule( $config, $half );
+			$this->assertNotNull( $rule );
+			$charged += Packaging_Fee::rule_amount( $rule, $config, $half );
+		}
+
+		$this->assertSame( 56.0, $charged, 'two deliveries, two boxes' );
+	}
+
 	// ---------------------------------------------------------------- helpers
 
 	private function make_category( string $name ): int {

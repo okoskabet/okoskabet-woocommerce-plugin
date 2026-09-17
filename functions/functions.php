@@ -540,7 +540,7 @@ function oko_print_delivery_date_mode($rate): void
 /** Which "what's new" notice a shop has dismissed. */
 const OKO_WHATS_NEW_OPTION = 'okoskabet_whats_new_dismissed';
 /** Bumped when there is something new to tell shops about. */
-const OKO_WHATS_NEW_KEY = 'pre-order-packaging-pickup-v1';
+const OKO_WHATS_NEW_KEY = 'split-delivery-flip-v1';
 
 add_action('admin_notices', 'oko_render_whats_new_notice');
 add_action('admin_init', 'oko_dismiss_whats_new_notice');
@@ -563,6 +563,8 @@ function oko_render_whats_new_notice(): void
 		__('Store pickup as a delivery method.', O_TEXTDOMAIN),
 		__('Island delivery: postcodes without delivery days can still be ordered and land among unprocessed orders.', O_TEXTDOMAIN),
 		__('Shipping methods in a row of their own at checkout.', O_TEXTDOMAIN),
+		__('Split delivery: a basket that needs more than one delivery day offers the customer two buttons — split it into one order per day, or see exactly which items to take out so the rest arrives together. The button wording is yours to set.', O_TEXTDOMAIN),
+		__('Delivery exceptions: each rule can be turned around to cover every product OTHER than the categories and tags you picked.', O_TEXTDOMAIN),
 	);
 	?>
 	<div class="notice notice-info">

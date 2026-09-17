@@ -9,14 +9,19 @@
  * Flow:
  *   1. On checkout page load, detect if a split is needed.
  *   2. If needed, render a banner above the checkout form listing the
- *      delivery groups and require the customer to acknowledge.
+ *      delivery groups and offering the customer two ways out:
+ *        - "Opdel levering i to" — one order per delivery day (this class);
+ *        - "Tøm fra kurven" — take the few items out of the basket that
+ *          stand in the way, and everything else goes out together.
+ *      Both button labels are the shop's to edit in the settings.
  *   3. The PHP `woocommerce_checkout_process` hook blocks order
  *      submission until either (a) no split is needed, or (b) the
- *      customer has acknowledged AND the cart now contains only the
+ *      customer picked one of the two and the cart now holds only the
  *      items for the current step.
- *   4. When the customer clicks "Continue with delivery 1", an AJAX
- *      endpoint stores the remaining groups in the WC session and
- *      replaces the cart with only the first group's items.
+ *   4. When the customer picks the split, an AJAX endpoint stores the
+ *      remaining groups in the WC session and replaces the cart with only
+ *      the first group's items. When they pick the other button, the named
+ *      items leave the cart and checkout carries on as usual.
  *   5. On the WooCommerce thank-you page, if there are pending groups
  *      in session, we show a "Order next delivery" banner. Clicking it
  *      restores the next group's items to the cart and redirects back
@@ -26,6 +31,12 @@
  *      gets a `_oko_split_token` post_meta (UUID v4) and a
  *      `_oko_split_step` (1, 2, 3...) so an admin can reconstruct
  *      the relationship by querying.
+ *
+ *      Independent also means each order pays its own shipping and its own
+ *      packaging fee. That is intended, not an oversight: two deliveries are
+ *      two vans and two boxes, and the second order is an ordinary
+ *      WooCommerce order whose cart computes both from scratch. Nothing here
+ *      suppresses the second charge, and nothing should start to.
  *
  * Out of scope for the MVP — see CHANGELOG.md and ROADMAP.md:
  *   - Email reminder if customer abandons mid-flow
@@ -77,6 +88,8 @@ class Split_Checkout extends Base {
 		add_action( 'wp_ajax_nopriv_oko_resume_split', array( $this, 'ajax_resume_split' ) );
 		add_action( 'wp_ajax_oko_cancel_split',        array( $this, 'ajax_cancel_split' ) );
 		add_action( 'wp_ajax_nopriv_oko_cancel_split', array( $this, 'ajax_cancel_split' ) );
+		add_action( 'wp_ajax_oko_reduce_split',        array( $this, 'ajax_reduce_split' ) );
+		add_action( 'wp_ajax_nopriv_oko_reduce_split', array( $this, 'ajax_reduce_split' ) );
 
 		// Show "next delivery" banner ABOVE the order details on thank-you
 		// page. We hook woocommerce_before_thankyou which fires before WC's
@@ -113,166 +126,412 @@ class Split_Checkout extends Base {
 	}
 
 	/**
-	 * Compute the delivery groups required to fulfil the current cart.
-	 *
-	 * Returns:
-	 *   - empty array → no split needed (single delivery date works)
-	 *   - 1 group     → no split needed (everything fits one date)
-	 *   - 2+ groups   → split required; one order per group
-	 *
-	 * Each group has shape:
-	 *   [
-	 *     'items'     => [ <cart_item_key> => <full cart_item array>, ... ],
-	 *     'product_ids' => [ id, id, ... ],
-	 *     'product_names' => [ 'Mælk', 'Brød', ... ],
-	 *     'suggested_date' => 'YYYY-MM-DD',  // first valid date for this group
-	 *   ]
-	 *
-	 * @return array<int, array>
+	 * How many days ahead split detection looks. The Økoskabet API decides
+	 * which days a shop actually delivers on; here we only need a horizon wide
+	 * enough that a genuinely conflicting cart still finds its dates. A
+	 * once-a-year only_on rule sits inside 365.
 	 */
-	public function compute_split_groups(): array {
+	const DETECTION_WINDOW_DAYS = 365;
+
+	/**
+	 * Which delivery dates each cart line could be delivered on.
+	 *
+	 * @return array<string, string[]> cart_item_key => sorted Y-m-d dates
+	 */
+	private function dates_per_cart_line(): array {
 		if ( ! function_exists( 'WC' ) || ! WC()->cart || WC()->cart->is_empty() ) {
 			return array();
 		}
 
-		$cart_items = WC()->cart->get_cart();
-		if ( empty( $cart_items ) ) {
+		// With no delivery rules configured at all, every product can go on
+		// every day the API offers, so the cart never needs splitting. Saying
+		// so up front keeps the cost of this feature at zero for the shops that
+		// have not switched any rule on — which is most of them, and they pay
+		// for this on every checkout render otherwise.
+		if ( ! \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::is_in_use() ) {
 			return array();
 		}
 
-		$delivery_exceptions = $this->get_delivery_exceptions_instance();
-		if ( ! $delivery_exceptions ) {
-			return array();
-		}
-
-		// For each cart item, compute its set of allowed dates.
-		// We use a 60-day rolling window — same as the standard checkout API.
-		$standard_window = $this->generate_standard_date_window();
-		$config          = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::get_config();
-
-		$item_dates = array();  // cart_item_key => sorted list of allowed YYYY-MM-DD
-		foreach ( $cart_items as $key => $item ) {
+		$window = $this->detection_window();
+		$out    = array();
+		foreach ( WC()->cart->get_cart() as $key => $item ) {
 			$pid = (int) ( $item['product_id'] ?? 0 );
-			if ( $pid <= 0 ) { continue; }
-			$rules = $delivery_exceptions->collect_applicable_rules( array( $pid ), $config );
-			$allowed = $this->dates_for_rules( $standard_window, $rules );
-			sort( $allowed );
-			$item_dates[ $key ] = $allowed;
-		}
-
-		// Group items by which dates are valid for them. Two items belong to
-		// the same group if they share at least one common delivery date.
-		// We use a simple greedy clustering: walk items in order; for each
-		// item, either join an existing group (if intersecting with that
-		// group's running intersection) or open a new group.
-		$groups = array();  // each entry: ['keys'=>[...], 'common'=>[date,...]]
-		foreach ( $item_dates as $key => $allowed ) {
-			$placed = false;
-			foreach ( $groups as &$group ) {
-				$intersection = array_values( array_intersect( $group['common'], $allowed ) );
-				if ( ! empty( $intersection ) ) {
-					$group['keys'][]  = $key;
-					$group['common']  = $intersection;
-					$placed           = true;
-					break;
-				}
+			if ( $pid <= 0 ) {
+				continue;
 			}
-			unset( $group );
-			if ( ! $placed ) {
-				$groups[] = array(
-					'keys'   => array( $key ),
-					'common' => $allowed,
-				);
-			}
-		}
-
-		// If we ended up with 0 or 1 groups, no split is needed.
-		if ( count( $groups ) < 2 ) {
-			return array();
-		}
-
-		// Decorate each group with display data and a suggested date (first
-		// available date in the common-set).
-		$result = array();
-		foreach ( $groups as $group ) {
-			$items_full   = array();
-			$product_ids  = array();
-			$product_names = array();
-			foreach ( $group['keys'] as $key ) {
-				$items_full[ $key ] = $cart_items[ $key ];
-				$pid                = (int) ( $cart_items[ $key ]['product_id'] ?? 0 );
-				if ( $pid > 0 ) {
-					$product_ids[] = $pid;
-					$prod          = wc_get_product( $pid );
-					if ( $prod ) {
-						$product_names[] = $prod->get_name();
-					}
-				}
-			}
-			$result[] = array(
-				'items'          => $items_full,
-				'product_ids'    => array_values( array_unique( $product_ids ) ),
-				'product_names'  => array_values( array_unique( $product_names ) ),
-				'suggested_date' => ! empty( $group['common'] ) ? $group['common'][0] : '',
+			$out[ $key ] = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::deliverable_dates_for_products(
+				$window,
+				array( $pid )
 			);
 		}
 
-		// Order groups by suggested_date so customer sees them
-		// chronologically.
-		usort( $result, function ( $a, $b ) {
-			return strcmp( (string) $a['suggested_date'], (string) $b['suggested_date'] );
-		} );
-
-		return $result;
+		return $out;
 	}
 
 	/**
-	 * Generate the standard 60-day window starting tomorrow. The Økoskabet
-	 * API normally returns the operational window; for split-detection we
-	 * just need a reasonable horizon to test rules against.
+	 * The candidate dates split detection tests rules against, starting today.
 	 *
 	 * @return string[]
 	 */
-	private function generate_standard_date_window(): array {
+	private function detection_window(): array {
 		$dates = array();
-		$start = new \DateTimeImmutable( 'tomorrow', wp_timezone() );
-		for ( $i = 0; $i < 60; $i++ ) {
+		$start = new \DateTimeImmutable( 'today', wp_timezone() );
+		for ( $i = 0; $i < self::DETECTION_WINDOW_DAYS; $i++ ) {
 			$dates[] = $start->modify( "+{$i} days" )->format( 'Y-m-d' );
 		}
 		return $dates;
 	}
 
 	/**
-	 * Filter a date list down to those that pass all given rules.
-	 * Mirrors the restrict-stage of Delivery_Exceptions::filter_dates_for_cart.
+	 * Split the current cart into as few delivery days as it can be delivered in.
 	 *
-	 * @param string[] $dates
-	 * @param array    $rules
-	 * @return string[]
+	 * Always returns what the cart needs, even when that is a single group —
+	 * callers that only care about conflicts use compute_split_groups().
+	 *
+	 * The grouping is greedy by coverage: take the date that can carry the most
+	 * of the remaining lines, give that date those lines, repeat. Ties go to the
+	 * earlier date, so the answer is the same on every render — important,
+	 * because the customer is shown these groups and then clicks a button that
+	 * recomputes them.
+	 *
+	 * The obvious alternative — walk the lines and drop each into the first
+	 * group it fits — is what this replaces. It gave different answers depending
+	 * on cart order and routinely reported three deliveries where two would do,
+	 * because a line that could have bridged two groups had already been spent
+	 * on the first one it touched.
+	 *
+	 * Lines that have NO deliverable date at all (a from/until window that has
+	 * closed, say) cannot be helped by any split. They are gathered into one
+	 * final group with an empty date, which is what hides the split button:
+	 * there is no day to book that group on. The "remove these" options still
+	 * list them, which is the way out.
+	 *
+	 * Each group has shape:
+	 *   [
+	 *     'keys'           => [ <cart_item_key>, ... ],
+	 *     'items'          => [ <cart_item_key> => <full cart_item array>, ... ],
+	 *     'product_ids'    => [ id, id, ... ],
+	 *     'product_names'  => [ 'Mælk', 'Brød', ... ],
+	 *     'suggested_date' => 'YYYY-MM-DD',  // '' when nothing can carry it
+	 *   ]
+	 *
+	 * @return array<int, array>
 	 */
-	private function dates_for_rules( array $dates, array $rules ): array {
-		if ( empty( $rules ) ) { return $dates; }
-		return array_values( array_filter( $dates, function ( string $date ) use ( $rules ): bool {
-			foreach ( $rules as $rule ) {
-				if ( ! \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::date_passes_rule( $date, $rule ) ) {
-					return false;
+	public function compute_delivery_groups(): array {
+		$line_dates = $this->dates_per_cart_line();
+		if ( empty( $line_dates ) ) {
+			return array();
+		}
+
+		$undeliverable = array();
+		$remaining     = array();
+		foreach ( $line_dates as $key => $dates ) {
+			if ( empty( $dates ) ) {
+				$undeliverable[] = $key;
+			} else {
+				$remaining[ $key ] = $dates;
+			}
+		}
+
+		$groups = array();
+		while ( ! empty( $remaining ) ) {
+			// How many of the remaining lines each candidate date can carry.
+			$coverage = array();
+			foreach ( $remaining as $dates ) {
+				foreach ( $dates as $date ) {
+					$coverage[ $date ] = ( $coverage[ $date ] ?? 0 ) + 1;
 				}
 			}
-			return true;
-		} ) );
+
+			// Best date: most lines carried, earliest date breaking the tie.
+			// ksort first so the tie-break falls out of the walk order.
+			ksort( $coverage );
+			$best      = '';
+			$best_hits = 0;
+			foreach ( $coverage as $date => $hits ) {
+				if ( $hits > $best_hits ) {
+					$best      = (string) $date;
+					$best_hits = $hits;
+				}
+			}
+
+			$keys = array();
+			foreach ( $remaining as $key => $dates ) {
+				if ( in_array( $best, $dates, true ) ) {
+					$keys[] = $key;
+					unset( $remaining[ $key ] );
+				}
+			}
+
+			$groups[] = array( 'keys' => $keys, 'date' => $best );
+		}
+
+		// Chronological, so the customer reads them in the order they happen.
+		usort( $groups, function ( $a, $b ) {
+			return strcmp( (string) $a['date'], (string) $b['date'] );
+		} );
+
+		if ( ! empty( $undeliverable ) ) {
+			$groups[] = array( 'keys' => $undeliverable, 'date' => '' );
+		}
+
+		return array_map( function ( array $group ): array {
+			return $this->decorate_group( $group['keys'], (string) $group['date'] );
+		}, $groups );
 	}
 
 	/**
-	 * Get the live Delivery_Exceptions instance from the plugin's classmap
-	 * loader. The Initialize class instantiates one of each integration —
-	 * we look up that singleton rather than create a new one (so we share
-	 * the per-request rule cache).
+	 * Attach the product names and ids a group needs to be shown and re-added.
+	 *
+	 * @param string[] $keys Cart item keys.
+	 * @param string   $date Y-m-d, or '' when the group has no deliverable day.
 	 */
-	private function get_delivery_exceptions_instance() {
-		// Lazy: just instantiate a new one. The expensive work
-		// (collect_applicable_rules) is statically cached, so a fresh
-		// instance hits the same cache.
-		return new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions();
+	private function decorate_group( array $keys, string $date ): array {
+		$cart_items    = ( function_exists( 'WC' ) && WC()->cart ) ? WC()->cart->get_cart() : array();
+		$items_full    = array();
+		$product_ids   = array();
+		$product_names = array();
+
+		foreach ( $keys as $key ) {
+			if ( ! isset( $cart_items[ $key ] ) ) {
+				continue;
+			}
+			$items_full[ $key ] = $cart_items[ $key ];
+			$pid                = (int) ( $cart_items[ $key ]['product_id'] ?? 0 );
+			if ( $pid > 0 ) {
+				$product_ids[] = $pid;
+				$prod          = function_exists( 'wc_get_product' ) ? wc_get_product( $pid ) : null;
+				if ( $prod ) {
+					$product_names[] = $prod->get_name();
+				}
+			}
+		}
+
+		return array(
+			'keys'           => array_values( $keys ),
+			'items'          => $items_full,
+			'product_ids'    => array_values( array_unique( $product_ids ) ),
+			'product_names'  => array_values( array_unique( $product_names ) ),
+			'suggested_date' => $date,
+		);
+	}
+
+	/**
+	 * The delivery groups when — and only when — the cart needs more than one.
+	 *
+	 * Empty array means one delivery day covers everything, which is the normal
+	 * case and the one where this whole feature stays out of the way.
+	 *
+	 * @return array<int, array>
+	 */
+	public function compute_split_groups(): array {
+		$groups = $this->compute_delivery_groups();
+
+		return count( $groups ) < 2 ? array() : $groups;
+	}
+
+	/**
+	 * Can every group the cart needs actually be booked?
+	 *
+	 * False when a line has no deliverable day at all — splitting would then
+	 * produce an order the customer cannot pick a date for, so we don't offer it.
+	 *
+	 * @param array<int, array> $groups
+	 */
+	private function groups_are_bookable( array $groups ): bool {
+		foreach ( $groups as $group ) {
+			if ( (string) ( $group['suggested_date'] ?? '' ) === '' ) {
+				return false;
+			}
+		}
+
+		return ! empty( $groups );
+	}
+
+	// ---------------------------------------------------------------------
+	// "Remove these and the rest travels together"
+	// ---------------------------------------------------------------------
+
+	/**
+	 * The ways to get the whole remaining cart onto ONE delivery day.
+	 *
+	 * One option per delivery day the cart's groups point at. For each of those
+	 * days we ask the *whole* cart — not just that day's group — which lines can
+	 * make it, because a line that the grouping already spent on an earlier day
+	 * may well be deliverable on this one too, and asking again keeps the
+	 * "remove" list as short as it honestly can be.
+	 *
+	 * Options are sorted by how much they cost the customer: fewest items
+	 * removed first, then the earliest delivery. Two days that require removing
+	 * exactly the same items are one option, shown under the earlier day.
+	 *
+	 * Each option has shape:
+	 *   [
+	 *     'date'          => 'YYYY-MM-DD',
+	 *     'date_label'    => 'den 22. september 2026',
+	 *     'remove_keys'   => [ <cart_item_key>, ... ],
+	 *     'remove_names'  => [ 'Mælk', ... ],
+	 *     'keep_names'    => [ 'Brød', ... ],
+	 *     'text'          => 'Fjern Mælk, så kan resten leveres sammen den …',
+	 *   ]
+	 *
+	 * @return array<int, array>
+	 */
+	public function compute_removal_options(): array {
+		$line_dates = $this->dates_per_cart_line();
+		if ( empty( $line_dates ) ) {
+			return array();
+		}
+
+		$candidate_dates = array();
+		foreach ( $this->compute_delivery_groups() as $group ) {
+			$date = (string) ( $group['suggested_date'] ?? '' );
+			if ( $date !== '' ) {
+				$candidate_dates[ $date ] = true;
+			}
+		}
+
+		$options = array();
+		$seen    = array();
+		foreach ( array_keys( $candidate_dates ) as $date ) {
+			$keep   = array();
+			$remove = array();
+			foreach ( $line_dates as $key => $dates ) {
+				if ( in_array( $date, $dates, true ) ) {
+					$keep[] = $key;
+				} else {
+					$remove[] = $key;
+				}
+			}
+
+			// Nothing to remove means this day already carries the cart, and
+			// nothing to keep means the option empties the basket. Neither is
+			// an offer worth making.
+			if ( empty( $remove ) || empty( $keep ) ) {
+				continue;
+			}
+
+			// Two days that cost the same items are the same offer.
+			$signature = implode( '|', $remove );
+			if ( isset( $seen[ $signature ] ) ) {
+				continue;
+			}
+			$seen[ $signature ] = true;
+
+			$options[] = array(
+				'date'         => (string) $date,
+				'date_label'   => \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::format_date_human( (string) $date ),
+				'remove_keys'  => $remove,
+				'remove_names' => $this->names_for_keys( $remove ),
+				'keep_names'   => $this->names_for_keys( $keep ),
+			);
+		}
+
+		// Cheapest first: fewest items given up, then the soonest delivery.
+		usort( $options, function ( $a, $b ) {
+			$by_cost = count( $a['remove_keys'] ) <=> count( $b['remove_keys'] );
+			return $by_cost !== 0 ? $by_cost : strcmp( $a['date'], $b['date'] );
+		} );
+
+		foreach ( $options as $i => $option ) {
+			$options[ $i ]['text'] = sprintf(
+				/* translators: 1 = product names ("Mælk og Brød"), 2 = date ("den 22. september 2026") */
+				__( 'Remove %1$s, and the rest can be delivered together on %2$s', O_TEXTDOMAIN ),
+				self::format_name_list( $option['remove_names'] ),
+				$option['date_label']
+			);
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Product names for a set of cart item keys, in cart order and de-duplicated.
+	 *
+	 * @param string[] $keys
+	 * @return string[]
+	 */
+	private function names_for_keys( array $keys ): array {
+		$cart_items = ( function_exists( 'WC' ) && WC()->cart ) ? WC()->cart->get_cart() : array();
+		$names      = array();
+		foreach ( $keys as $key ) {
+			$pid = (int) ( $cart_items[ $key ]['product_id'] ?? 0 );
+			if ( $pid <= 0 ) {
+				continue;
+			}
+			$prod = function_exists( 'wc_get_product' ) ? wc_get_product( $pid ) : null;
+			if ( $prod ) {
+				$names[] = $prod->get_name();
+			}
+		}
+
+		return array_values( array_unique( $names ) );
+	}
+
+	/**
+	 * Join names the way a person writes a list: "Mælk, Brød og Smør".
+	 *
+	 * @param string[] $names
+	 */
+	public static function format_name_list( array $names ): string {
+		$names = array_values( array_filter( $names, function ( $n ) { return (string) $n !== ''; } ) );
+		if ( empty( $names ) ) {
+			return '';
+		}
+		if ( count( $names ) === 1 ) {
+			return $names[0];
+		}
+		$last = array_pop( $names );
+
+		return implode( ', ', $names ) . ' ' . __( 'and', O_TEXTDOMAIN ) . ' ' . $last;
+	}
+
+	// ---------------------------------------------------------------------
+	// Button wording (shop-editable)
+	// ---------------------------------------------------------------------
+
+	/** Plugin settings, or an empty array before the plugin is configured. */
+	private static function settings(): array {
+		$settings = function_exists( 'o_get_settings' ) ? o_get_settings() : array();
+
+		return is_array( $settings ) ? $settings : array();
+	}
+
+	/**
+	 * What the "split it up" button says.
+	 *
+	 * Two deliveries get their own wording because that is what nearly every
+	 * conflicting cart needs and "i to" reads far better than a number. Three or
+	 * more falls back to a counted phrase — promising "i to" when the shop is
+	 * about to ask for three orders would be a lie the customer finds out about
+	 * one order in.
+	 *
+	 * @param int $group_count How many deliveries the cart needs.
+	 */
+	public static function split_button_label( int $group_count ): string {
+		$settings = self::settings();
+
+		if ( $group_count <= 2 ) {
+			$label = trim( (string) ( $settings['_split_button_split_label'] ?? '' ) );
+			return $label !== '' ? $label : __( 'Split the delivery in two', O_TEXTDOMAIN );
+		}
+
+		$template = trim( (string) ( $settings['_split_button_split_label_many'] ?? '' ) );
+		if ( $template === '' ) {
+			/* translators: %d = number of separate deliveries */
+			$template = __( 'Split into %d deliveries', O_TEXTDOMAIN );
+		}
+
+		// A shop that drops the %d gets its wording verbatim rather than a
+		// PHP warning, so a typo in a settings field cannot break a checkout.
+		return strpos( $template, '%d' ) === false ? $template : sprintf( $template, $group_count );
+	}
+
+	/** What the "take things out of the basket" button says. */
+	public static function reduce_button_label(): string {
+		$label = trim( (string) ( self::settings()['_split_button_reduce_label'] ?? '' ) );
+
+		return $label !== '' ? $label : __( 'Empty from the basket', O_TEXTDOMAIN );
 	}
 
 	// ---------------------------------------------------------------------
@@ -324,6 +583,18 @@ class Split_Checkout extends Base {
 		$groups = $this->compute_split_groups();
 		if ( count( $groups ) < 2 ) { return; }
 
+		$options      = $this->compute_removal_options();
+		$can_split    = $this->groups_are_bookable( $groups );
+		$group_count  = count( $groups );
+
+		// Neither way out is available: no bookable split and nothing that
+		// could be removed to rescue the rest. Say so plainly rather than
+		// showing two buttons that do nothing.
+		if ( ! $can_split && empty( $options ) ) {
+			$this->render_dead_end_banner();
+			return;
+		}
+
 		// CSS: hide the rest of the checkout form while the conflict banner
 		// is showing — there's no point letting the customer fill in
 		// billing/shipping fields when they need to make a different
@@ -339,33 +610,43 @@ class Split_Checkout extends Base {
 				background: #fff; padding: 16px; border-radius: 4px;
 				margin-top: 16px;
 			}
-			.oko-split-banner .oko-split-ack-row {
-				display: flex; align-items: flex-start; gap: 10px;
-				cursor: pointer; user-select: none;
-			}
-			.oko-split-banner .oko-split-ack-row input[type=checkbox] {
-				margin-top: 3px; transform: scale(1.2);
+			.oko-split-banner .oko-split-choices {
+				display: flex; flex-wrap: wrap; gap: 12px;
 			}
 			.oko-split-banner .oko-split-cta {
-				width: 100%; padding: 14px 24px; font-size: 1.05em;
+				flex: 1 1 220px; padding: 14px 24px; font-size: 1.05em;
 				font-weight: 600; background: #c44; color: #fff;
 				border: none; border-radius: 4px; cursor: pointer;
 				transition: opacity 0.2s, transform 0.1s;
 			}
 			.oko-split-banner .oko-split-cta:hover { opacity: 0.92; }
 			.oko-split-banner .oko-split-cta:active { transform: translateY(1px); }
-			.oko-split-banner .oko-split-cta.is-locked {
-				background: #b78a8a; cursor: not-allowed;
+			.oko-split-banner .oko-split-cta[disabled] {
+				background: #b78a8a; cursor: wait;
+			}
+			.oko-split-banner .oko-split-cta.is-secondary {
+				background: #fff; color: #444; border: 2px solid #c44;
+			}
+			.oko-split-banner .oko-split-cta.is-secondary[aria-expanded=true] {
+				background: #f7e9e9;
+			}
+			.oko-split-banner .oko-split-remove-panel {
+				margin-top: 4px; border-top: 1px solid #f0c0c0; padding-top: 14px;
+			}
+			.oko-split-banner .oko-split-remove-panel[hidden] { display: none; }
+			.oko-split-banner .oko-split-remove-option {
+				display: flex; align-items: flex-start; gap: 10px;
+				padding: 10px 12px; border: 1px solid #e4d7d7;
+				border-radius: 4px; margin-bottom: 8px; cursor: pointer;
+				line-height: 1.45;
+			}
+			.oko-split-banner .oko-split-remove-option:hover { background: #fdf7f7; }
+			.oko-split-banner .oko-split-remove-option input[type=radio] {
+				margin-top: 4px; transform: scale(1.2); flex: 0 0 auto;
 			}
 			.oko-split-banner .oko-split-error {
 				color: #c44; font-weight: 600; margin: 0;
 				min-height: 1.2em;
-			}
-			.oko-split-ack-row.shake { animation: oko-shake 0.3s; }
-			@keyframes oko-shake {
-				0%, 100% { transform: translateX(0); }
-				25%      { transform: translateX(-6px); }
-				75%      { transform: translateX(6px); }
 			}
 		</style>';
 
@@ -385,18 +666,21 @@ class Split_Checkout extends Base {
 			. '</h3>';
 
 		echo '<p style="margin:0 0 16px;">'
-			. esc_html__( 'You\'ll need to complete one order per delivery day. We\'ll guide you through each step.', O_TEXTDOMAIN )
+			. esc_html__( 'You can split the order so each part is delivered on its own day, or take a few items out of the basket so everything else arrives together. Choose below.', O_TEXTDOMAIN )
 			. '</p>';
 
 		echo '<ol>';
 		foreach ( $groups as $idx => $group ) {
-			echo '<li><strong>'
-				. esc_html( sprintf(
-					/* translators: 1 = step number, 2 = formatted date */
+			$date_label = (string) $group['suggested_date'] !== ''
+				? sprintf(
+					/* translators: 1 = delivery number, 2 = formatted date */
 					__( 'Delivery %1$d (%2$s)', O_TEXTDOMAIN ),
 					$idx + 1,
 					$this->format_date_for_display( $group['suggested_date'] )
-				) )
+				)
+				: __( 'No delivery day available', O_TEXTDOMAIN );
+			echo '<li><strong>'
+				. esc_html( $date_label )
 				. '</strong> — '
 				. esc_html( implode( ', ', $group['product_names'] ) )
 				. '</li>';
@@ -405,28 +689,28 @@ class Split_Checkout extends Base {
 
 		echo '<div class="oko-split-actions">';
 
-		echo '<label class="oko-split-ack-row">';
-		echo '<input type="checkbox" id="oko-split-ack" />';
-		echo '<span>' . esc_html( sprintf(
-			/* translators: %d = total number of separate orders */
-			_n(
-				'I understand I will complete %d separate order',
-				'I understand I will complete %d separate orders',
-				count( $groups ),
-				O_TEXTDOMAIN
-			),
-			count( $groups )
-		) ) . '</span>';
-		echo '</label>';
+		echo '<div class="oko-split-choices">';
 
-		echo '<button type="button" id="oko-split-continue" class="oko-split-cta is-locked">'
-			. esc_html( sprintf(
-				/* translators: 1 = current step number, 2 = total steps */
-				__( 'Continue with delivery %1$d of %2$d', O_TEXTDOMAIN ),
-				1,
-				count( $groups )
-			) )
-			. '</button>';
+		if ( $can_split ) {
+			echo '<button type="button" id="oko-split-continue" class="oko-split-cta">'
+				. esc_html( self::split_button_label( $group_count ) )
+				. '</button>';
+		}
+
+		if ( ! empty( $options ) ) {
+			echo '<button type="button" id="oko-split-reduce-toggle" class="oko-split-cta is-secondary"'
+				. ' aria-expanded="false" aria-controls="oko-split-remove-panel">'
+				. esc_html( self::reduce_button_label() )
+				. '</button>';
+		}
+
+		echo '</div>';
+
+		if ( ! empty( $options ) ) {
+			// Open by default when there is nothing else to click, so the
+			// customer's only way forward isn't hidden behind a toggle.
+			$this->render_removal_options( $options, ! $can_split );
+		}
 
 		echo '<p class="oko-split-error" id="oko-split-error" aria-live="polite"></p>';
 
@@ -434,10 +718,7 @@ class Split_Checkout extends Base {
 		echo '</div>';
 
 		// Inline JS — uses event delegation on `document` so the listeners
-		// survive WooCommerce's checkout re-renders. The button is always
-		// "clickable" — if the checkbox isn't ticked, we shake the checkbox
-		// row and show an inline error rather than disabling the button
-		// (which made the button visually disappear in earlier UI tests).
+		// survive WooCommerce's checkout re-renders.
 		$ajax_url = admin_url( 'admin-ajax.php' );
 		$nonce    = wp_create_nonce( $this->nonce_action() );
 		?>
@@ -447,24 +728,28 @@ class Split_Checkout extends Base {
 			if (window._okoSplitBound) { return; }
 			window._okoSplitBound = true;
 
-			var AJAX_URL      = <?php echo wp_json_encode( $ajax_url ); ?>;
-			var NONCE         = <?php echo wp_json_encode( $nonce ); ?>;
-			var TXT_WORKING   = <?php echo wp_json_encode( __( 'Working…', O_TEXTDOMAIN ) ); ?>;
-			var TXT_ERR_START = <?php echo wp_json_encode( __( 'Could not start split checkout. Please try again.', O_TEXTDOMAIN ) ); ?>;
-			var TXT_ERR_ACK   = <?php echo wp_json_encode( __( 'Please tick the box above first.', O_TEXTDOMAIN ) ); ?>;
+			var AJAX_URL       = <?php echo wp_json_encode( $ajax_url ); ?>;
+			var NONCE          = <?php echo wp_json_encode( $nonce ); ?>;
+			var TXT_WORKING    = <?php echo wp_json_encode( __( 'Working…', O_TEXTDOMAIN ) ); ?>;
+			var TXT_ERR_START  = <?php echo wp_json_encode( __( 'Could not start split checkout. Please try again.', O_TEXTDOMAIN ) ); ?>;
+			var TXT_ERR_REDUCE = <?php echo wp_json_encode( __( 'Could not remove the items. Please try again.', O_TEXTDOMAIN ) ); ?>;
+			var TXT_ERR_PICK   = <?php echo wp_json_encode( __( 'Choose one of the options first.', O_TEXTDOMAIN ) ); ?>;
 
-			function syncBtnState() {
-				var ack = document.getElementById('oko-split-ack');
-				var btn = document.getElementById('oko-split-continue');
-				if (!ack || !btn) { return; }
-				if (ack.checked) {
-					btn.classList.remove('is-locked');
-					var err = document.getElementById('oko-split-error');
-					if (err) { err.textContent = ''; }
-				} else {
-					btn.classList.add('is-locked');
-				}
-				// Block the standard place-order button while banner is up.
+			function errorBox() { return document.getElementById('oko-split-error'); }
+
+			function showError(message) {
+				var err = errorBox();
+				if (err) { err.textContent = message; } else { alert(message); }
+			}
+
+			function clearError() {
+				var err = errorBox();
+				if (err) { err.textContent = ''; }
+			}
+
+			// The banner is the decision; WooCommerce's own place-order button
+			// must not offer a way around it.
+			function lockPlaceOrder() {
 				var placeOrder = document.querySelector('#place_order');
 				if (placeOrder) {
 					placeOrder.disabled = true;
@@ -473,85 +758,143 @@ class Split_Checkout extends Base {
 				}
 			}
 
-			document.addEventListener('change', function (e) {
-				if (e.target && e.target.id === 'oko-split-ack') {
-					syncBtnState();
-				}
-			});
-
-			document.addEventListener('click', function (e) {
-				if (!e.target || e.target.id !== 'oko-split-continue') {
-					return;
-				}
-				e.preventDefault();
-				var ack = document.getElementById('oko-split-ack');
-				var btn = e.target;
-				var err = document.getElementById('oko-split-error');
-
-				// If the checkbox isn't ticked, draw the customer's eye to it
-				// instead of silently doing nothing. Shake + inline error.
-				if (!ack || !ack.checked) {
-					var row = document.querySelector('.oko-split-ack-row');
-					if (row) {
-						row.classList.remove('shake');
-						// Force reflow so the animation re-triggers.
-						void row.offsetWidth;
-						row.classList.add('shake');
-					}
-					if (err) { err.textContent = TXT_ERR_ACK; }
-					return;
-				}
-
-				if (err) { err.textContent = ''; }
-				btn.disabled = true;
-				var origText = btn.textContent;
-				btn.textContent = TXT_WORKING;
+			function post(fields, button, fallbackMessage) {
+				clearError();
+				var original = button.textContent;
+				button.disabled = true;
+				button.textContent = TXT_WORKING;
 
 				var fd = new FormData();
-				fd.append('action', 'oko_start_split');
 				fd.append('_wpnonce', NONCE);
+				Object.keys(fields).forEach(function (name) {
+					fd.append(name, fields[name]);
+				});
 
-				console.log('[oko-split] sending start request to', AJAX_URL);
+				function restore() {
+					button.textContent = original;
+					button.disabled = false;
+				}
+
 				fetch(AJAX_URL, {
 					method: 'POST',
 					credentials: 'same-origin',
 					body: fd
 				}).then(function (r) {
-					console.log('[oko-split] response status', r.status);
 					return r.json();
 				}).then(function (data) {
-					console.log('[oko-split] response data', data);
 					if (data && data.success) {
 						window.location.reload();
-					} else {
-						var msg = (data && data.data && data.data.message)
-							? data.data.message
-							: TXT_ERR_START;
-						if (err) { err.textContent = msg; }
-						else { alert(msg); }
-						btn.textContent = origText;
-						btn.disabled = false;
+						return;
 					}
-				}).catch(function (errObj) {
-					console.error('[oko-split] fetch failed', errObj);
-					if (err) { err.textContent = TXT_ERR_START; }
-					else { alert(TXT_ERR_START); }
-					btn.textContent = origText;
-					btn.disabled = false;
+					showError((data && data.data && data.data.message) || fallbackMessage);
+					restore();
+				}).catch(function () {
+					showError(fallbackMessage);
+					restore();
 				});
+			}
+
+			document.addEventListener('click', function (e) {
+				var target = e.target;
+				if (!target || !target.id) { return; }
+
+				if (target.id === 'oko-split-continue') {
+					e.preventDefault();
+					post({ action: 'oko_start_split' }, target, TXT_ERR_START);
+					return;
+				}
+
+				if (target.id === 'oko-split-reduce-toggle') {
+					e.preventDefault();
+					var panel = document.getElementById('oko-split-remove-panel');
+					if (!panel) { return; }
+					var open = panel.hasAttribute('hidden');
+					if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+					target.setAttribute('aria-expanded', open ? 'true' : 'false');
+					clearError();
+					return;
+				}
+
+				if (target.id === 'oko-split-reduce-confirm') {
+					e.preventDefault();
+					var picked = document.querySelector('input[name="oko_split_remove_option"]:checked');
+					if (!picked) {
+						showError(TXT_ERR_PICK);
+						return;
+					}
+					post(
+						{ action: 'oko_reduce_split', date: picked.value },
+						target,
+						TXT_ERR_REDUCE
+					);
+				}
 			});
 
 			if (window.jQuery) {
-				jQuery(document.body).on('updated_checkout', syncBtnState);
+				jQuery(document.body).on('updated_checkout', lockPlaceOrder);
 			}
 			if (document.readyState !== 'loading') {
-				syncBtnState();
+				lockPlaceOrder();
 			} else {
-				document.addEventListener('DOMContentLoaded', syncBtnState);
+				document.addEventListener('DOMContentLoaded', lockPlaceOrder);
 			}
 		})();
 		</script>
 		<?php
+	}
+
+	/**
+	 * The list of "remove these and the rest travels together" offers.
+	 *
+	 * @param array<int, array> $options From compute_removal_options().
+	 * @param bool              $open    Whether the panel starts expanded.
+	 */
+	private function render_removal_options( array $options, bool $open ): void {
+		printf(
+			'<div class="oko-split-remove-panel" id="oko-split-remove-panel"%s>',
+			$open ? '' : ' hidden'
+		);
+
+		echo '<p style="margin:0 0 10px;">'
+			. esc_html__( 'Choose what you would rather do without this time. We take those items out of the basket, and everything else is delivered on the same day.', O_TEXTDOMAIN )
+			. '</p>';
+
+		foreach ( $options as $option ) {
+			echo '<label class="oko-split-remove-option">';
+			printf(
+				'<input type="radio" name="oko_split_remove_option" value="%s" />',
+				esc_attr( $option['date'] )
+			);
+			echo '<span>' . esc_html( $option['text'] ) . '</span>';
+			echo '</label>';
+		}
+
+		echo '<button type="button" id="oko-split-reduce-confirm" class="oko-split-cta" style="margin-top:6px;">'
+			. esc_html__( 'Remove the items and continue', O_TEXTDOMAIN )
+			. '</button>';
+
+		echo '</div>';
+	}
+
+	/**
+	 * Shown when the cart cannot be delivered at all and neither button helps:
+	 * no day can carry a group, and removing items would not rescue the rest.
+	 * In practice this is a rule that has closed on a product already in the
+	 * basket, so the honest answer is to send the customer to the shop.
+	 */
+	private function render_dead_end_banner(): void {
+		echo '<style>form.checkout.woocommerce-checkout { display: none !important; }</style>';
+		echo '<div class="oko-split-banner" style="background:#fff5f5;border:1px solid #f0c0c0;border-left:4px solid #c44;padding:20px;margin:0 0 24px;border-radius:4px;">';
+		echo '<h3 style="margin:0 0 12px;">' . esc_html__( 'We cannot find a delivery day for your basket', O_TEXTDOMAIN ) . '</h3>';
+		echo '<p style="margin:0;">'
+			. esc_html__( 'One or more items in the basket cannot be delivered at the moment. Please go back to the basket and remove them, or contact the shop.', O_TEXTDOMAIN )
+			. '</p>';
+		printf(
+			'<p style="margin:12px 0 0;"><a class="button" href="%s">%s</a></p>',
+			esc_url( wc_get_cart_url() ),
+			esc_html__( 'Back to the basket', O_TEXTDOMAIN )
+		);
+		echo '</div>';
 	}
 
 	/**
@@ -686,7 +1029,16 @@ class Split_Checkout extends Base {
 				count( $groups ),
 				WC()->cart->get_cart_contents_count()
 			) );
-			wp_send_json_error( array( 'message' => 'No split needed' ) );
+			wp_send_json_error( array( 'message' => __( 'No split needed', O_TEXTDOMAIN ) ) );
+		}
+
+		// A group with no deliverable day would become an order the customer
+		// cannot pick a date for. Removing those items is the only way out,
+		// and the banner offers exactly that instead of this button.
+		if ( ! $this->groups_are_bookable( $groups ) ) {
+			wp_send_json_error( array(
+				'message' => __( 'Some items have no delivery day, so the order cannot be split. Remove them instead.', O_TEXTDOMAIN ),
+			) );
 		}
 
 		// Snapshot every group's items in a serialisable shape so we can
@@ -838,6 +1190,68 @@ class Split_Checkout extends Base {
 		wp_send_json_success( array( 'redirect' => wc_get_page_permalink( 'shop' ) ) );
 	}
 
+	/**
+	 * Take the items a chosen option names out of the cart, so the rest of the
+	 * basket can go out on one delivery day.
+	 *
+	 * The client sends only the delivery date it picked; which items that costs
+	 * is recomputed here from the live cart. Trusting a list of cart keys from
+	 * the browser would let a stale banner — one rendered before the customer
+	 * changed the basket in another tab — empty items the customer never agreed
+	 * to give up.
+	 */
+	public function ajax_reduce_split(): void {
+		// Bootstrap session BEFORE nonce check — see ajax_start_split().
+		$this->ensure_wc_session();
+		check_ajax_referer( $this->nonce_action(), '_wpnonce' );
+
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			wp_send_json_error( array( 'message' => __( 'WooCommerce cart not available', O_TEXTDOMAIN ) ) );
+		}
+		if ( $this->is_split_active() ) {
+			wp_send_json_error( array( 'message' => __( 'A split is already in progress', O_TEXTDOMAIN ) ) );
+		}
+
+		$date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['date'] ) ) : '';
+		if ( $date === '' ) {
+			wp_send_json_error( array( 'message' => __( 'No option chosen', O_TEXTDOMAIN ) ) );
+		}
+
+		$chosen = null;
+		foreach ( $this->compute_removal_options() as $option ) {
+			if ( $option['date'] === $date ) {
+				$chosen = $option;
+				break;
+			}
+		}
+		if ( $chosen === null ) {
+			// The basket moved under the customer's feet; a reload re-renders
+			// the banner against what is actually in it now.
+			wp_send_json_error( array( 'message' => __( 'That option is no longer available. Please try again.', O_TEXTDOMAIN ) ) );
+		}
+
+		foreach ( $chosen['remove_keys'] as $key ) {
+			WC()->cart->remove_cart_item( $key );
+		}
+		WC()->cart->calculate_totals();
+
+		if ( WC()->session ) {
+			WC()->session->set( 'cart', WC()->cart->get_cart_for_session() );
+			WC()->session->save_data();
+		}
+
+		wc_add_notice(
+			sprintf(
+				/* translators: %s = product names ("Mælk og Brød") */
+				__( 'We took %s out of your basket. The rest is delivered together.', O_TEXTDOMAIN ),
+				self::format_name_list( $chosen['remove_names'] )
+			),
+			'notice'
+		);
+
+		wp_send_json_success( array( 'redirect' => wc_get_checkout_url() ) );
+	}
+
 	public function ajax_resume_split(): void {
 		// Bootstrap session BEFORE nonce check — see ajax_start_split().
 		$this->ensure_wc_session();
@@ -887,7 +1301,7 @@ class Split_Checkout extends Base {
 		// A split IS needed but the customer isn't in split-flow yet.
 		// They've bypassed the banner JS — block submission.
 		wc_add_notice(
-			__( 'Your cart contains items requiring multiple deliveries. Please use the split-checkout flow shown above.', O_TEXTDOMAIN ),
+			__( 'Your basket needs more than one delivery day. Please choose one of the options above before you order.', O_TEXTDOMAIN ),
 			'error'
 		);
 	}

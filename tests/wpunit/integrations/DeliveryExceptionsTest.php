@@ -421,4 +421,84 @@ class DeliveryExceptionsTest extends \Codeception\TestCase\WPTestCase {
 
 		$this->assertSame( array(), $result, 'legacy cutoff_tags config still filters after migration' );
 	}
+
+	// ---------------------------------------------------------------------
+	// #5 — "Gælder alle andre varer end de valgte"
+	//
+	// The flip is exercised against every exception family, and every
+	// empty-selection case, in tests/standalone/. What is worth proving here is
+	// that it still holds with real terms, real posts and the term cache in the
+	// way — the standalone harness answers wp_get_post_terms() from an array,
+	// and a matcher can be right there and wrong here.
+	// ---------------------------------------------------------------------
+
+	public function test_flipped_weekday_rule_restricts_everything_but_the_selection(): void {
+		$frost = $this->make_term( 'product_cat', 'frost' );
+
+		update_option( Delivery_Exceptions::OPTION_KEY, array(
+			'weekdays_enabled' => true,
+			'weekdays' => array(
+				3 => array( 'enabled' => true, 'flip' => true, 'categories' => array( $frost ), 'tags' => array() ),
+			),
+		) );
+
+		$in_frost  = $this->make_product( 'product_cat', $frost );
+		$elsewhere = $this->factory()->post->create();
+
+		$dates = array( $this->next_weekday( 3 ), $this->next_weekday( 4 ) );
+		sort( $dates );
+
+		$this->assertSame(
+			$dates,
+			$this->sut->filter_dates_for_cart( $dates, array( $in_frost ) ),
+			'the chosen category is the one the rule leaves alone'
+		);
+
+		$this->assertSame(
+			array( $this->next_weekday( 3 ) ),
+			$this->sut->filter_dates_for_cart( $dates, array( $elsewhere ) ),
+			'everything else is held to the weekday'
+		);
+	}
+
+	public function test_flipped_rule_bites_when_the_cart_mixes_both_sides(): void {
+		$frost = $this->make_term( 'product_cat', 'frost' );
+
+		update_option( Delivery_Exceptions::OPTION_KEY, array(
+			'weekdays_enabled' => true,
+			'weekdays' => array(
+				3 => array( 'enabled' => true, 'flip' => true, 'categories' => array( $frost ), 'tags' => array() ),
+			),
+		) );
+
+		$in_frost  = $this->make_product( 'product_cat', $frost );
+		$elsewhere = $this->factory()->post->create();
+
+		$dates = array( $this->next_weekday( 3 ), $this->next_weekday( 4 ) );
+		sort( $dates );
+
+		// The frost in the basket must not buy the other product out of the
+		// rule — which is exactly what pooling the cart's categories would do.
+		$this->assertSame(
+			array( $this->next_weekday( 3 ) ),
+			$this->sut->filter_dates_for_cart( $dates, array( $in_frost, $elsewhere ) )
+		);
+	}
+
+	public function test_flipped_rule_with_an_empty_selection_restricts_nothing(): void {
+		update_option( Delivery_Exceptions::OPTION_KEY, array(
+			'weekdays_enabled' => true,
+			'weekdays' => array(
+				3 => array( 'enabled' => true, 'flip' => true, 'categories' => array(), 'tags' => array() ),
+			),
+		) );
+
+		$product = $this->factory()->post->create();
+		$dates   = array( $this->next_weekday( 3 ), $this->next_weekday( 4 ) );
+		sort( $dates );
+
+		// A rule that names nothing is unfinished, not a statement that every
+		// product in the shop is Wednesday-only.
+		$this->assertSame( $dates, $this->sut->filter_dates_for_cart( $dates, array( $product ) ) );
+	}
 }

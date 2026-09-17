@@ -2,6 +2,55 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## Unreleased
+
+= Opdelt levering: kunden får to veje videre =
+
+Når en kurv ikke kan leveres på én dag, viste kassen før kun en besked. Nu får
+kunden to knapper at vælge imellem:
+
+  - **Opdel levering i to** — kunden bestiller den første levering nu og resten
+    lige efter. Det er det flow, der allerede lå i pluginet, og som nu virker
+    hele vejen igennem.
+  - **Tøm fra kurven** — for hver leveringsdag viser vi præcis hvilke varer der
+    står i vejen, og hvad der så kan leveres hvornår: "Fjern Mælk og Ost, så kan
+    resten leveres sammen den 22. september 2026". Kunden vælger én, de varer
+    ryger ud af kurven, og kassen fortsætter som normalt.
+
+Mulighederne står i den rækkefølge, der koster kunden mindst — færrest varer
+først. Har kurven brug for tre eller flere leveringsdage, siger knappen "Opdel
+levering i 3 leveringer" i stedet for "i to", for det ville ikke passe.
+
+Teksten på begge knapper sætter du selv under Indstillinger. Hele funktionen er
+slukket, indtil "Tillad opdelt checkout" tændes.
+
+Hver delordre er en helt almindelig ordre og betaler sin egen fragt og sit eget
+emballagegebyr. To leveringer er to ture og to kasser, så to gebyrer er det
+rigtige tal — ikke en fejl.
+
+= Opdelingen finder færre leveringer end før =
+
+Grupperingen ser nu på hele kurven på én gang og vælger den dag, der kan tage
+flest varer med. Før faldt hver vare ned i den første gruppe, den rørte ved, og
+en vare uden regler på sig kunne dermed åbne en tredje levering, hvor to var
+nok — og svaret skiftede med den rækkefølge, varerne lå i kurven.
+
+Opdelingen tager nu også højde for bestillingsfrister, så den dag, kunden bliver
+lovet, er en dag der stadig kan nås.
+
+= Leveringsundtagelser kan vendes om =
+
+Hver regel — faste ugedage, en enkelt dag, fra/til og bestillingsfrister — har
+fået et flueben: **"Gælder alle andre varer end de valgte"**. Med flueben dækker
+reglen præcis de varer, der ikke har nogen af de valgte kategorier og tags. Så
+"alt andet end frost leveres kun om onsdagen" er én regel i stedet for en liste
+over alle de øvrige kategorier.
+
+En regel uden noget valgt dækker ingenting, med eller uden flueben. En halvfærdig
+regel skal ikke kunne lukke hele butikken ned.
+
+Regler, der er gemt før dette, betyder præcis det samme som før.
+
 ## 1.4.7 - 2026-08-29
 
 = See what your Økoskabet features cost =
