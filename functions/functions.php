@@ -805,10 +805,12 @@ function oko_home_delivery_has_dates(string $postcode, array $product_ids): ?boo
  * apart, because "we don't know yet" and "there is no day" mean opposite
  * things to a customer standing in the checkout.
  *
- * @param  int[] $product_ids
+ * @param  int[]     $product_ids
+ * @param  bool|null $pre_order Ask for pre-order days, ordinary days, or — with
+ *                              null — whichever mode the checkout is in.
  * @return string[]|null Sorted Y-m-d dates, or null when unanswerable.
  */
-function oko_home_delivery_dates(string $postcode, array $product_ids): ?array
+function oko_home_delivery_dates(string $postcode, array $product_ids, ?bool $pre_order = null): ?array
 {
 	if ($postcode === '' || ! class_exists('\\okoskabet_woocommerce_plugin\\Rest\\OkoRest')) {
 		return null;
@@ -816,6 +818,9 @@ function oko_home_delivery_dates(string $postcode, array $product_ids): ?array
 	$request = new \WP_REST_Request('GET');
 	$request->set_param('zip', $postcode);
 	$request->set_param('product_ids', implode(',', array_map('intval', $product_ids)));
+	if ($pre_order !== null) {
+		$request->set_param('pre_order', $pre_order ? '1' : '0');
+	}
 	$response = \okoskabet_woocommerce_plugin\Rest\OkoRest::home_delivery_response($request);
 	if (! $response instanceof \WP_REST_Response) {
 		return null;
@@ -1370,6 +1375,71 @@ function oko_is_pre_order_checkout(): bool
 	}
 	// phpcs:enable WordPress.Security.NonceVerification
 	return false;
+}
+
+/**
+ * Whether the customer is looking at pre-order days right now.
+ *
+ * Same question as oko_is_pre_order_checkout(), asked at a moment when the
+ * form is not being submitted. On a plain page load there is no posted field
+ * to read, so the cookie the pre-order button sets is the only record of the
+ * choice — which is exactly what the date picker falls back to as well. Code
+ * that renders before the first recalculation, like the split banner, has to
+ * ask this rather than the posted-only version, or it draws the checkout the
+ * customer is not in.
+ */
+function oko_pre_order_checkout_requested(): bool
+{
+	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
+	if (isset($_POST['billing_okoskabet_pre_order']) || isset($_POST['post_data'])) {
+		return oko_is_pre_order_checkout();
+	}
+	// phpcs:enable WordPress.Security.NonceVerification
+
+	return (string) ($_COOKIE['okoskabet_pre_order'] ?? '') === '1'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared, never output.
+}
+
+/**
+ * Whether the cart, as a pre-order, has any day at all it could be delivered
+ * on. Null when Økoskabet could not be asked.
+ *
+ * A pre-order fee pays for holding goods for a date in the future. With no
+ * date there is nothing to hold and nothing to pay for, and a customer whose
+ * basket cannot be pre-ordered was being charged 50 kr for the privilege of
+ * being shown no dates at all.
+ */
+function oko_pre_order_cart_has_date(): ?bool
+{
+	if (! function_exists('WC') || ! WC()->cart || ! WC()->customer) {
+		return null;
+	}
+
+	$postcode = trim((string) WC()->customer->get_shipping_postcode());
+	if ($postcode === '') {
+		$postcode = trim((string) WC()->customer->get_billing_postcode());
+	}
+
+	$product_ids = array();
+	foreach (WC()->cart->get_cart() as $item) {
+		$pid = (int) ($item['product_id'] ?? 0);
+		if ($pid > 0) {
+			$product_ids[] = $pid;
+		}
+	}
+	if (empty($product_ids)) {
+		return null;
+	}
+
+	// Asked once per cart per request: the fee is recalculated several times
+	// over during one checkout render, and each miss is a call to Økoskabet.
+	static $cache = array();
+	$key = $postcode . '|' . implode(',', $product_ids);
+	if (! array_key_exists($key, $cache)) {
+		$dates = oko_home_delivery_dates($postcode, $product_ids, true);
+		$cache[$key] = $dates === null ? null : ! empty($dates);
+	}
+
+	return $cache[$key];
 }
 
 /**

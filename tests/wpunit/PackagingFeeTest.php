@@ -321,7 +321,117 @@ class PackagingFeeTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertSame( 56.0, $charged, 'two deliveries, two boxes' );
 	}
 
+	// ------------------------------------------------------- the pre-order fee
+
+	/**
+	 * @test
+	 * A pre-order fee pays for holding goods until a date in the future. A
+	 * Gaardmester basket mixing pre-orderable and ordinary goods had no
+	 * pre-order day at all — it showed the customer no dates and no
+	 * explanation, and charged them 50 kr for it anyway.
+	 */
+	public function a_pre_order_fee_is_not_charged_when_the_basket_has_no_pre_order_day() {
+		$config = $this->pre_order_fee_config();
+
+		$_POST['billing_okoskabet_pre_order'] = '1';
+		add_filter( 'okoskabet_pre_order_cart_has_date', '__return_false' );
+
+		$this->assertNull(
+			Packaging_Fee::matching_rule( $config, $this->cart_with( array( $this->make_product() ) ) ),
+			'nothing is being held, so there is nothing to charge for'
+		);
+
+		remove_filter( 'okoskabet_pre_order_cart_has_date', '__return_false' );
+		unset( $_POST['billing_okoskabet_pre_order'] );
+	}
+
+	/**
+	 * @test
+	 * Once the basket is split, the pre-order half does have a day — and that
+	 * order pays the fee, exactly as it should.
+	 */
+	public function a_pre_order_fee_is_charged_once_the_basket_has_a_day() {
+		$config = $this->pre_order_fee_config();
+
+		$_POST['billing_okoskabet_pre_order'] = '1';
+		add_filter( 'okoskabet_pre_order_cart_has_date', '__return_true' );
+
+		$rule = Packaging_Fee::matching_rule( $config, $this->cart_with( array( $this->make_product() ) ) );
+
+		remove_filter( 'okoskabet_pre_order_cart_has_date', '__return_true' );
+		unset( $_POST['billing_okoskabet_pre_order'] );
+
+		$this->assertNotNull( $rule );
+		$this->assertSame( 'Forudbestilling', $rule['label'] );
+	}
+
+	/**
+	 * @test
+	 * A shop must not lose the charge to a timeout. Only a clear "there is no
+	 * day" waives it; "could not find out" leaves things as they were, and the
+	 * checkout will not let an order through without a date anyway.
+	 */
+	public function an_unanswerable_question_leaves_the_pre_order_fee_alone() {
+		$config = $this->pre_order_fee_config();
+
+		$_POST['billing_okoskabet_pre_order'] = '1';
+		add_filter( 'okoskabet_pre_order_cart_has_date', '__return_null' );
+
+		$rule = Packaging_Fee::matching_rule( $config, $this->cart_with( array( $this->make_product() ) ) );
+
+		remove_filter( 'okoskabet_pre_order_cart_has_date', '__return_null' );
+		unset( $_POST['billing_okoskabet_pre_order'] );
+
+		$this->assertNotNull( $rule );
+	}
+
+	/**
+	 * @test
+	 * The two halves of a split pre-order are charged differently on purpose:
+	 * the held half pays the pre-order fee, the ordinary half pays the ordinary
+	 * packaging. The customer pays both, and each is right for what it covers.
+	 */
+	public function the_two_halves_of_a_split_pre_order_each_pay_their_own_fee() {
+		$config = Packaging_Fee::normalise_config(
+			array(
+				'enabled' => true,
+				'rules'   => array(
+					$this->rule( array( 'label' => 'Forudbestilling', 'amount' => '50', 'pre_order_only' => true ) ),
+					$this->rule( array( 'label' => 'Emballage', 'amount' => '28' ) ),
+				),
+			)
+		);
+
+		$cart = $this->cart_with( array( $this->make_product() ) );
+
+		// Step one: the pre-order, which now has a day of its own.
+		$_POST['billing_okoskabet_pre_order'] = '1';
+		add_filter( 'okoskabet_pre_order_cart_has_date', '__return_true' );
+		$held = Packaging_Fee::matching_rule( $config, $cart );
+		remove_filter( 'okoskabet_pre_order_cart_has_date', '__return_true' );
+
+		// Step two: the ordinary delivery for the rest.
+		$_POST['billing_okoskabet_pre_order'] = '';
+		$ordinary = Packaging_Fee::matching_rule( $config, $cart );
+		unset( $_POST['billing_okoskabet_pre_order'] );
+
+		$this->assertSame( 'Forudbestilling', $held['label'] );
+		$this->assertSame( 'Emballage', $ordinary['label'] );
+		$this->assertSame( 50.0, Packaging_Fee::rule_amount( $held, $config, $cart ) );
+		$this->assertSame( 28.0, Packaging_Fee::rule_amount( $ordinary, $config, $cart ) );
+	}
+
 	// ---------------------------------------------------------------- helpers
+
+	/** A shop charging 50 kr for a pre-order and nothing otherwise. */
+	private function pre_order_fee_config(): array {
+		return Packaging_Fee::normalise_config(
+			array(
+				'enabled' => true,
+				'rules'   => array( $this->rule( array( 'label' => 'Forudbestilling', 'amount' => '50', 'pre_order_only' => true ) ) ),
+			)
+		);
+	}
 
 	private function make_category( string $name ): int {
 		$term = wp_insert_term( $name, 'product_cat' );

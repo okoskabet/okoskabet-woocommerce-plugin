@@ -63,6 +63,7 @@ function oko_test_reset(): void {
 	// grouping want the rules to be the only thing narrowing the days; tests
 	// about the dates themselves set a sparse, realistic calendar.
 	$GLOBALS['oko_test_delivery_days'] = oko_test_days_ahead( 28 );
+	oko_test_set_pre_order( false );
 	\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::purge_rules_cache();
 	oko_test_set_cart( array() );
 }
@@ -321,11 +322,11 @@ function oko_test_delivery_days(): ?array {
  */
 class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations\Split_Checkout {
 
-	/** @var int[] Every product the source was asked about. */
+	/** @var string[] Every product+mode the source was asked about. */
 	public $asked = array();
 
-	protected function delivery_days_for_product( int $product_id ): ?array {
-		$this->asked[] = $product_id;
+	protected function delivery_days_for_product( int $product_id, bool $pre_order = false ): ?array {
+		$this->asked[] = $product_id . '|' . ( $pre_order ? 'pre' : 'normal' );
 
 		$days = $GLOBALS['oko_test_delivery_days'];
 		if ( $days === null ) {
@@ -333,8 +334,35 @@ class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations
 		}
 
 		return ( new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions() )
-			->filter_dates_for_cart( $days, array( $product_id ) );
+			->filter_dates_for_cart( $days, array( $product_id ), $pre_order );
 	}
+
+	/** The banner's own wording for a group, which is otherwise internal. */
+	public function heading_for( array $group, int $number ): string {
+		return $this->group_heading( $group, $number );
+	}
+}
+
+/** What the banner would call this group. */
+function oko_split_heading( array $group, int $number ): string {
+	return ( new Oko_Test_Split_Checkout() )->heading_for( $group, $number );
+}
+
+/** Whether the checkout is currently in pre-order mode, for the stubs below. */
+$GLOBALS['oko_test_pre_order'] = false;
+
+/** Put the test checkout into a pre-order, or back out of it. */
+function oko_test_set_pre_order( bool $on ): void {
+	$GLOBALS['oko_test_pre_order'] = $on;
+	$_COOKIE['okoskabet_pre_order'] = $on ? '1' : '';
+}
+
+function oko_pre_order_checkout_requested(): bool {
+	return (bool) $GLOBALS['oko_test_pre_order'];
+}
+
+function oko_is_pre_order_checkout(): bool {
+	return (bool) $GLOBALS['oko_test_pre_order'];
 }
 
 // ---------------------------------------------------------------------------

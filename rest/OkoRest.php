@@ -288,8 +288,17 @@ class OkoRest extends Base
 	 * serving from before the button existed.
 	 */
 	private static function is_pre_order_request(\WP_REST_Request $request): bool {
-		return (string) $request->get_param('pre_order') === '1'
-			|| (string) ($_COOKIE['okoskabet_pre_order'] ?? '') === '1'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared, never output.
+		// A caller that states the mode outright decides it. Split checkout has
+		// to be able to ask what a product's NORMAL days are while the customer
+		// is in the middle of a pre-order, and the cookie alone would make that
+		// impossible. The checkout script only ever sends the parameter for a
+		// pre-order, never to say "normal", so nothing existing lands here.
+		$stated = $request->get_param('pre_order');
+		if ($stated !== null && (string) $stated !== '') {
+			return (string) $stated === '1';
+		}
+
+		return (string) ($_COOKIE['okoskabet_pre_order'] ?? '') === '1'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared, never output.
 	}
 
 	/**

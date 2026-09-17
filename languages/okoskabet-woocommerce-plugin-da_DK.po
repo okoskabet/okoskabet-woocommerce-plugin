@@ -1358,3 +1358,16 @@ msgstr "Opdelt levering: en kurv der har brug for mere end én leveringsdag give
 
 msgid "Delivery exceptions: each rule can be turned around to cover every product OTHER than the categories and tags you picked."
 msgstr "Leveringsundtagelser: hver regel kan vendes om, så den dækker alle andre varer end de kategorier og tags, du har valgt."
+
+# Opdeling på tværs af forudbestilling og almindelig levering
+msgid "Only part of your basket can be pre-ordered"
+msgstr "Kun en del af din kurv kan forudbestilles"
+
+msgid "You can split the order into a pre-order for the items that can be held, and an ordinary delivery for the rest — each with its own date and its own fee. Or take the items that cannot be pre-ordered out of the basket. Choose below."
+msgstr "Du kan dele ordren op i en forudbestilling på de varer, der kan gemmes, og en almindelig levering på resten — hver med sin egen dato og sit eget gebyr. Eller du kan tage de varer ud af kurven, der ikke kan forudbestilles. Vælg nedenfor."
+
+msgid "Pre-order %1$d (%2$s)"
+msgstr "Forudbestilling %1$d (%2$s)"
+
+msgid "Remove %1$s, and the rest can be pre-ordered together for %2$s"
+msgstr "Fjern %1$s, så kan resten forudbestilles samlet til %2$s"

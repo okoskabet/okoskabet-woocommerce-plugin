@@ -358,6 +358,9 @@ class Packaging_Fee extends Base {
 			if ( ! empty( $rule['pre_order_only'] ) && ! self::is_pre_order() ) {
 				continue;
 			}
+			if ( ! empty( $rule['pre_order_only'] ) && self::pre_order_has_no_date() ) {
+				continue;
+			}
 			return $rule;
 		}
 
@@ -370,6 +373,34 @@ class Packaging_Fee extends Base {
 	 */
 	private static function is_pre_order(): bool {
 		return \function_exists( 'oko_is_pre_order_checkout' ) && \oko_is_pre_order_checkout();
+	}
+
+	/**
+	 * Whether this basket, as a pre-order, has no day it could be delivered on.
+	 *
+	 * A pre-order fee pays for holding goods until a date in the future. With
+	 * no date there is nothing being held. A Gaardmester basket mixing
+	 * pre-orderable and ordinary goods had no pre-order day at all, showed the
+	 * customer no dates and no explanation, and still charged them 50 kr for it.
+	 *
+	 * Only a clear "there is no day" waives the fee. If Økoskabet cannot be
+	 * asked, the fee is charged as it always was — a shop should not lose the
+	 * charge to a timeout, and the checkout will not let the order through
+	 * without a date anyway.
+	 */
+	private static function pre_order_has_no_date(): bool {
+		$has_date = \function_exists( 'oko_pre_order_cart_has_date' ) ? \oko_pre_order_cart_has_date() : null;
+
+		/**
+		 * Whether the basket has a pre-order day: true, false, or null for
+		 * "could not find out". Answering it here is what lets the rule be
+		 * tested without an Økoskabet to ask.
+		 *
+		 * @param bool|null $has_date
+		 */
+		$has_date = \apply_filters( 'okoskabet_pre_order_cart_has_date', $has_date );
+
+		return $has_date === false;
 	}
 
 	/**
