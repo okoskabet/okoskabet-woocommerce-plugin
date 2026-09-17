@@ -89,6 +89,26 @@ it( 'puts the groups in the order they will happen', function () {
 	);
 } );
 
+it( 'offers each group the soonest day it can have, not just any day that fits', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	// Every Monday in the year ahead suits the milk equally well as far as the
+	// rules are concerned. The customer is being shown one of them and asked to
+	// commit, so it has to be the next one — a date eleven months out fits the
+	// rules and is no use to anybody.
+	$dates = array();
+	foreach ( oko_split()->compute_split_groups() as $group ) {
+		$dates[] = $group['suggested_date'];
+	}
+	sort( $dates );
+
+	$expected = array( oko_test_next_weekday( 1 ), oko_test_next_weekday( 3 ) );
+	sort( $expected );
+
+	assert_same( $expected, $dates, 'the next Monday and the next Wednesday' );
+} );
+
 it( 'names a day each group can actually be delivered on', function () {
 	oko_split_weekday_shop();
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
