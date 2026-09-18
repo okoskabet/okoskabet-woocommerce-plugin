@@ -113,7 +113,9 @@ class OkoskabetCheckout {
 		// recalculation each time, seen on Gaardmester. Only where it does not
 		// do we ask. See woocommerceRecalculatesOn() for how that is told.
 		$( document ).on( 'change', SHIP_TO_DIFFERENT_SELECTOR, function () {
-			if ( ! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_CHANGE ) ) {
+			if (
+				! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_CHANGE )
+			) {
 				$( document.body ).trigger( 'update_checkout' );
 			}
 		} );
@@ -494,11 +496,14 @@ function findDateModeSpan( radio: HTMLElement ): HTMLElement | null {
 	let node = radio.parentElement;
 	while ( node && node !== stop ) {
 		if (
-			node.querySelectorAll( 'input[name^="shipping_method["]' ).length > 1
+			node.querySelectorAll( 'input[name^="shipping_method["]' ).length >
+			1
 		) {
 			return null;
 		}
-		const span = node.querySelector< HTMLElement >( '.okoskabet-date-mode' );
+		const span = node.querySelector< HTMLElement >(
+			'.okoskabet-date-mode'
+		);
 		if ( span ) {
 			return span;
 		}
