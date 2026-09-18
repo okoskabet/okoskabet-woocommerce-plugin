@@ -108,18 +108,20 @@ class OkoskabetCheckout {
 		// so price and dates move together, and the picker is rebuilt with the
 		// new dates on updated_checkout above.
 		//
-		// WooCommerce's own checkout already recalculates on both, so there it
-		// is left alone — asking as well cost a second, wasted recalculation
-		// every time the box was ticked or unticked, seen on Gaardmester. A
-		// builder's checkout does not always do it — Bricks' Checkout v2 does
-		// not mark the postcode field — and there nothing would recalculate.
-		const recalculate = function () {
-			if ( ! checkoutRecalculatesOnAddressChange() ) {
+		// Where WooCommerce's own checkout script already recalculates on the
+		// field, it is left to do so — asking as well cost a second, wasted
+		// recalculation each time, seen on Gaardmester. Only where it does not
+		// do we ask. See woocommerceRecalculatesOn() for how that is told.
+		$( document ).on( 'change', SHIP_TO_DIFFERENT_SELECTOR, function () {
+			if ( ! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_CHANGE ) ) {
 				$( document.body ).trigger( 'update_checkout' );
 			}
-		};
-		$( document ).on( 'change', SHIP_TO_DIFFERENT_SELECTOR, recalculate );
-		$( document ).on( 'change', SHIPPING_POSTAL_CODE_SELECTOR, recalculate );
+		} );
+		$( document ).on( 'change', SHIPPING_POSTAL_CODE_SELECTOR, function () {
+			if ( ! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_TEXT ) ) {
+				$( document.body ).trigger( 'update_checkout' );
+			}
+		} );
 	}
 
 	// Ask for the dates of every Økoskabet method on offer now, rather than
@@ -395,20 +397,37 @@ class OkoskabetCheckout {
 	}
 }
 
+// What WooCommerce's checkout.js recalculates on, copied from its own event
+// bindings (WooCommerce 11.1.0, assets/js/frontend/checkout.js), so the
+// question below is the one WooCommerce itself answers.
+const WC_RECALCULATES_ON_CHANGE =
+	'#ship-to-different-address input, .update_totals_on_change input[type="checkbox"]';
+const WC_RECALCULATES_ON_TEXT =
+	'.address-field input.input-text, .update_totals_on_change input.input-text';
+
 /**
- * Whether this checkout recalculates by itself when the shipping address
- * changes.
+ * Whether WooCommerce's own checkout script will recalculate when this field
+ * changes, so that asking as well would only recalculate twice.
  *
- * WooCommerce marks the shipping postcode field update_totals_on_change and
- * recalculates on it, and on the ship-to-different-address box as well. A
- * checkout that carries the mark is WooCommerce's own, or one built closely
- * enough on it to behave the same, and is left to do its own recalculating.
+ * It does when its script runs on the page (wc_checkout_params is how it
+ * announces itself), the field sits inside form.checkout — which is where it
+ * listens — and the field matches the selectors it listens for.
+ *
+ * An earlier version looked for update_totals_on_change on the shipping
+ * postcode field instead, and got Gaardmester wrong: its Checkout Field Editor
+ * strips that class from both postcode fields, yet WooCommerce still
+ * recalculates on the ship-to-different box, which it binds to directly, and
+ * on the postcode, which carries address-field. Asking what WooCommerce binds
+ * to, rather than guessing from one class, holds whatever sits in between.
  */
-function checkoutRecalculatesOnAddressChange(): boolean {
+function woocommerceRecalculatesOn(
+	field: Element | null,
+	selector: string
+): boolean {
 	return (
-		document
-			.getElementById( 'shipping_postcode_field' )
-			?.classList.contains( 'update_totals_on_change' ) === true
+		typeof ( window as any ).wc_checkout_params !== 'undefined' &&
+		!! field?.closest( 'form.checkout' ) &&
+		!! field?.matches( selector )
 	);
 }
 
