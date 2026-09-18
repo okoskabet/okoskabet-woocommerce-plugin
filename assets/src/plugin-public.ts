@@ -13,6 +13,13 @@ const POSTAL_CODE_SELECTOR = '#billing_postcode';
 const ADDRESS_1_SELECTOR = '#billing_address_1';
 const ADDRESS_2_SELECTOR = '#billing_address_2';
 
+// The other address, used when the customer ticks "ship to a different
+// address". See getDeliveryAddress() for when each one applies.
+const SHIP_TO_DIFFERENT_SELECTOR = '#ship-to-different-address-checkbox';
+const SHIPPING_POSTAL_CODE_SELECTOR = '#shipping_postcode';
+const SHIPPING_ADDRESS_1_SELECTOR = '#shipping_address_1';
+const SHIPPING_ADDRESS_2_SELECTOR = '#shipping_address_2';
+
 const DELIVERY_DATE_INPUT_SELECTOR = '#billing_okoskabet_delivery_date';
 const SHED_ID_INPUT_SELECTOR = '#billing_okoskabet_shed_id';
 
@@ -94,6 +101,57 @@ class OkoskabetCheckout {
 			that.clearInputs();
 			that.warmDeliveryDates();
 		} );
+
+		// Ticking "ship to a different address", or changing the shipping
+		// postcode, changes which address the dates belong to. WooCommerce has
+		// to recalculate: it works out the shipping zone from the same address,
+		// so price and dates move together, and the picker is rebuilt with the
+		// new dates on updated_checkout above.
+		//
+		// Where WooCommerce's own checkout script already recalculates on the
+		// field, it is left to do so — asking as well cost a second, wasted
+		// recalculation each time, seen on Gaardmester. Only where it does not
+		// do we ask. See woocommerceRecalculatesOn() for how that is told.
+		$( document ).on( 'change', SHIP_TO_DIFFERENT_SELECTOR, function () {
+			if ( ! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_CHANGE ) ) {
+				$( document.body ).trigger( 'update_checkout' );
+			}
+		} );
+		// The postcode needs one more condition. WooCommerce listens to it, but
+		// only acts on a change if the field was typed in first: its change
+		// handler (maybe_input_changed) does nothing unless a keydown marked
+		// the input dirty. A postcode filled in by the browser's autofill, or
+		// pasted with the mouse, changes without a keydown and recalculates
+		// nothing — so a customer who ticked the box and let the browser fill
+		// the shipping address kept the billing address's dates, and the
+		// server only checks that a date was chosen, not that it fits.
+		//
+		// So we stay out only when this very field was typed in since its last
+		// change, which is when WooCommerce is sure to act. Tab is not typing:
+		// WooCommerce ignores it too. Anywhere we cannot be sure, we ask — an
+		// occasional second recalculation costs one aborted request, while a
+		// missing one books the wrong day.
+		let typedInShippingPostcode = false;
+		$( document ).on(
+			'keydown',
+			SHIPPING_POSTAL_CODE_SELECTOR,
+			function ( event: JQuery.KeyDownEvent ) {
+				if ( event.key !== 'Tab' ) {
+					typedInShippingPostcode = true;
+				}
+			}
+		);
+		$( document ).on( 'change', SHIPPING_POSTAL_CODE_SELECTOR, function () {
+			const typed = typedInShippingPostcode;
+			typedInShippingPostcode = false;
+			if (
+				typed &&
+				woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_TEXT )
+			) {
+				return;
+			}
+			$( document.body ).trigger( 'update_checkout' );
+		} );
 	}
 
 	// Ask for the dates of every Økoskabet method on offer now, rather than
@@ -104,17 +162,10 @@ class OkoskabetCheckout {
 	// other one's dates already there. The answers are remembered, so asking
 	// again costs nothing.
 	private warmDeliveryDates() {
-		const postalCode =
-			this.getFormFieldValue( POSTAL_CODE_SELECTOR )?.trim();
+		const { postalCode, address } = this.getDeliveryAddress();
 		if ( ! postalCode ) {
 			return;
 		}
-		const address = [
-			this.getFormFieldValue( ADDRESS_1_SELECTOR )?.trim(),
-			this.getFormFieldValue( ADDRESS_2_SELECTOR )?.trim(),
-		]
-			.filter( ( val ) => val && val !== '' )
-			.join( ', ' );
 
 		const offered = Array.from(
 			document.querySelectorAll< HTMLInputElement >(
@@ -248,15 +299,7 @@ class OkoskabetCheckout {
 		  }
 		| undefined {
 		const shippingMethod = this.getSelectedShippingMethod();
-
-		const postalCode =
-			this.getFormFieldValue( POSTAL_CODE_SELECTOR )?.trim();
-		const address1 = this.getFormFieldValue( ADDRESS_1_SELECTOR )?.trim();
-		const address2 = this.getFormFieldValue( ADDRESS_2_SELECTOR )?.trim();
-
-		const address = [ address1, address2 ]
-			.filter( ( val ) => val && val !== '' )
-			.join( ', ' );
+		const { postalCode, address } = this.getDeliveryAddress();
 
 		if ( shippingMethod && postalCode ) {
 			return {
@@ -266,6 +309,54 @@ class OkoskabetCheckout {
 				dateMode: this.getSelectedDateMode(),
 			};
 		}
+	}
+
+	// The address the order will actually be delivered to — the one the
+	// dates have to be asked for.
+	//
+	// The picker used to read the billing address and nothing else. A home
+	// delivery is sent to the shipping address, though, and WooCommerce works
+	// out the shipping zone from it too, so a customer who ticked "ship to a
+	// different address" got the zone and price of one place and the dates of
+	// another. Billing in 2100 København, shipping to 3700 Rønne: Ø-levering
+	// at the Bornholm price, on a day Økoskabet only drives in København, and
+	// the order went to Økoskabet like that.
+	//
+	// The rule is the one PHP already uses when it decides whether a home
+	// delivery may go without a date (oko_home_delivery_may_go_without_date):
+	// the shipping address when the box is ticked and it has a postcode, the
+	// billing address otherwise. Ticked with the shipping postcode still empty
+	// falls back to billing, as it does there, rather than asking for no dates.
+	// A customer who never ticks the box sees exactly what they saw before.
+	private getDeliveryAddress(): {
+		postalCode: string | undefined;
+		address: string;
+	} {
+		const shipsElsewhere =
+			document.querySelector< HTMLInputElement >(
+				SHIP_TO_DIFFERENT_SELECTOR
+			)?.checked === true;
+		const shippingPostalCode = shipsElsewhere
+			? this.getFormFieldValue( SHIPPING_POSTAL_CODE_SELECTOR )?.trim()
+			: undefined;
+		const useShipping = shipsElsewhere && !! shippingPostalCode;
+
+		const postalCode = useShipping
+			? shippingPostalCode
+			: this.getFormFieldValue( POSTAL_CODE_SELECTOR )?.trim();
+
+		const address = [
+			this.getFormFieldValue(
+				useShipping ? SHIPPING_ADDRESS_1_SELECTOR : ADDRESS_1_SELECTOR
+			)?.trim(),
+			this.getFormFieldValue(
+				useShipping ? SHIPPING_ADDRESS_2_SELECTOR : ADDRESS_2_SELECTOR
+			)?.trim(),
+		]
+			.filter( ( val ) => val && val !== '' )
+			.join( ', ' );
+
+		return { postalCode, address };
 	}
 
 	// The delivery-date setting of the chosen rate, printed next to its radio
@@ -334,6 +425,40 @@ class OkoskabetCheckout {
 	private setLocationInput( value: string ): void {
 		jQuery( SHED_ID_INPUT_SELECTOR ).val( value );
 	}
+}
+
+// What WooCommerce's checkout.js recalculates on, copied from its own event
+// bindings (WooCommerce 11.1.0, assets/js/frontend/checkout.js), so the
+// question below is the one WooCommerce itself answers.
+const WC_RECALCULATES_ON_CHANGE =
+	'#ship-to-different-address input, .update_totals_on_change input[type="checkbox"]';
+const WC_RECALCULATES_ON_TEXT =
+	'.address-field input.input-text, .update_totals_on_change input.input-text';
+
+/**
+ * Whether WooCommerce's own checkout script will recalculate when this field
+ * changes, so that asking as well would only recalculate twice.
+ *
+ * It does when its script runs on the page (wc_checkout_params is how it
+ * announces itself), the field sits inside form.checkout — which is where it
+ * listens — and the field matches the selectors it listens for.
+ *
+ * An earlier version looked for update_totals_on_change on the shipping
+ * postcode field instead, and got Gaardmester wrong: its Checkout Field Editor
+ * strips that class from both postcode fields, yet WooCommerce still
+ * recalculates on the ship-to-different box, which it binds to directly, and
+ * on the postcode, which carries address-field. Asking what WooCommerce binds
+ * to, rather than guessing from one class, holds whatever sits in between.
+ */
+function woocommerceRecalculatesOn(
+	field: Element | null,
+	selector: string
+): boolean {
+	return (
+		typeof ( window as any ).wc_checkout_params !== 'undefined' &&
+		!! field?.closest( 'form.checkout' ) &&
+		!! field?.matches( selector )
+	);
 }
 
 /**
