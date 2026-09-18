@@ -31,6 +31,8 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 }
 ?>
 <div id="tabs-1" class="wrap">
+	<h2 class="oko-settings-group" style="font-size:1.6em;"><?php esc_html_e( 'Standard settings', O_TEXTDOMAIN ); ?></h2>
+	<p class="description"><?php esc_html_e( 'What every shop needs: the connection to Økoskabet, the texts at checkout and the webhooks. The extras your shop can choose come further down.', O_TEXTDOMAIN ); ?></p>
 	<?php
 	$cmb = new_cmb2_box(
 		array(
@@ -280,52 +282,6 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 			)
 		);
 	}
-
-	$cmb->add_field(
-		array(
-			'name'    => __('Allow split checkout', O_TEXTDOMAIN),
-			'desc'    => __('When ON: a basket that cannot be delivered on one day gets two buttons at checkout — split it into one order per delivery day, or take the items in the way out of the basket so the rest is delivered together. Each part-order is an ordinary order and pays its own shipping and packaging fee. When OFF: a notice tells the customer to remove items so they all share at least one delivery date.', O_TEXTDOMAIN),
-			'id'      => '_split_checkout_enabled',
-			'type'    => 'checkbox',
-			'default' => '',
-		)
-	);
-
-	$cmb->add_field(
-		array(
-			'name'            => __('Button: split the delivery', O_TEXTDOMAIN),
-			'desc'            => __('What the first button says when the basket needs exactly two delivery days. The customer orders the first delivery now and the rest straight after. Leave empty for "Opdel levering i to".', O_TEXTDOMAIN),
-			'id'              => '_split_button_split_label',
-			'type'            => 'text',
-			'sanitization_cb' => 'sanitize_text_field',
-			'attributes'      => array('placeholder' => 'Opdel levering i to'),
-			'default'         => '',
-		)
-	);
-
-	$cmb->add_field(
-		array(
-			'name'            => __('Button: split into more than two', O_TEXTDOMAIN),
-			'desc'            => __('What that button says when the basket needs three or more delivery days, where "i to" would not be true. Write %d where the number belongs. Leave empty for "Opdel levering i 3 leveringer".', O_TEXTDOMAIN),
-			'id'              => '_split_button_split_label_many',
-			'type'            => 'text',
-			'sanitization_cb' => 'sanitize_text_field',
-			'attributes'      => array('placeholder' => 'Opdel levering i %d leveringer'),
-			'default'         => '',
-		)
-	);
-
-	$cmb->add_field(
-		array(
-			'name'            => __('Button: take items out of the basket', O_TEXTDOMAIN),
-			'desc'            => __('What the second button says. It shows the customer which items to give up for the rest of the basket to be delivered on one day, with the date, and removes them when they choose. Leave empty for "Tøm fra kurven".', O_TEXTDOMAIN),
-			'id'              => '_split_button_reduce_label',
-			'type'            => 'text',
-			'sanitization_cb' => 'sanitize_text_field',
-			'attributes'      => array('placeholder' => 'Tøm fra kurven'),
-			'default'         => '',
-		)
-	);
 
 	$cmb->add_field(
 		array(

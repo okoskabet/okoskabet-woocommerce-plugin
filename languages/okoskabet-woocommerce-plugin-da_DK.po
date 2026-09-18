@@ -1394,3 +1394,25 @@ msgstr "Fjern %s, så kan resten leveres sammen"
 
 msgid "Remove %s, and the rest can be pre-ordered together"
 msgstr "Fjern %s, så kan resten forudbestilles samlet"
+
+# Settings page — standard settings on top, the extras below
+msgid "Standard settings"
+msgstr "Standardindstillinger"
+
+msgid "What every shop needs: the connection to Økoskabet, the texts at checkout and the webhooks. The extras your shop can choose come further down."
+msgstr "Det, hver butik skal have sat op: forbindelsen til Økoskabet, teksterne i kassen og webhooks. De ekstra funktioner, I selv kan vælge, kommer længere nede."
+
+msgid "Extra features"
+msgstr "Ekstra funktioner"
+
+msgid "Features beyond the basics. Each one is switched on and off on its own."
+msgstr "Funktioner ud over det grundlæggende. Hver af dem slås til og fra for sig."
+
+msgid "Split delivery"
+msgstr "Opdelt levering"
+
+msgid "Split delivery saved."
+msgstr "Opdelt levering er gemt."
+
+msgid "Save split delivery"
+msgstr "Gem opdelt levering"

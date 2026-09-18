@@ -995,10 +995,68 @@ it( 'never touches shipping or fees, so a second order is charged like a first',
 	assert_true( count( $GLOBALS['oko_test_hooks'] ) > 0, 'the class did register its own hooks' );
 } );
 
-it( 'stays out of the way entirely until the shop switches it on', function () {
+it( 'stays out of the checkout entirely until the shop switches it on', function () {
 	oko_test_set_settings( array() );
 	( new Split_Checkout() )->initialize();
 
-	assert_same( array(), $GLOBALS['oko_test_hooks'], 'no hooks while the feature is off' );
+	// The settings panel is the one thing that must be there while the
+	// feature is off — it is where the shop switches it on. Nothing else: not
+	// a banner, not an AJAX endpoint, not a checkout hook.
+	$registered = array_map( function ( $h ) { return $h['hook']; }, $GLOBALS['oko_test_hooks'] );
+	sort( $registered );
+	assert_same(
+		array( 'admin_post_' . Split_Checkout::ACTION_SAVE_SETTINGS, 'okoskabet_after_settings_form' ),
+		$registered,
+		'only the settings panel while the feature is off'
+	);
 	assert_false( Split_Checkout::is_feature_enabled() );
+} );
+
+describe( 'Split checkout: its settings panel' );
+
+it( 'saves its own settings and leaves the rest of the main settings alone', function () {
+	// The panel writes into the same option as the main form, which holds the
+	// API key and the webhook secret. A save here that rebuilt the option from
+	// the panel's four fields would cost the shop its connection to Økoskabet.
+	$GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings'] = array(
+		'_api_key'                  => 'kept-key',
+		'_webhook_secret'           => 'kept-secret',
+		'_hide_wc_order_comments'   => 'on',
+		'_split_button_reduce_label' => 'Gammel tekst',
+	);
+
+	Split_Checkout::save_settings( array(
+		'_split_checkout_enabled'   => 'on',
+		'_split_button_split_label' => '  Del op i to  ',
+		'_api_key'                  => 'should-not-be-written',
+	) );
+
+	$saved = $GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings'];
+
+	assert_same( 'kept-key', $saved['_api_key'], 'the API key is untouched, whatever the form sent' );
+	assert_same( 'kept-secret', $saved['_webhook_secret'], 'the webhook secret is untouched' );
+	assert_same( 'on', $saved['_hide_wc_order_comments'], 'a main-form setting is untouched' );
+
+	assert_same( 'on', $saved['_split_checkout_enabled'], 'the feature is switched on' );
+	assert_same( 'Del op i to', $saved['_split_button_split_label'], 'the wording is stored, trimmed' );
+	assert_false( isset( $saved['_split_button_reduce_label'] ), 'a field left empty goes back to the built-in wording' );
+} );
+
+it( 'switches the feature off when the box is unticked', function () {
+	$GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings'] = array(
+		'_split_checkout_enabled' => 'on',
+	);
+
+	// An unticked checkbox is not sent at all — that absence is the "off".
+	Split_Checkout::save_settings( array() );
+
+	$saved = $GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings'];
+	assert_false( isset( $saved['_split_checkout_enabled'] ), 'stored as no key, as the main form always did' );
+} );
+
+it( 'accepts nothing but "on" as switching the feature on', function () {
+	Split_Checkout::save_settings( array( '_split_checkout_enabled' => 'yes please' ) );
+
+	$saved = $GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings'];
+	assert_false( isset( $saved['_split_checkout_enabled'] ), 'anything else is off' );
 } );

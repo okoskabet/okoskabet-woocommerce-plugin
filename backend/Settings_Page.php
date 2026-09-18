@@ -35,6 +35,26 @@ class Settings_Page extends Base {
 		$realpath        = (string) \realpath( __DIR__ );
 		$plugin_basename = \plugin_basename( \plugin_dir_path( $realpath ) . O_TEXTDOMAIN . '.php' );
 		\add_filter( 'plugin_action_links_' . $plugin_basename, array( $this, 'add_action_links' ) );
+
+		// Divides the page: everything above is what every shop needs,
+		// everything below is an extra the shop chooses. Priority 8 puts it
+		// after the merchants table (5) and before the first extra, the
+		// delivery exceptions (10).
+		\add_action( 'okoskabet_after_settings_form', array( $this, 'render_extras_heading' ), 8 );
+	}
+
+	/**
+	 * The heading over the extras.
+	 *
+	 * @return void
+	 */
+	public function render_extras_heading() {
+		?>
+		<h2 class="oko-settings-group" style="font-size:1.6em; margin-top:48px; padding-top:24px; border-top:1px solid #c3c4c7;">
+			<?php \esc_html_e( 'Extra features', O_TEXTDOMAIN ); ?>
+		</h2>
+		<p class="description"><?php \esc_html_e( 'Features beyond the basics. Each one is switched on and off on its own.', O_TEXTDOMAIN ); ?></p>
+		<?php
 	}
 
 	/**

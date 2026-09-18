@@ -75,8 +75,35 @@ class Split_Checkout extends Base {
 	const MODE_PRE_ORDER = 'pre_order';
 	const MODE_NORMAL    = 'normal';
 
+	/** admin-post action behind the settings panel's save button. */
+	const ACTION_SAVE_SETTINGS = 'oko_save_split_checkout';
+
+	/** Who may change the panel — the same as every other extra on the page. */
+	const SETTINGS_CAPABILITY = 'manage_woocommerce';
+
+	/**
+	 * The settings the panel owns, and the only ones its save touches.
+	 *
+	 * They stay in the plugin's main settings option, where they have been
+	 * since the feature arrived: the panel moved on the page, the data did not.
+	 * A shop that updates keeps what it had, and every reader —
+	 * is_feature_enabled(), the button labels — keeps reading the same keys.
+	 */
+	const SETTING_KEYS = array(
+		'_split_checkout_enabled',
+		'_split_button_split_label',
+		'_split_button_split_label_many',
+		'_split_button_reduce_label',
+	);
+
 	public function initialize() {
 		parent::initialize();
+
+		// The settings panel has to be there while the feature is off too —
+		// it is where a shop switches it on. Priority 12 puts it straight
+		// under the delivery exceptions (10) and above the packaging fee (15).
+		add_action( 'okoskabet_after_settings_form', array( $this, 'render_settings_section' ), 12 );
+		add_action( 'admin_post_' . self::ACTION_SAVE_SETTINGS, array( $this, 'handle_settings_save' ) );
 
 		if ( ! $this->is_feature_enabled() ) {
 			return;
@@ -741,6 +768,140 @@ class Split_Checkout extends Base {
 		$label = trim( (string) ( self::settings()['_split_button_reduce_label'] ?? '' ) );
 
 		return $label !== '' ? $label : __( 'Empty from the basket', O_TEXTDOMAIN );
+	}
+
+	// ---------------------------------------------------------------------
+	// Settings panel
+	// ---------------------------------------------------------------------
+
+	/**
+	 * The feature's own panel on the settings page, among the other extras.
+	 *
+	 * It used to be four fields at the bottom of the main form, under
+	 * "Webhook & Betaling", where nobody looking for it would look. It is an
+	 * extra a shop chooses — like the delivery exceptions it works on top of —
+	 * so it sits with them, and the main form is left holding what every shop
+	 * needs.
+	 */
+	public function render_settings_section(): void {
+		if ( ! current_user_can( self::SETTINGS_CAPABILITY ) ) {
+			return;
+		}
+
+		$settings = self::settings();
+		$value    = function ( string $key ) use ( $settings ): string {
+			return (string) ( $settings[ $key ] ?? '' );
+		};
+		$saved = isset( $_GET['oko_split_saved'] ) && $_GET['oko_split_saved'] === '1'; // phpcs:ignore WordPress.Security.NonceVerification
+
+		$texts = array(
+			'_split_button_split_label'      => array(
+				__( 'Button: split the delivery', O_TEXTDOMAIN ),
+				__( 'What the first button says when the basket needs exactly two delivery days. The customer orders the first delivery now and the rest straight after. Leave empty for "Opdel levering i to".', O_TEXTDOMAIN ),
+				'Opdel levering i to',
+			),
+			'_split_button_split_label_many' => array(
+				__( 'Button: split into more than two', O_TEXTDOMAIN ),
+				__( 'What that button says when the basket needs three or more delivery days, where "i to" would not be true. Write %d where the number belongs. Leave empty for "Opdel levering i 3 leveringer".', O_TEXTDOMAIN ),
+				'Opdel levering i %d leveringer',
+			),
+			'_split_button_reduce_label'     => array(
+				__( 'Button: take items out of the basket', O_TEXTDOMAIN ),
+				__( 'What the second button says. It shows the customer which items to give up for the rest of the basket to be delivered on one day, with the date, and removes them when they choose. Leave empty for "Tøm fra kurven".', O_TEXTDOMAIN ),
+				'Tøm fra kurven',
+			),
+		);
+		?>
+		<div id="okoskabet-split-checkout" style="margin-top:32px;">
+			<h2><?php esc_html_e( 'Split delivery', O_TEXTDOMAIN ); ?></h2>
+
+			<?php if ( $saved ) : ?>
+				<div class="notice notice-success is-dismissible">
+					<p><?php esc_html_e( 'Split delivery saved.', O_TEXTDOMAIN ); ?></p>
+				</div>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::ACTION_SAVE_SETTINGS ); ?>
+				<input type="hidden" name="action" value="<?php echo esc_attr( self::ACTION_SAVE_SETTINGS ); ?>" />
+
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Allow split checkout', O_TEXTDOMAIN ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="_split_checkout_enabled" value="on" <?php checked( $value( '_split_checkout_enabled' ), 'on' ); ?> />
+								<?php esc_html_e( 'When ON: a basket that cannot be delivered on one day gets two buttons at checkout — split it into one order per delivery day, or take the items in the way out of the basket so the rest is delivered together. Each part-order is an ordinary order and pays its own shipping and packaging fee. When OFF: a notice tells the customer to remove items so they all share at least one delivery date.', O_TEXTDOMAIN ); ?>
+							</label>
+						</td>
+					</tr>
+					<?php foreach ( $texts as $key => list( $label, $help, $placeholder ) ) : ?>
+						<tr>
+							<th scope="row"><label for="<?php echo esc_attr( 'oko' . $key ); ?>"><?php echo esc_html( $label ); ?></label></th>
+							<td>
+								<input type="text" class="regular-text" id="<?php echo esc_attr( 'oko' . $key ); ?>" name="<?php echo esc_attr( $key ); ?>" value="<?php echo esc_attr( $value( $key ) ); ?>" placeholder="<?php echo esc_attr( $placeholder ); ?>" />
+								<p class="description"><?php echo esc_html( $help ); ?></p>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				</table>
+
+				<?php submit_button( __( 'Save split delivery', O_TEXTDOMAIN ), 'primary', 'submit', false ); ?>
+			</form>
+		</div>
+		<?php
+	}
+
+	public function handle_settings_save(): void {
+		if ( ! current_user_can( self::SETTINGS_CAPABILITY ) ) {
+			wp_die( esc_html__( 'You do not have access.', O_TEXTDOMAIN ) );
+		}
+		check_admin_referer( self::ACTION_SAVE_SETTINGS );
+
+		self::save_settings( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		wp_safe_redirect(
+			add_query_arg(
+				array( 'page' => O_TEXTDOMAIN, 'oko_split_saved' => '1' ),
+				admin_url( 'admin.php' )
+			) . '#okoskabet-split-checkout'
+		);
+		exit;
+	}
+
+	/**
+	 * Write the panel's four settings into the main settings option, and
+	 * nothing else.
+	 *
+	 * The option also holds the API key, the webhook secret and every other
+	 * setting on the main form, so this reads the whole row and changes only
+	 * its own keys — a save here must never be able to cost a shop its
+	 * connection to Økoskabet.
+	 *
+	 * An empty value is stored the way the main form always stored it: as no
+	 * key at all. Every reader already treats a missing key as "off" or "use
+	 * the built-in wording".
+	 *
+	 * @param array $posted The submitted form, already unslashed.
+	 */
+	public static function save_settings( array $posted ): void {
+		$option_key = O_TEXTDOMAIN . '-settings';
+		$option     = (array) get_option( $option_key, array() );
+
+		foreach ( self::SETTING_KEYS as $key ) {
+			$raw   = $posted[ $key ] ?? '';
+			$value = $key === '_split_checkout_enabled'
+				? ( $raw === 'on' ? 'on' : '' )
+				: sanitize_text_field( is_string( $raw ) ? $raw : '' );
+
+			if ( $value === '' ) {
+				unset( $option[ $key ] );
+			} else {
+				$option[ $key ] = $value;
+			}
+		}
+
+		update_option( $option_key, $option );
 	}
 
 	// ---------------------------------------------------------------------

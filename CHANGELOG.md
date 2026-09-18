@@ -4,6 +4,22 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 ## Unreleased
 
+= Indstillingssiden: standard øverst, ekstra funktioner nedenunder =
+
+"Tillad opdelt checkout" og de tre knaptekster stod nederst i hovedformularen,
+under "Webhook & Betaling", hvor ingen ville lede efter dem. De har nu deres
+egen sektion, **Opdelt levering**, lige under Leveringsundtagelser.
+
+Siden er samtidig delt i to: **Standardindstillinger** øverst — forbindelsen til
+Økoskabet, teksterne i kassen, webhooks — og **Ekstra funktioner** nedenunder:
+leveringsundtagelser, opdelt levering, emballagegebyr og oversigten over
+funktioner og priser.
+
+Det er kun placeringen, der er ændret. Indstillingerne er gemt samme sted som
+før, så en butik, der opdaterer, beholder det, den havde sat op. Sektionen har
+sin egen gem-knap, og den rører kun sine egne fire felter — API-nøglen og resten
+af hovedformularen kan den ikke komme til at overskrive.
+
 = Fortryder man opdelingen, får man sin kurv tilbage =
 
 "Annullér opdelt levering og start forfra" tømte kurven og sendte kunden ud i
