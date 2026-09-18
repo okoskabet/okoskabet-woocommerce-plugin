@@ -66,6 +66,9 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				'inline' => __('Inline', O_TEXTDOMAIN),
 				'modal'   => __('Modal', O_TEXTDOMAIN),
 			),
+			// What an unset option now behaves as (see the checkout config),
+			// so the radio shows the truth instead of neither choice.
+			'default'          => 'inline',
 		)
 	);
 

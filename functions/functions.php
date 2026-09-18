@@ -216,37 +216,73 @@ add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
 
 
 add_action('woocommerce_review_order_after_shipping', 'custom_content_for_custom_shipping_checkout', 10);
+
+/**
+ * WooCommerce's own review-order hook — the way every shop has rendered
+ * until now, and still the default.
+ *
+ * A checkout built on WooCommerce's stock templates reaches the delivery UI
+ * through here and through nothing else, and gets exactly the markup it got
+ * before. A theme that renders the UI itself turns this off with the filter
+ * rather than by unhooking, so the two can never both run.
+ */
 function custom_content_for_custom_shipping_checkout(): void
 {
+	if (! apply_filters('oko_auto_render_delivery_ui', true)) {
+		return;
+	}
+
+	oko_render_delivery_ui('table');
+}
+
+/**
+ * Draw the delivery UI's mount point, wherever this checkout keeps it.
+ *
+ * The Svelte app that draws the date picker, the shed list and the map does
+ * not care what the checkout is built with; it needs a place to mount and
+ * the cart's product ids. Only this function knows about the surrounding
+ * markup, which is why it is the one thing a builder has to be able to call.
+ *
+ * `$context` decides the wrapper, and nothing else:
+ *   - `table` — inside WooCommerce's review-order table, so the pre-order
+ *     buttons come out as a `<tr>`. The default, and what the hook above asks
+ *     for, so the classic checkout is unchanged.
+ *   - `block` — anywhere else: Bricks, Elementor, a theme template. Same
+ *     content in a plain `<div>`, because a `<tr>` outside a table is dropped
+ *     by the HTML parser before any of our JS ever sees it.
+ *
+ * Renders once per request. A shop that both leaves the hook on and places
+ * the shortcode gets one UI, not two.
+ */
+function oko_render_delivery_ui(string $context = 'table'): void
+{
+	if (did_action(OKO_UI_DRAWN_ACTION)) {
+		return;
+	}
+
 	$settings = o_get_settings();
 
-	// Resolve which merchant the current cart routes to so the JS-rendered
-	// checkout UI shows the right descriptions and talks to the right
-	// /sheds and /home_delivery endpoints. The router has already applied
-	// the mixed-cart-falls-back-to-default policy at this point — every
-	// cart resolves to exactly one merchant.
-	$resolved = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')
-		? \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_cart()
-		: array('merchant_id' => '', 'merchant' => null, 'is_mixed' => false, 'fell_back_to_default' => false, 'merchant_ids' => array(), 'per_product' => array());
-
-	$merchant = $resolved['merchant'] ?? null;
-
-	// If we have no merchant we still want the legacy fallback so a fresh
-	// install (where the migration hasn't fired yet) doesn't break.
-	if (! $merchant) {
-		$merchant = o_get_merchant();
-	}
+	$resolved = oko_resolve_checkout_merchant();
+	$merchant = $resolved['merchant'];
 
 	if (empty($merchant['api_key'])) {
 		return;
 	}
+
+	// Latched only once we are certain we are drawing. A shop without a key
+	// renders nothing and stays free to render later in the same request, if
+	// a key arrives — which is what a settings save inside checkout does.
+	do_action(OKO_UI_DRAWN_ACTION);
 
 	$shed_description  = ! empty($merchant['description_shipping_okoskabet']) ? $merchant['description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
 	$local_description = ! empty($merchant['description_shipping_private'])   ? $merchant['description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
 
 	$config = wp_json_encode(array(
 		'locale'        => get_locale(),
-		'displayOption' => $settings['_display_option'] ?? '',
+		// Only 'inline' and 'modal' mean anything to the picker. An unset
+		// option ('') is neither, which hides the locker picker with no way
+		// to open it, so anything but 'modal' is inline.
+		'displayOption' => ($settings['_display_option'] ?? '') === 'modal' ? 'modal' : 'inline',
 		'descriptions'  => array(
 			'homeDelivery' => $local_description,
 			'shedDelivery' => $shed_description,
@@ -267,6 +303,10 @@ function custom_content_for_custom_shipping_checkout(): void
 				: __('Note to the driver (optional)', O_TEXTDOMAIN),
 			'hideWcOrderComments' => !empty($settings['_hide_wc_order_comments']),
 		),
+		// Rate id → date setting, so the script can answer "does this rate
+		// need a date?" from the selected radio's value alone, without
+		// walking the markup around it. See oko_delivery_date_modes().
+		'dateModes' => oko_delivery_date_modes(),
 		'endpoints' => array(
 			// Endpoints accept `merchant_id` and/or `product_ids` so the
 			// JS can either rely on cart routing or pin a request.
@@ -345,6 +385,14 @@ function custom_content_for_custom_shipping_checkout(): void
 	}
 	echo '<input type="hidden" id="okoskabet-cart-product-ids" value="' . esc_attr(implode(',', array_unique($product_ids))) . '" />';
 
+	// Outside the review-order table there is no shipping row to sit beside,
+	// so the shop's chosen spot is the anchor instead: the script puts the
+	// delivery-location and store-pickup rows in here. Empty in a classic
+	// checkout, where the table is a better anchor and is found first.
+	if ($context !== 'table') {
+		echo '<div class="okoskabet-delivery-mount"></div>';
+	}
+
 	// The way into a pre-order, and back out of it — only for a cart holding
 	// something that can be pre-ordered.
 	if (
@@ -356,12 +404,23 @@ function custom_content_for_custom_shipping_checkout(): void
 		$pre_order = oko_is_pre_order_checkout();
 		$button    = '<button type="button" class="button okoskabet-pre-order-toggle%s" data-pre-order="%s" aria-pressed="%s">%s</button>';
 		$notice = $pre_order ? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_notice() : '';
-		printf(
-			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s%s</div></td></tr>',
+
+		// Same row, two wrappers. Inside the review-order table it has to be a
+		// `<tr>`; anywhere else a `<tr>` is thrown away by the parser before
+		// the script can find it, so there it is a `<div>` carrying the same
+		// class. The class is what the JS looks for, never the tag.
+		$inner = sprintf(
+			'<div class="okoskabet-order-type">%s%s%s</div>',
 			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="grid-column:1/-1;box-sizing:border-box;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
 			sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label())),
 			sprintf($button, $pre_order ? ' alt' : '', '1', $pre_order ? 'true' : 'false', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label()))
 		);
+
+		if ($context === 'table') {
+			printf('<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2">%s</td></tr>', $inner);
+		} else {
+			printf('<div class="okoskabet-pre-order-row" style="display:none">%s</div>', $inner);
+		}
 	}
 
 	oko_print_checkout_layout_script((string) ($settings['_separate_shipping_label'] ?? ''));
@@ -380,6 +439,200 @@ function custom_content_for_custom_shipping_checkout(): void
 			display: none !important;
 		}
 	</style>';
+}
+
+/**
+ * `[okoskabet_levering]` — the delivery UI, placed by the shop.
+ *
+ * A checkout that does not render WooCommerce's review-order template never
+ * fires the hook above, and until now that meant no date picker, no shed
+ * list and no explanation of why: the shipping methods still appeared, so
+ * the checkout looked finished. Bricks' Checkout v2 is the case that found
+ * this, but any builder that draws its own checkout has the same hole, and
+ * so does WooCommerce's own block checkout.
+ *
+ * The shortcode is the way out that costs an existing shop nothing: it is
+ * new, it is opt-in, and a shop that never places it keeps rendering through
+ * the hook exactly as before. WordPress passes '' for $atts when the
+ * shortcode has no attributes, hence the string.
+ */
+add_shortcode('okoskabet_levering', 'oko_delivery_ui_shortcode');
+function oko_delivery_ui_shortcode(array|string $atts = array()): string
+{
+	$atts = shortcode_atts(array('context' => 'block'), (array) $atts, 'okoskabet_levering');
+
+	ob_start();
+	oko_render_delivery_ui($atts['context'] === 'table' ? 'table' : 'block');
+
+	return (string) ob_get_clean();
+}
+
+/**
+ * The same thing for a theme or a builder element that would rather call PHP
+ * than place a shortcode: `oko_delivery_ui();` in the template.
+ *
+ * Pair it with `add_filter('oko_auto_render_delivery_ui', '__return_false')`
+ * when the theme also leaves WooCommerce's review-order table in place, so
+ * the UI is drawn where the theme wants it and nowhere else.
+ */
+function oko_delivery_ui(string $context = 'block'): void
+{
+	oko_render_delivery_ui($context === 'table' ? 'table' : 'block');
+}
+
+/**
+ * `{do_action:okoskabet_levering}` — the same UI, reached through a page
+ * builder's own mechanism.
+ *
+ * Bricks' text element does not run shortcodes: [okoskabet_levering] placed
+ * in one comes out as the literal text. It does run `{do_action:...}`, for any
+ * action name. So a Bricks checkout places the delivery UI with a text element
+ * holding `{do_action:okoskabet_levering}` in the step where the shipping
+ * choice lives. That is also how the Bricks WooCommerce wizard builds its own
+ * checkouts — out of do_action text elements — so it reads as native there.
+ * do_action() with no arguments passes '', which oko_delivery_ui() treats as
+ * 'block'.
+ */
+add_action('okoskabet_levering', 'oko_delivery_ui');
+
+/**
+ * The merchant the current cart routes to, with the router's full answer.
+ *
+ * The JS-rendered checkout UI needs it to show the right descriptions and
+ * talk to the right /sheds and /home_delivery endpoints, and the
+ * missing-picker check needs the same merchant, or it would judge a cart by
+ * a key the cart never uses. The router has already applied the
+ * mixed-cart-falls-back-to-default policy — every cart resolves to exactly
+ * one merchant. With no merchant at all we still fall back to the legacy
+ * one, so a fresh install (where the migration hasn't fired yet) doesn't
+ * break.
+ *
+ * @return array{merchant: array{id?: string, label?: string, api_key?: string, description_shipping_okoskabet?: string, description_shipping_private?: string}, is_mixed?: bool, fell_back_to_default?: bool}
+ */
+function oko_resolve_checkout_merchant(): array
+{
+	$resolved = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')
+		? \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_cart()
+		: array('merchant_id' => '', 'merchant' => null, 'is_mixed' => false, 'fell_back_to_default' => false, 'merchant_ids' => array(), 'per_product' => array());
+
+	if (empty($resolved['merchant'])) {
+		$resolved['merchant'] = o_get_merchant();
+	}
+
+	return $resolved;
+}
+
+/** Fired once, when the delivery UI is drawn; did_action() is the latch. */
+const OKO_UI_DRAWN_ACTION = 'oko_delivery_ui_drawn';
+
+/**
+ * Every rate WooCommerce has calculated for this cart, keyed by rate id.
+ *
+ * The packages are already calculated by the time a checkout renders, so
+ * this reads what WooCommerce has rather than costing another shipping run.
+ *
+ * @return \Generator<string, \WC_Shipping_Rate>
+ */
+function oko_cart_rates(): \Generator
+{
+	if (! function_exists('WC') || ! WC()->shipping()) {
+		return;
+	}
+
+	foreach ((array) WC()->shipping()->get_packages() as $package) {
+		foreach ((array) ($package['rates'] ?? array()) as $rate_id => $rate) {
+			if ($rate instanceof \WC_Shipping_Rate) {
+				yield (string) $rate_id => $rate;
+			}
+		}
+	}
+}
+
+/** Is one of our own shipping methods actually on offer for this cart? */
+function oko_cart_offers_okoskabet_rate(): bool
+{
+	foreach (oko_cart_rates() as $rate) {
+		if (strpos($rate->get_method_id(), 'hey_okoskabet_') === 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/** Where we remember that a checkout finished without drawing the UI. */
+const OKO_UI_MISSING_OPTION = 'okoskabet_delivery_ui_missing';
+
+add_action('wp_footer', 'oko_note_whether_delivery_ui_rendered', 99);
+
+/**
+ * Notice, at the end of a checkout, whether the delivery UI ever got drawn.
+ *
+ * When a checkout does not fire the review-order hook, nothing breaks loudly: the Økoskabet shipping
+ * methods still appear, priced and selectable, because they are registered
+ * shipping methods and have nothing to do with the hook. The checkout looks
+ * finished. Only a customer reaching the end finds there is no way to choose
+ * a shed or a date — and the shop hears about it from them.
+ *
+ * So the plugin now watches its own rendering and says so in wp-admin.
+ *
+ * The conditions are deliberately narrow, because a false alarm on a shop
+ * where everything is fine is worse than no alarm at all: a real checkout
+ * page, a shop that has an API key, and one of our own rates actually on
+ * offer for the cart in front of the customer.
+ */
+function oko_note_whether_delivery_ui_rendered(): void
+{
+	if (! function_exists('is_checkout') || ! is_checkout()) {
+		return;
+	}
+	if (function_exists('is_order_received_page') && is_order_received_page()) {
+		return;
+	}
+
+	// Drawn: clear a warning left from before, and skip the checks below —
+	// they only matter when the UI is missing.
+	if (did_action(OKO_UI_DRAWN_ACTION)) {
+		if (get_option(OKO_UI_MISSING_OPTION, false)) {
+			update_option(OKO_UI_MISSING_OPTION, false);
+		}
+		return;
+	}
+
+	// The merchant this cart routes to, as the render itself decides it: a
+	// cart whose merchant has no key renders nothing on purpose.
+	$merchant = oko_resolve_checkout_merchant()['merchant'];
+	if (empty($merchant['api_key'])) {
+		return;
+	}
+
+	if (! oko_cart_offers_okoskabet_rate()) {
+		return;
+	}
+
+	// Written only when the answer changes, so a busy checkout does not
+	// rewrite an option on every page view. Autoloaded: it is one boolean,
+	// read on every checkout view and every admin page.
+	if (! get_option(OKO_UI_MISSING_OPTION, false)) {
+		update_option(OKO_UI_MISSING_OPTION, true);
+	}
+}
+
+add_action('admin_notices', 'oko_render_missing_delivery_ui_notice');
+
+/** Tell the shop, in words it can act on, that the picker never drew. */
+function oko_render_missing_delivery_ui_notice(): void
+{
+	if (! current_user_can('manage_woocommerce') || ! get_option(OKO_UI_MISSING_OPTION, false)) {
+		return;
+	}
+
+	printf(
+		'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p>%s</p></div>',
+		esc_html__('Økoskabet: the delivery picker is not showing in your checkout', O_TEXTDOMAIN),
+		esc_html__('Your checkout offers Økoskabet delivery, but the date and locker picker was not drawn on the last checkout a customer opened. They can choose a delivery method and still have no way to choose a day — and the checkout gives them no sign that anything is missing.', O_TEXTDOMAIN),
+		esc_html__('This happens when the checkout is built with something other than WooCommerce\'s own checkout — a page builder, or the block checkout. Place [okoskabet_levering] where the delivery options belong, or in Bricks a text element holding {do_action:okoskabet_levering}, and this notice disappears by itself.', O_TEXTDOMAIN)
+	);
 }
 
 
@@ -504,6 +757,29 @@ function oko_delivery_date_mode_for_rate($rate): string
 	$method      = $instance_id > 0 && class_exists('WC_Shipping_Zones') ? \WC_Shipping_Zones::get_shipping_method($instance_id) : false;
 
 	return $method && $method->get_option('allow_without_date', 'no') === 'yes' ? OKO_DATE_MODE_WHEN_AVAILABLE : OKO_DATE_MODE_REQUIRED;
+}
+
+/**
+ * Every home-delivery rate in this cart, and the date setting behind it,
+ * keyed by rate id.
+ *
+ * The fallback for a checkout that never prints the date-mode span beside
+ * each radio (see oko_print_delivery_date_mode()). The script asks the span
+ * first, because it is reprinted whenever the shipping choices are redrawn;
+ * this map is written once, at page load, and so answers for the zone the
+ * page opened in.
+ */
+function oko_delivery_date_modes(): array
+{
+	$modes = array();
+
+	foreach (oko_cart_rates() as $rate_id => $rate) {
+		if ($rate->get_method_id() === 'hey_okoskabet_shipping_home') {
+			$modes[$rate_id] = oko_delivery_date_mode_for_rate($rate);
+		}
+	}
+
+	return $modes;
 }
 
 /** The delivery-date setting of the home delivery the customer has chosen. */

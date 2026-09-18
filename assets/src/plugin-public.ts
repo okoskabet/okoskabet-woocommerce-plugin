@@ -113,7 +113,9 @@ class OkoskabetCheckout {
 		// recalculation each time, seen on Gaardmester. Only where it does not
 		// do we ask. See woocommerceRecalculatesOn() for how that is told.
 		$( document ).on( 'change', SHIP_TO_DIFFERENT_SELECTOR, function () {
-			if ( ! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_CHANGE ) ) {
+			if (
+				! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_CHANGE )
+			) {
 				$( document.body ).trigger( 'update_checkout' );
 			}
 		} );
@@ -359,15 +361,34 @@ class OkoskabetCheckout {
 		return { postalCode, address };
 	}
 
-	// The delivery-date setting of the chosen rate, printed next to its radio
-	// button by PHP. The rate's id carries no instance, so the setting cannot
-	// be looked up from here.
+	// The delivery-date setting of the chosen rate. The rate's id carries no
+	// instance, so the setting cannot be worked out here and has to come from
+	// PHP — from the span printed beside the radio, or from the config map.
 	private getSelectedDateMode(): DateMode {
-		const mode = this.getSelectedShippingMethodElement()
-			?.closest( 'li' )
-			?.querySelector< HTMLElement >( '.okoskabet-date-mode' )
-			?.dataset.dateMode;
-		return mode === 'when_available' ? mode : 'required';
+		const element = this.getSelectedShippingMethodElement();
+
+		// The span first. WooCommerce prints it with the rate and reprints it
+		// every time the shipping choices are redrawn, so it always belongs
+		// to the rate on screen now. That matters because every home-delivery
+		// rate shares one id: Hjemmelevering and an island zone's Ø-levering
+		// are both hey_okoskabet_shipping_home, with different settings.
+		const spanMode = element
+			? findDateModeSpan( element )?.dataset.dateMode
+			: undefined;
+		if ( spanMode === 'when_available' || spanMode === 'required' ) {
+			return spanMode;
+		}
+
+		// The map only when the checkout never printed the span — one that
+		// skips woocommerce_after_shipping_rate. It is written once, when the
+		// page loads, so it answers for the zone the page opened in: a
+		// customer who moves to another zone afterwards gets that zone's
+		// setting only from the span.
+		const rateId = element?.value;
+		const mapped = rateId
+			? ( window as any )._okoskabet_checkout?.dateModes?.[ rateId ]
+			: undefined;
+		return mapped === 'when_available' ? mapped : 'required';
 	}
 
 	private getSelectedShippingMethodElement(): HTMLInputElement | undefined {
@@ -419,11 +440,11 @@ class OkoskabetCheckout {
 	}
 
 	private setDeliveryDateInput( value: string ): void {
-		jQuery( DELIVERY_DATE_INPUT_SELECTOR ).val( value );
+		ensureBookingField( DELIVERY_DATE_INPUT_SELECTOR ).val( value );
 	}
 
 	private setLocationInput( value: string ): void {
-		jQuery( SHED_ID_INPUT_SELECTOR ).val( value );
+		ensureBookingField( SHED_ID_INPUT_SELECTOR ).val( value );
 	}
 }
 
@@ -459,6 +480,77 @@ function woocommerceRecalculatesOn(
 		!! field?.closest( 'form.checkout' ) &&
 		!! field?.matches( selector )
 	);
+}
+
+/**
+ * The date-setting span that belongs to one shipping radio.
+ *
+ * WooCommerce's own list puts each rate in an `<li>`, but a builder need not:
+ * Bricks nests the radio in divs with no list around it. So climb from the
+ * radio until a span turns up, and stop as soon as the climb takes in a
+ * second shipping radio, because any span found from there on could be the
+ * other rate's.
+ *
+ * @param radio The selected shipping radio.
+ * @return The span, or null when none belongs to this radio alone.
+ */
+function findDateModeSpan( radio: HTMLElement ): HTMLElement | null {
+	const stop = radio.closest( 'form' ) ?? document.body;
+	let node = radio.parentElement;
+	while ( node && node !== stop ) {
+		if (
+			node.querySelectorAll( 'input[name^="shipping_method["]' ).length >
+			1
+		) {
+			return null;
+		}
+		const span = node.querySelector< HTMLElement >(
+			'.okoskabet-date-mode'
+		);
+		if ( span ) {
+			return span;
+		}
+		node = node.parentElement;
+	}
+	return null;
+}
+
+/**
+ * The hidden field a choice is written into, added to the checkout form if
+ * the checkout never rendered it.
+ *
+ * A builder's checkout, such as Bricks' Checkout v2, draws its own form fields and leaves out the ones this plugin registers, so
+ * `jQuery( '#billing_okoskabet_shed_id' ).val( … )` wrote into nothing, and
+ * the order was placed with no locker and no date. checkout-helpers.js adds
+ * the missing fields too; the two scripts load in no fixed order, so this
+ * does it as well rather than write into a field that is not there yet.
+ * On a checkout that renders the field, it is found and nothing is added.
+ *
+ * @param selector The field's id selector, e.g. '#billing_okoskabet_shed_id'.
+ * @return The field, wrapped in jQuery.
+ */
+function ensureBookingField( selector: string ): JQuery< HTMLElement > {
+	const existing = document.querySelector< HTMLElement >( selector );
+	if ( existing ) {
+		return jQuery( existing );
+	}
+
+	const form = document.querySelector(
+		'form.checkout, form[name="checkout"]'
+	);
+	if ( ! form ) {
+		return jQuery( selector );
+	}
+
+	const name = selector.replace( /^#/, '' );
+	const input = document.createElement( 'input' );
+	input.type = 'hidden';
+	input.name = name;
+	input.id = name;
+	input.className = 'okoskabet-booking-field';
+	form.appendChild( input );
+
+	return jQuery( input );
 }
 
 /**
