@@ -681,11 +681,21 @@
 
 		// Matched on the class alone. The rows are <tr> in a review-order
 		// table and <div> anywhere else, and both have to be cleared.
+		//
+		// The pickup place goes with them. A customer who looked at store
+		// pickup and then chose a locker otherwise sent the pickup place
+		// along with the locker, and the order's admin view listed both. The
+		// booking itself was never affected — PHP reads the pickup place only
+		// for a store-pickup order — but the order should say what was chosen.
+		// The date is left alone: it is shared with locker and home delivery,
+		// and whichever of those is chosen writes its own.
 		function removeUI() {
 			var rows = document.querySelectorAll("." + WRAPPER_ID);
 			Array.prototype.forEach.call(rows, function (r) {
 				if (r.parentNode) { r.parentNode.removeChild(r); }
 			});
+			var lf = document.getElementById(FIELD_LOCATION);
+			if (lf) { lf.value = ""; }
 		}
 
 		function syncHiddenFields() {
