@@ -164,6 +164,63 @@
 	}
 
 	// =========================================================================
+	// The fields the booking travels in
+	// =========================================================================
+
+	// The customer's choice of locker, date and pickup place is written into
+	// hidden billing fields, and WooCommerce saves whatever arrives under a
+	// registered field name onto the order. The plugin registers these through
+	// woocommerce_checkout_fields — enough for WooCommerce's own checkout,
+	// because that renders every registered field.
+	//
+	// A builder's checkout does not. Bricks' Checkout v2 draws each form field
+	// as its own element, so fields a plugin adds never reach the form. The
+	// pickers still work and still write — jQuery's .val() and a null
+	// getElementById both fail without a sound — and the order goes through
+	// with no locker, no date and no pickup place. Nothing is booked with
+	// Økoskabet, and nothing says so.
+	//
+	// So make sure the fields exist inside the form. Only missing ones are
+	// added, so a checkout that already renders them is left exactly as it is.
+	// billing_okoskabet_done is deliberately absent: the plugin sets that on
+	// the order itself, after the fact, and it must never arrive from a form.
+	var OKO_BOOKING_FIELDS = [
+		"billing_okoskabet_shed_id",
+		"billing_okoskabet_delivery_date",
+		"billing_okoskabet_pickup_location_id",
+		"billing_okoskabet_delivery_location",
+		"billing_okoskabet_delivery_note",
+		"billing_okoskabet_pre_order"
+	];
+
+	function okoEnsureBookingFields() {
+		var form = document.querySelector("form.checkout, form[name='checkout']");
+		if (!form) {
+			return;
+		}
+
+		OKO_BOOKING_FIELDS.forEach(function (name) {
+			if (form.querySelector("[name='" + name + "']")) {
+				return;
+			}
+			var input = document.createElement("input");
+			input.type = "hidden";
+			input.name = name;
+			input.id = name;
+			input.className = "okoskabet-booking-field";
+			// On the form itself rather than inside a step, so a builder
+			// re-rendering its steps cannot take the fields with it.
+			form.appendChild(input);
+		});
+	}
+
+	okoEnsureBookingFields();
+	document.addEventListener("DOMContentLoaded", okoEnsureBookingFields);
+	if (window.jQuery) {
+		window.jQuery(document.body).on("updated_checkout", okoEnsureBookingFields);
+	}
+
+	// =========================================================================
 	// Module 1: delivery exceptions overlay
 	// =========================================================================
 

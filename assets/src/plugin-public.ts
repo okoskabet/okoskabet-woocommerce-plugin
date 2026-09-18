@@ -438,11 +438,11 @@ class OkoskabetCheckout {
 	}
 
 	private setDeliveryDateInput( value: string ): void {
-		jQuery( DELIVERY_DATE_INPUT_SELECTOR ).val( value );
+		ensureBookingField( DELIVERY_DATE_INPUT_SELECTOR ).val( value );
 	}
 
 	private setLocationInput( value: string ): void {
-		jQuery( SHED_ID_INPUT_SELECTOR ).val( value );
+		ensureBookingField( SHED_ID_INPUT_SELECTOR ).val( value );
 	}
 }
 
@@ -478,6 +478,42 @@ function woocommerceRecalculatesOn(
 		!! field?.closest( 'form.checkout' ) &&
 		!! field?.matches( selector )
 	);
+}
+
+/**
+ * The hidden field a choice is written into, added to the checkout form if
+ * the checkout never rendered it.
+ *
+ * A builder's checkout — Bricks' Checkout v2 is the one that found this —
+ * draws its own form fields and leaves out the ones this plugin registers, so
+ * `jQuery( '#billing_okoskabet_shed_id' ).val( … )` wrote into nothing, and
+ * the order was placed with no locker and no date. checkout-helpers.js adds
+ * the missing fields too; the two scripts load in no fixed order, so this
+ * does it as well rather than write into a field that is not there yet.
+ * On a checkout that renders the field, it is found and nothing is added.
+ */
+function ensureBookingField( selector: string ): JQuery< HTMLElement > {
+	const existing = document.querySelector< HTMLElement >( selector );
+	if ( existing ) {
+		return jQuery( existing );
+	}
+
+	const form = document.querySelector(
+		'form.checkout, form[name="checkout"]'
+	);
+	if ( ! form ) {
+		return jQuery( selector );
+	}
+
+	const name = selector.replace( /^#/, '' );
+	const input = document.createElement( 'input' );
+	input.type = 'hidden';
+	input.name = name;
+	input.id = name;
+	input.className = 'okoskabet-booking-field';
+	form.appendChild( input );
+
+	return jQuery( input );
 }
 
 /**
