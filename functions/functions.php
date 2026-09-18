@@ -490,6 +490,23 @@ function oko_delivery_ui(string $context = 'block'): void
 	oko_render_delivery_ui($context === 'table' ? 'table' : 'block');
 }
 
+/**
+ * `{do_action:okoskabet_levering}` — the same UI, reached through a page
+ * builder's own mechanism.
+ *
+ * Bricks' text element does not run shortcodes: [okoskabet_levering] placed
+ * in one comes out as the literal text. It does run `{do_action:...}`, for any
+ * action name. So a Bricks checkout places the delivery UI with a text element
+ * holding `{do_action:okoskabet_levering}` in the step where the shipping
+ * choice lives. That is also how the Bricks WooCommerce wizard builds its own
+ * checkouts — out of do_action text elements — so it reads as native there.
+ */
+add_action('okoskabet_levering', 'oko_delivery_ui_action');
+function oko_delivery_ui_action(): void
+{
+	oko_render_delivery_ui('block');
+}
+
 /** Whether the delivery UI has been drawn in this request. Latches once. */
 function oko_delivery_ui_rendered(?bool $set = null): bool
 {
@@ -582,7 +599,7 @@ function oko_render_missing_delivery_ui_notice(): void
 		'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p>%s</p></div>',
 		esc_html__('Økoskabet: the delivery picker is not showing in your checkout', O_TEXTDOMAIN),
 		esc_html__('Your checkout offers Økoskabet delivery, but the date and locker picker was not drawn on the last checkout a customer opened. They can choose a delivery method and still have no way to choose a day — and the checkout gives them no sign that anything is missing.', O_TEXTDOMAIN),
-		esc_html__('This happens when the checkout is built with something other than WooCommerce\'s own checkout — a page builder, or the block checkout. Place the shortcode [okoskabet_levering] where the delivery options belong, and this notice disappears by itself.', O_TEXTDOMAIN)
+		esc_html__('This happens when the checkout is built with something other than WooCommerce\'s own checkout — a page builder, or the block checkout. Place [okoskabet_levering] where the delivery options belong, or in Bricks a text element holding {do_action:okoskabet_levering}, and this notice disappears by itself.', O_TEXTDOMAIN)
 	);
 }
 
