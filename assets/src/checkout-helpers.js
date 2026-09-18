@@ -71,9 +71,8 @@
 		// A mount the shop placed itself, via [okoskabet_levering] or
 		// {do_action:okoskabet_levering} — unless it sits inside the "ship to a
 		// different address" block. WooCommerce keeps that block hidden until
-		// the customer ticks the box, so rows placed in it are drawn and never
-		// seen: on Jysk Naturkød the store-pickup place and date were there,
-		// filled in, and invisible. It is also the easiest place to land by
+		// the customer ticks the box, so rows placed in it are drawn, filled
+		// in, and never seen. It is also the easiest place to land by
 		// accident in a Bricks checkout, because the do_action elements the
 		// Bricks WooCommerce wizard builds with live inside that block. Such a
 		// mount is passed over, and the rows go under the shipping choices.
@@ -111,14 +110,8 @@
 
 		var node = radios[0].parentElement;
 		while (node && node !== document.body) {
-			var holdsAll = true;
-			for (var i = 0; i < radios.length; i++) {
-				if (!node.contains(radios[i])) {
-					holdsAll = false;
-					break;
-				}
-			}
-			if (holdsAll) {
+			var group = node;
+			if (Array.prototype.every.call(radios, function (r) { return group.contains(r); })) {
 				// One method means the "group" is that method's own line, which
 				// is too tight to sit after. One step out gives the rows a home
 				// that is not inside the option itself.
@@ -163,11 +156,8 @@
 			return true;
 		}
 
-		if (anchor.node.nextSibling) {
-			anchor.node.parentNode.insertBefore(element, anchor.node.nextSibling);
-		} else {
-			anchor.node.parentNode.appendChild(element);
-		}
+		// insertBefore(x, null) appends, so this also covers a last child.
+		anchor.node.parentNode.insertBefore(element, anchor.node.nextSibling);
 		return true;
 	}
 
@@ -733,16 +723,12 @@
 			return parts.join(", ");
 		}
 
-		// Set by buildUI() before it builds any rows, so every row in one
-		// pass comes out the same shape as the place it is going.
-		var placementMode = "table";
-
-		function row(labelText, contentNode) {
-			var tr = okoRow(placementMode);
+		function row(mode, labelText, contentNode) {
+			var tr = okoRow(mode);
 			tr.className = WRAPPER_ID;
-			var th = okoLabelCell(placementMode);
+			var th = okoLabelCell(mode);
 			th.textContent = labelText;
-			var td = okoContentCell(placementMode);
+			var td = okoContentCell(mode);
 			td.appendChild(contentNode);
 			tr.appendChild(th);
 			tr.appendChild(td);
@@ -757,7 +743,7 @@
 			// Decided once, before a single row is built: both the shape of
 			// the rows and where they end up come from the same answer.
 			var anchor = okoAnchor();
-			placementMode = anchor ? anchor.mode : "table";
+			var mode = anchor ? anchor.mode : "table";
 
 			// Two <tr> rows, appended next to the shipping row. A <tbody>
 			// inserted as a sibling of a <tr> is invalid nesting and renders
@@ -768,7 +754,7 @@
 				var warn = document.createElement("div");
 				warn.className = "okoskabet-pickup-empty";
 				warn.textContent = t.noPlaces;
-				wrapper.appendChild(row(t.place, warn));
+				wrapper.appendChild(row(mode, t.place, warn));
 				okoPlace(anchor, wrapper);
 				syncHiddenFields();
 				return;
@@ -785,7 +771,7 @@
 				only.textContent = addrOnly
 					? (locations[0].name + " \u2014 " + addrOnly)
 					: locations[0].name;
-				wrapper.appendChild(row(t.place, only));
+				wrapper.appendChild(row(mode, t.place, only));
 			} else {
 				placeSel = document.createElement("select");
 				placeSel.id = SELECT_PLACE_ID;
@@ -798,14 +784,14 @@
 					placeSel.appendChild(o);
 				});
 				chosenLocationId = String(locations[0].id);
-				wrapper.appendChild(row(t.place, placeSel));
+				wrapper.appendChild(row(mode, t.place, placeSel));
 			}
 
 			// When to collect, for whichever location is selected.
 			var dateSel = document.createElement("select");
 			dateSel.id = SELECT_DATE_ID;
 			dateSel.style.width = "100%";
-			wrapper.appendChild(row(t.date, dateSel));
+			wrapper.appendChild(row(mode, t.date, dateSel));
 
 			function fillDates() {
 				var wanted = placeSel ? placeSel.value : chosenLocationId;

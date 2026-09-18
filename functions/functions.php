@@ -256,7 +256,7 @@ function custom_content_for_custom_shipping_checkout(): void
  */
 function oko_render_delivery_ui(string $context = 'table'): void
 {
-	if (oko_delivery_ui_rendered()) {
+	if (did_action(OKO_UI_DRAWN_ACTION)) {
 		return;
 	}
 
@@ -272,23 +272,16 @@ function oko_render_delivery_ui(string $context = 'table'): void
 	// Latched only once we are certain we are drawing. A shop without a key
 	// renders nothing and stays free to render later in the same request, if
 	// a key arrives — which is what a settings save inside checkout does.
-	oko_delivery_ui_rendered(true);
+	do_action(OKO_UI_DRAWN_ACTION);
 
 	$shed_description  = ! empty($merchant['description_shipping_okoskabet']) ? $merchant['description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
 	$local_description = ! empty($merchant['description_shipping_private'])   ? $merchant['description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
 
 	$config = wp_json_encode(array(
 		'locale'        => get_locale(),
-		// Only two values mean anything to the picker, and an unset option
-		// must land on one of them. It used to reach the checkout as '', and
-		// the shed picker read that as "not inline", so it started hidden,
-		// and also as "not modal", so it got neither the floating box nor the
-		// button that opens one. A customer who chose Økoskab — the method a
-		// checkout selects first — had no way to choose a locker at all, and
-		// the hidden picker still held its full height, pushing the other
-		// methods off the screen. The setting has no default, so this is
-		// every shop that never opened it. Inline is what they get now; a
-		// shop that chose modal keeps modal.
+		// Only 'inline' and 'modal' mean anything to the picker. An unset
+		// option ('') is neither, which hides the locker picker with no way
+		// to open it, so anything but 'modal' is inline.
 		'displayOption' => ($settings['_display_option'] ?? '') === 'modal' ? 'modal' : 'inline',
 		'descriptions'  => array(
 			'homeDelivery' => $local_description,
@@ -497,12 +490,10 @@ function oko_delivery_ui(string $context = 'block'): void
  * holding `{do_action:okoskabet_levering}` in the step where the shipping
  * choice lives. That is also how the Bricks WooCommerce wizard builds its own
  * checkouts — out of do_action text elements — so it reads as native there.
+ * do_action() with no arguments passes '', which oko_delivery_ui() treats as
+ * 'block'.
  */
-add_action('okoskabet_levering', 'oko_delivery_ui_action');
-function oko_delivery_ui_action(): void
-{
-	oko_render_delivery_ui('block');
-}
+add_action('okoskabet_levering', 'oko_delivery_ui');
 
 /**
  * The merchant the current cart routes to, with the router's full answer.
@@ -531,30 +522,38 @@ function oko_resolve_checkout_merchant(): array
 	return $resolved;
 }
 
-/** Whether the delivery UI has been drawn in this request. Latches once. */
-function oko_delivery_ui_rendered(?bool $set = null): bool
-{
-	static $rendered = false;
+/** Fired once, when the delivery UI is drawn; did_action() is the latch. */
+const OKO_UI_DRAWN_ACTION = 'oko_delivery_ui_drawn';
 
-	if ($set === true) {
-		$rendered = true;
+/**
+ * Every rate WooCommerce has calculated for this cart, keyed by rate id.
+ *
+ * The packages are already calculated by the time a checkout renders, so
+ * this reads what WooCommerce has rather than costing another shipping run.
+ *
+ * @return \Generator<string, \WC_Shipping_Rate>
+ */
+function oko_cart_rates(): \Generator
+{
+	if (! function_exists('WC') || ! WC()->shipping()) {
+		return;
 	}
 
-	return $rendered;
+	foreach ((array) WC()->shipping()->get_packages() as $package) {
+		foreach ((array) ($package['rates'] ?? array()) as $rate_id => $rate) {
+			if ($rate instanceof \WC_Shipping_Rate) {
+				yield (string) $rate_id => $rate;
+			}
+		}
+	}
 }
 
 /** Is one of our own shipping methods actually on offer for this cart? */
 function oko_cart_offers_okoskabet_rate(): bool
 {
-	if (! function_exists('WC') || ! WC()->shipping()) {
-		return false;
-	}
-
-	foreach ((array) WC()->shipping()->get_packages() as $package) {
-		foreach ((array) ($package['rates'] ?? array()) as $rate) {
-			if ($rate instanceof \WC_Shipping_Rate && strpos($rate->get_method_id(), 'hey_okoskabet_') === 0) {
-				return true;
-			}
+	foreach (oko_cart_rates() as $rate) {
+		if (strpos($rate->get_method_id(), 'hey_okoskabet_') === 0) {
+			return true;
 		}
 	}
 
@@ -569,8 +568,7 @@ add_action('wp_footer', 'oko_note_whether_delivery_ui_rendered', 99);
 /**
  * Notice, at the end of a checkout, whether the delivery UI ever got drawn.
  *
- * This is the check that would have saved an evening. When a checkout does not
- * fire the review-order hook, nothing breaks loudly: the Økoskabet shipping
+ * When a checkout does not fire the review-order hook, nothing breaks loudly: the Økoskabet shipping
  * methods still appear, priced and selectable, because they are registered
  * shipping methods and have nothing to do with the hook. The checkout looks
  * finished. Only a customer reaching the end finds there is no way to choose
@@ -592,6 +590,15 @@ function oko_note_whether_delivery_ui_rendered(): void
 		return;
 	}
 
+	// Drawn: clear a warning left from before, and skip the checks below —
+	// they only matter when the UI is missing.
+	if (did_action(OKO_UI_DRAWN_ACTION)) {
+		if (get_option(OKO_UI_MISSING_OPTION, false)) {
+			update_option(OKO_UI_MISSING_OPTION, false);
+		}
+		return;
+	}
+
 	// The merchant this cart routes to, as the render itself decides it: a
 	// cart whose merchant has no key renders nothing on purpose.
 	$merchant = oko_resolve_checkout_merchant()['merchant'];
@@ -603,12 +610,11 @@ function oko_note_whether_delivery_ui_rendered(): void
 		return;
 	}
 
-	$missing = ! oko_delivery_ui_rendered();
-
 	// Written only when the answer changes, so a busy checkout does not
-	// rewrite an option on every page view.
-	if ($missing !== (bool) get_option(OKO_UI_MISSING_OPTION, false)) {
-		update_option(OKO_UI_MISSING_OPTION, $missing, false);
+	// rewrite an option on every page view. Autoloaded: it is one boolean,
+	// read on every checkout view and every admin page.
+	if (! get_option(OKO_UI_MISSING_OPTION, false)) {
+		update_option(OKO_UI_MISSING_OPTION, true);
 	}
 }
 
@@ -757,31 +763,19 @@ function oko_delivery_date_mode_for_rate($rate): string
  * Every home-delivery rate in this cart, and the date setting behind it,
  * keyed by rate id.
  *
- * The checkout script needs to know the setting of whichever rate the
- * customer has selected *right now*, and the customer can switch rates
- * without a page load. Until now the answer travelled as a hidden span
- * printed next to each radio button, which only works if the script can
- * walk from the radio to the span — that is, only in markup this plugin
- * already knows. A map keyed by rate id needs no markup at all: the radio
- * carries the rate id in its `value`, in every checkout we have seen,
- * builders included.
- *
- * The packages are already calculated by the time a checkout renders, so
- * this reads what WooCommerce has rather than costing another shipping run.
+ * The fallback for a checkout that never prints the date-mode span beside
+ * each radio (see oko_print_delivery_date_mode()). The script asks the span
+ * first, because it is reprinted whenever the shipping choices are redrawn;
+ * this map is written once, at page load, and so answers for the zone the
+ * page opened in.
  */
 function oko_delivery_date_modes(): array
 {
-	if (! function_exists('WC') || ! WC()->shipping()) {
-		return array();
-	}
-
 	$modes = array();
 
-	foreach ((array) WC()->shipping()->get_packages() as $package) {
-		foreach ((array) ($package['rates'] ?? array()) as $rate_id => $rate) {
-			if ($rate instanceof \WC_Shipping_Rate && $rate->get_method_id() === 'hey_okoskabet_shipping_home') {
-				$modes[(string) $rate_id] = oko_delivery_date_mode_for_rate($rate);
-			}
+	foreach (oko_cart_rates() as $rate_id => $rate) {
+		if ($rate->get_method_id() === 'hey_okoskabet_shipping_home') {
+			$modes[$rate_id] = oko_delivery_date_mode_for_rate($rate);
 		}
 	}
 

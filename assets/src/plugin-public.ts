@@ -490,8 +490,9 @@ function woocommerceRecalculatesOn(
  * other rate's.
  */
 function findDateModeSpan( radio: HTMLElement ): HTMLElement | null {
+	const stop = radio.closest( 'form' ) ?? document.body;
 	let node = radio.parentElement;
-	while ( node && node !== document.body ) {
+	while ( node && node !== stop ) {
 		if (
 			node.querySelectorAll( 'input[name^="shipping_method["]' ).length > 1
 		) {
@@ -510,8 +511,7 @@ function findDateModeSpan( radio: HTMLElement ): HTMLElement | null {
  * The hidden field a choice is written into, added to the checkout form if
  * the checkout never rendered it.
  *
- * A builder's checkout — Bricks' Checkout v2 is the one that found this —
- * draws its own form fields and leaves out the ones this plugin registers, so
+ * A builder's checkout, such as Bricks' Checkout v2, draws its own form fields and leaves out the ones this plugin registers, so
  * `jQuery( '#billing_okoskabet_shed_id' ).val( … )` wrote into nothing, and
  * the order was placed with no locker and no date. checkout-helpers.js adds
  * the missing fields too; the two scripts load in no fixed order, so this
