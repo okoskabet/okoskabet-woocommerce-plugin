@@ -68,9 +68,17 @@
 
 		// Past here we are not in a review-order table at all.
 
-		// A mount the shop placed itself, via [okoskabet_levering].
+		// A mount the shop placed itself, via [okoskabet_levering] or
+		// {do_action:okoskabet_levering} — unless it sits inside the "ship to a
+		// different address" block. WooCommerce keeps that block hidden until
+		// the customer ticks the box, so rows placed in it are drawn and never
+		// seen: on Jysk Naturkød the store-pickup place and date were there,
+		// filled in, and invisible. It is also the easiest place to land by
+		// accident in a Bricks checkout, because the do_action elements the
+		// Bricks WooCommerce wizard builds with live inside that block. Such a
+		// mount is passed over, and the rows go under the shipping choices.
 		var mount = document.querySelector(".okoskabet-delivery-mount");
-		if (mount) {
+		if (mount && !mount.closest(".shipping_address")) {
 			return { node: mount, mode: "block", how: "append" };
 		}
 
