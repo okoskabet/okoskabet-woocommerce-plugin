@@ -1758,7 +1758,13 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			return;
 		}
 
-		if (empty($order->get_transaction_id()) && !empty($order->get_total()) && $order->get_total() > 0) {
+		// An order with money owing and no transaction id has not been paid
+		// through a gateway: a card payment that never went through, or a bank
+		// transfer the customer has yet to make. Hold it back while it is on
+		// hold. When the shop sets it to processing, the shop is saying the
+		// money has arrived, so let it through — otherwise a bank transfer,
+		// which never gets a transaction id, would never be sent at all.
+		if ($new_status !== 'processing' && empty($order->get_transaction_id()) && !empty($order->get_total()) && $order->get_total() > 0) {
 			error_log("okoskabet_woocommerce_plugin: Missing transaction id. Not submitting order to Økoskabet");
 			return;
 		}
