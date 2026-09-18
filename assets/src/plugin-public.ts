@@ -490,6 +490,9 @@ function woocommerceRecalculatesOn(
  * radio until a span turns up, and stop as soon as the climb takes in a
  * second shipping radio, because any span found from there on could be the
  * other rate's.
+ *
+ * @param radio The selected shipping radio.
+ * @return The span, or null when none belongs to this radio alone.
  */
 function findDateModeSpan( radio: HTMLElement ): HTMLElement | null {
 	const stop = radio.closest( 'form' ) ?? document.body;
@@ -522,6 +525,9 @@ function findDateModeSpan( radio: HTMLElement ): HTMLElement | null {
  * the missing fields too; the two scripts load in no fixed order, so this
  * does it as well rather than write into a field that is not there yet.
  * On a checkout that renders the field, it is found and nothing is added.
+ *
+ * @param selector The field's id selector, e.g. '#billing_okoskabet_shed_id'.
+ * @return The field, wrapped in jQuery.
  */
 function ensureBookingField( selector: string ): JQuery< HTMLElement > {
 	const existing = document.querySelector< HTMLElement >( selector );
