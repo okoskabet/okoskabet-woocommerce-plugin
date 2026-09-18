@@ -474,10 +474,11 @@ function oko_render_delivery_ui(string $context = 'table'): void
  *
  * The shortcode is the way out that costs an existing shop nothing: it is
  * new, it is opt-in, and a shop that never places it keeps rendering through
- * the hook exactly as before.
+ * the hook exactly as before. WordPress passes '' for $atts when the
+ * shortcode has no attributes, hence the string.
  */
 add_shortcode('okoskabet_levering', 'oko_delivery_ui_shortcode');
-function oko_delivery_ui_shortcode($atts = array()): string
+function oko_delivery_ui_shortcode(array|string $atts = array()): string
 {
 	$atts = shortcode_atts(array('context' => 'block'), (array) $atts, 'okoskabet_levering');
 
