@@ -117,10 +117,40 @@ class OkoskabetCheckout {
 				$( document.body ).trigger( 'update_checkout' );
 			}
 		} );
-		$( document ).on( 'change', SHIPPING_POSTAL_CODE_SELECTOR, function () {
-			if ( ! woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_TEXT ) ) {
-				$( document.body ).trigger( 'update_checkout' );
+		// The postcode needs one more condition. WooCommerce listens to it, but
+		// only acts on a change if the field was typed in first: its change
+		// handler (maybe_input_changed) does nothing unless a keydown marked
+		// the input dirty. A postcode filled in by the browser's autofill, or
+		// pasted with the mouse, changes without a keydown and recalculates
+		// nothing — so a customer who ticked the box and let the browser fill
+		// the shipping address kept the billing address's dates, and the
+		// server only checks that a date was chosen, not that it fits.
+		//
+		// So we stay out only when this very field was typed in since its last
+		// change, which is when WooCommerce is sure to act. Tab is not typing:
+		// WooCommerce ignores it too. Anywhere we cannot be sure, we ask — an
+		// occasional second recalculation costs one aborted request, while a
+		// missing one books the wrong day.
+		let typedInShippingPostcode = false;
+		$( document ).on(
+			'keydown',
+			SHIPPING_POSTAL_CODE_SELECTOR,
+			function ( event: JQuery.KeyDownEvent ) {
+				if ( event.key !== 'Tab' ) {
+					typedInShippingPostcode = true;
+				}
 			}
+		);
+		$( document ).on( 'change', SHIPPING_POSTAL_CODE_SELECTOR, function () {
+			const typed = typedInShippingPostcode;
+			typedInShippingPostcode = false;
+			if (
+				typed &&
+				woocommerceRecalculatesOn( this, WC_RECALCULATES_ON_TEXT )
+			) {
+				return;
+			}
+			$( document.body ).trigger( 'update_checkout' );
 		} );
 	}
 
