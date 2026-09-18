@@ -103,25 +103,23 @@ class OkoskabetCheckout {
 		} );
 
 		// Ticking "ship to a different address", or changing the shipping
-		// postcode, changes which address the dates belong to. Ask WooCommerce
+		// postcode, changes which address the dates belong to. WooCommerce has
 		// to recalculate: it works out the shipping zone from the same address,
 		// so price and dates move together, and the picker is rebuilt with the
 		// new dates on updated_checkout above.
-		$( document ).on( 'change', SHIP_TO_DIFFERENT_SELECTOR, function () {
-			$( document.body ).trigger( 'update_checkout' );
-		} );
-
-		// WooCommerce's own checkout marks the postcode field
-		// update_totals_on_change and recalculates by itself, so that case is
-		// left to it. A builder's checkout does not always mark it — Bricks'
-		// Checkout v2 does not — and there nothing would recalculate at all.
-		$( document ).on( 'change', SHIPPING_POSTAL_CODE_SELECTOR, function () {
-			const field = document.getElementById( 'shipping_postcode_field' );
-			if ( field?.classList.contains( 'update_totals_on_change' ) ) {
-				return;
+		//
+		// WooCommerce's own checkout already recalculates on both, so there it
+		// is left alone — asking as well cost a second, wasted recalculation
+		// every time the box was ticked or unticked, seen on Gaardmester. A
+		// builder's checkout does not always do it — Bricks' Checkout v2 does
+		// not mark the postcode field — and there nothing would recalculate.
+		const recalculate = function () {
+			if ( ! checkoutRecalculatesOnAddressChange() ) {
+				$( document.body ).trigger( 'update_checkout' );
 			}
-			$( document.body ).trigger( 'update_checkout' );
-		} );
+		};
+		$( document ).on( 'change', SHIP_TO_DIFFERENT_SELECTOR, recalculate );
+		$( document ).on( 'change', SHIPPING_POSTAL_CODE_SELECTOR, recalculate );
 	}
 
 	// Ask for the dates of every Økoskabet method on offer now, rather than
@@ -395,6 +393,23 @@ class OkoskabetCheckout {
 	private setLocationInput( value: string ): void {
 		jQuery( SHED_ID_INPUT_SELECTOR ).val( value );
 	}
+}
+
+/**
+ * Whether this checkout recalculates by itself when the shipping address
+ * changes.
+ *
+ * WooCommerce marks the shipping postcode field update_totals_on_change and
+ * recalculates on it, and on the ship-to-different-address box as well. A
+ * checkout that carries the mark is WooCommerce's own, or one built closely
+ * enough on it to behave the same, and is left to do its own recalculating.
+ */
+function checkoutRecalculatesOnAddressChange(): boolean {
+	return (
+		document
+			.getElementById( 'shipping_postcode_field' )
+			?.classList.contains( 'update_totals_on_change' ) === true
+	);
 }
 
 /**
