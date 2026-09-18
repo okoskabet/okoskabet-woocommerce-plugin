@@ -416,8 +416,8 @@ msgstr "Du kan også scrolle ned for at se din ordrebekræftelse først."
 msgid "Cancel split delivery and start over"
 msgstr "Annullér opdelt levering og start forfra"
 
-msgid "Cancel the split delivery and clear your cart? You'll be sent back to the shop and can start a fresh order."
-msgstr "Annullér den opdelte levering og tøm din kurv? Du sendes tilbage til shoppen og kan starte en ny ordre."
+msgid "The split delivery is cancelled, and your basket is back as it was."
+msgstr "Den opdelte levering er annulleret, og din kurv er som før."
 
 # Merchant form — secret-field controls and hints
 msgid "Show/hide API key"
@@ -1249,3 +1249,170 @@ msgstr "Nyt i denne version. Du behøver ikke gøre noget – alt nyt er slået 
 
 msgid "See the settings"
 msgstr "Se indstillingerne"
+
+# ----------------------------------------------------------------------
+# Opdelt levering: to knapper, og vending af leveringsundtagelser
+# ----------------------------------------------------------------------
+
+# Split_Checkout — the two buttons and their settings
+msgid "When ON: a basket that cannot be delivered on one day gets two buttons at checkout — split it into one order per delivery day, or take the items in the way out of the basket so the rest is delivered together. Each part-order is an ordinary order and pays its own shipping and packaging fee. When OFF: a notice tells the customer to remove items so they all share at least one delivery date."
+msgstr "Når TÆNDT: en kurv der ikke kan leveres på én dag får to knapper i kassen — del den op i én ordre per leveringsdag, eller tag de varer ud af kurven der står i vejen, så resten leveres sammen. Hver delordre er en helt almindelig ordre og betaler sin egen fragt og sit eget emballagegebyr. Når SLUKKET: en besked beder kunden fjerne varer, så de har mindst én fælles leveringsdato."
+
+msgid "Button: split the delivery"
+msgstr "Knap: opdel leveringen"
+
+msgid "What the first button says when the basket needs exactly two delivery days. The customer orders the first delivery now and the rest straight after. Leave empty for \"Opdel levering i to\"."
+msgstr "Hvad den første knap siger, når kurven har brug for præcis to leveringsdage. Kunden bestiller den første levering nu og resten lige efter. Lad feltet stå tomt for \"Opdel levering i to\"."
+
+msgid "Button: split into more than two"
+msgstr "Knap: opdel i mere end to"
+
+msgid "What that button says when the basket needs three or more delivery days, where \"i to\" would not be true. Write %d where the number belongs. Leave empty for \"Opdel levering i 3 leveringer\"."
+msgstr "Hvad den samme knap siger, når kurven har brug for tre eller flere leveringsdage, hvor \"i to\" ikke ville passe. Skriv %d der hvor tallet hører hjemme. Lad feltet stå tomt for \"Opdel levering i 3 leveringer\"."
+
+msgid "Button: take items out of the basket"
+msgstr "Knap: tag varer ud af kurven"
+
+msgid "What the second button says. It shows the customer which items to give up for the rest of the basket to be delivered on one day, with the date, and removes them when they choose. Leave empty for \"Tøm fra kurven\"."
+msgstr "Hvad den anden knap siger. Den viser kunden hvilke varer der skal gives afkald på, for at resten af kurven kan leveres på én dag, med datoen, og fjerner dem når kunden vælger. Lad feltet stå tomt for \"Tøm fra kurven\"."
+
+msgid "Split the delivery in two"
+msgstr "Opdel levering i to"
+
+msgid "Split into %d deliveries"
+msgstr "Opdel levering i %d leveringer"
+
+msgid "Empty from the basket"
+msgstr "Tøm fra kurven"
+
+msgid "You can split the order so each part is delivered on its own day, or take a few items out of the basket so everything else arrives together. Choose below."
+msgstr "Du kan dele ordren op, så hver del leveres på sin egen dag, eller tage et par varer ud af kurven, så alt det andet kommer samlet. Vælg nedenfor."
+
+msgid "No delivery day available"
+msgstr "Ingen leveringsdag tilgængelig"
+
+msgid "Choose what you would rather do without this time. We take those items out of the basket, and everything else is delivered on the same day."
+msgstr "Vælg hvad du hellere vil undvære denne gang. Vi tager de varer ud af kurven, og alt det andet leveres på samme dag."
+
+msgid "Remove %1$s, and the rest can be delivered together on %2$s"
+msgstr "Fjern %1$s, så kan resten leveres sammen %2$s"
+
+msgid "Remove the items and continue"
+msgstr "Fjern varerne og fortsæt"
+
+msgid "and"
+msgstr "og"
+
+msgid "We took %s out of your basket. The rest is delivered together."
+msgstr "Vi tog %s ud af din kurv. Resten leveres samlet."
+
+msgid "Choose one of the options first."
+msgstr "Vælg en af mulighederne først."
+
+msgid "Could not remove the items. Please try again."
+msgstr "Kunne ikke fjerne varerne. Prøv venligst igen."
+
+msgid "That option is no longer available. Please try again."
+msgstr "Den mulighed er der ikke længere. Prøv venligst igen."
+
+msgid "No option chosen"
+msgstr "Der er ikke valgt en mulighed"
+
+msgid "No split needed"
+msgstr "Der er ikke brug for en opdeling"
+
+msgid "A split is already in progress"
+msgstr "En opdeling er allerede i gang"
+
+msgid "WooCommerce cart not available"
+msgstr "WooCommerce-kurven er ikke tilgængelig"
+
+msgid "Some items have no delivery day, so the order cannot be split. Remove them instead."
+msgstr "Nogle varer har ingen leveringsdag, så ordren kan ikke deles op. Fjern dem i stedet."
+
+msgid "Your basket needs more than one delivery day. Please choose one of the options above before you order."
+msgstr "Din kurv har brug for mere end én leveringsdag. Vælg venligst en af mulighederne ovenfor, før du bestiller."
+
+msgid "We cannot find a delivery day for your basket"
+msgstr "Vi kan ikke finde en leveringsdag til din kurv"
+
+msgid "One or more items in the basket cannot be delivered at the moment. Please go back to the basket and remove them, or contact the shop."
+msgstr "En eller flere varer i kurven kan ikke leveres lige nu. Gå venligst tilbage til kurven og fjern dem, eller kontakt butikken."
+
+msgid "Back to the basket"
+msgstr "Tilbage til kurven"
+
+# Delivery_Exceptions — the per-rule flip
+msgid "Applies to all products other than the chosen ones"
+msgstr "Gælder alle andre varer end de valgte"
+
+msgid "Turns the rule around: it then covers every product that carries NONE of the categories and tags chosen below. A rule with nothing chosen still covers nothing."
+msgstr "Vender reglen om: den dækker så alle varer der IKKE har nogen af de kategorier og tags, der er valgt nedenfor. En regel uden noget valgt dækker stadig ingenting."
+
+msgid "Every rule has an \"Applies to all products other than the chosen ones\" tick. Ticked, the rule covers exactly the products that carry none of the categories and tags you picked — so \"everything but frost\" needs one rule rather than a list of every other category. A rule with nothing picked covers nothing, ticked or not."
+msgstr "Hver regel har et flueben, \"Gælder alle andre varer end de valgte\". Med flueben dækker reglen præcis de varer, der ikke har nogen af de kategorier og tags, du har valgt — så \"alt andet end frost\" kræver én regel i stedet for en liste over alle de øvrige kategorier. En regel uden noget valgt dækker ingenting, med eller uden flueben."
+
+# What's new
+msgid "Split delivery: a basket that needs more than one delivery day offers the customer two buttons — split it into one order per day, or see exactly which items to take out so the rest arrives together. The button wording is yours to set."
+msgstr "Opdelt levering: en kurv der har brug for mere end én leveringsdag giver kunden to knapper — del den op i én ordre per dag, eller se præcis hvilke varer der skal tages ud, så resten kommer samlet. Teksten på knapperne bestemmer du selv."
+
+msgid "Delivery exceptions: each rule can be turned around to cover every product OTHER than the categories and tags you picked."
+msgstr "Leveringsundtagelser: hver regel kan vendes om, så den dækker alle andre varer end de kategorier og tags, du har valgt."
+
+# Opdeling på tværs af forudbestilling og almindelig levering
+msgid "Only part of your basket can be pre-ordered"
+msgstr "Kun en del af din kurv kan forudbestilles"
+
+msgid "You can split the order into a pre-order for the items that can be held, and an ordinary delivery for the rest — each with its own date and its own fee. Or take the items that cannot be pre-ordered out of the basket. Choose below."
+msgstr "Du kan dele ordren op i en forudbestilling på de varer, der kan gemmes, og en almindelig levering på resten — hver med sin egen dato og sit eget gebyr. Eller du kan tage de varer ud af kurven, der ikke kan forudbestilles. Vælg nedenfor."
+
+msgid "Pre-order %1$d (%2$s)"
+msgstr "Forudbestilling %1$d (%2$s)"
+
+msgid "Remove %1$s, and the rest can be pre-ordered together for %2$s"
+msgstr "Fjern %1$s, så kan resten forudbestilles samlet til %2$s"
+
+# Vejen ud af en forudbestilling, og genberegnede muligheder
+msgid "Choose an ordinary order instead"
+msgstr "Vælg normal bestilling i stedet"
+
+msgid "Your basket has changed, so we have worked the options out again. Please choose once more."
+msgstr "Din kurv har ændret sig, så vi har regnet mulighederne ud igen. Vælg venligst på ny."
+
+# Ingen dato hvor flere dage er mulige
+msgid "Your items cannot all be delivered on the same day"
+msgstr "Varerne i din kurv kan ikke leveres på samme dag"
+
+msgid "Delivery %d"
+msgstr "Levering %d"
+
+msgid "Pre-order %d"
+msgstr "Forudbestilling %d"
+
+msgid "Remove %s, and the rest can be delivered together"
+msgstr "Fjern %s, så kan resten leveres sammen"
+
+msgid "Remove %s, and the rest can be pre-ordered together"
+msgstr "Fjern %s, så kan resten forudbestilles samlet"
+
+# Settings page — standard settings on top, the extras below
+msgid "Standard settings"
+msgstr "Standardindstillinger"
+
+msgid "What every shop needs: the connection to Økoskabet, the texts at checkout and the webhooks. The extras your shop can choose come further down."
+msgstr "Det, hver butik skal have sat op: forbindelsen til Økoskabet, teksterne i kassen og webhooks. De ekstra funktioner, I selv kan vælge, kommer længere nede."
+
+msgid "Extra features"
+msgstr "Ekstra funktioner"
+
+msgid "Features beyond the basics. Each one is switched on and off on its own."
+msgstr "Funktioner ud over det grundlæggende. Hver af dem slås til og fra for sig."
+
+msgid "Split delivery"
+msgstr "Opdelt levering"
+
+msgid "Split delivery saved."
+msgstr "Opdelt levering er gemt."
+
+msgid "Save split delivery"
+msgstr "Gem opdelt levering"

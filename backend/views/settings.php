@@ -31,6 +31,8 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 }
 ?>
 <div id="tabs-1" class="wrap">
+	<h2 class="oko-settings-group" style="font-size:1.6em;"><?php esc_html_e( 'Standard settings', O_TEXTDOMAIN ); ?></h2>
+	<p class="description"><?php esc_html_e( 'What every shop needs: the connection to Økoskabet, the texts at checkout and the webhooks. The extras your shop can choose come further down.', O_TEXTDOMAIN ); ?></p>
 	<?php
 	$cmb = new_cmb2_box(
 		array(
@@ -280,16 +282,6 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 			)
 		);
 	}
-
-	$cmb->add_field(
-		array(
-			'name'    => __('Allow split checkout', O_TEXTDOMAIN),
-			'desc'    => __('When ON: if a customer\'s cart contains items that cannot all be delivered on the same day, they\'ll be guided through one separate order per delivery date. When OFF: a notice tells the customer to remove items so they all share at least one delivery date.', O_TEXTDOMAIN),
-			'id'      => '_split_checkout_enabled',
-			'type'    => 'checkbox',
-			'default' => '',
-		)
-	);
 
 	$cmb->add_field(
 		array(
