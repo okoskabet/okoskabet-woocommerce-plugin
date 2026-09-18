@@ -769,7 +769,7 @@
 				warn.className = "okoskabet-pickup-empty";
 				warn.textContent = t.noPlaces;
 				wrapper.appendChild(row(t.place, warn));
-				place(wrapper);
+				okoPlace(anchor, wrapper);
 				syncHiddenFields();
 				return;
 			}
