@@ -293,7 +293,17 @@ function oko_render_delivery_ui(string $context = 'table'): void
 
 	$config = wp_json_encode(array(
 		'locale'        => get_locale(),
-		'displayOption' => $settings['_display_option'] ?? '',
+		// Only two values mean anything to the picker, and an unset option
+		// must land on one of them. It used to reach the checkout as '', and
+		// the shed picker read that as "not inline", so it started hidden,
+		// and also as "not modal", so it got neither the floating box nor the
+		// button that opens one. A customer who chose Økoskab — the method a
+		// checkout selects first — had no way to choose a locker at all, and
+		// the hidden picker still held its full height, pushing the other
+		// methods off the screen. The setting has no default, so this is
+		// every shop that never opened it. Inline is what they get now; a
+		// shop that chose modal keeps modal.
+		'displayOption' => ($settings['_display_option'] ?? '') === 'modal' ? 'modal' : 'inline',
 		'descriptions'  => array(
 			'homeDelivery' => $local_description,
 			'shedDelivery' => $shed_description,
