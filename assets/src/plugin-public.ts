@@ -361,32 +361,32 @@ class OkoskabetCheckout {
 
 	// The delivery-date setting of the chosen rate. The rate's id carries no
 	// instance, so the setting cannot be worked out here and has to come from
-	// PHP — either in the config map, or, on a page rendered before this
-	// version, from the span printed next to the radio button.
+	// PHP — from the span printed beside the radio, or from the config map.
 	private getSelectedDateMode(): DateMode {
 		const element = this.getSelectedShippingMethodElement();
 
-		// The map is keyed by rate id, which the radio carries in its value.
-		// Nothing about the surrounding markup matters, so this also answers
-		// in a checkout the plugin has never seen — a page builder's own, or
-		// WooCommerce's block checkout.
+		// The span first. WooCommerce prints it with the rate and reprints it
+		// every time the shipping choices are redrawn, so it always belongs
+		// to the rate on screen now. That matters because every home-delivery
+		// rate shares one id: Hjemmelevering and an island zone's Ø-levering
+		// are both hey_okoskabet_shipping_home, with different settings.
+		const spanMode = element
+			? findDateModeSpan( element )?.dataset.dateMode
+			: undefined;
+		if ( spanMode === 'when_available' || spanMode === 'required' ) {
+			return spanMode;
+		}
+
+		// The map only when the checkout never printed the span — one that
+		// skips woocommerce_after_shipping_rate. It is written once, when the
+		// page loads, so it answers for the zone the page opened in: a
+		// customer who moves to another zone afterwards gets that zone's
+		// setting only from the span.
 		const rateId = element?.value;
 		const mapped = rateId
 			? ( window as any )._okoskabet_checkout?.dateModes?.[ rateId ]
 			: undefined;
-		if ( mapped === 'when_available' || mapped === 'required' ) {
-			return mapped;
-		}
-
-		// Fallback: the hidden span beside the radio. Kept so a page still
-		// served from a cache built before this version keeps working, and
-		// because a rate added by something other than our own shipping
-		// method never appears in the map. Removed a release from now.
-		const mode = element
-			?.closest( 'li' )
-			?.querySelector< HTMLElement >( '.okoskabet-date-mode' )
-			?.dataset.dateMode;
-		return mode === 'when_available' ? mode : 'required';
+		return mapped === 'when_available' ? mapped : 'required';
 	}
 
 	private getSelectedShippingMethodElement(): HTMLInputElement | undefined {
@@ -478,6 +478,32 @@ function woocommerceRecalculatesOn(
 		!! field?.closest( 'form.checkout' ) &&
 		!! field?.matches( selector )
 	);
+}
+
+/**
+ * The date-setting span that belongs to one shipping radio.
+ *
+ * WooCommerce's own list puts each rate in an `<li>`, but a builder need not:
+ * Bricks nests the radio in divs with no list around it. So climb from the
+ * radio until a span turns up, and stop as soon as the climb takes in a
+ * second shipping radio, because any span found from there on could be the
+ * other rate's.
+ */
+function findDateModeSpan( radio: HTMLElement ): HTMLElement | null {
+	let node = radio.parentElement;
+	while ( node && node !== document.body ) {
+		if (
+			node.querySelectorAll( 'input[name^="shipping_method["]' ).length > 1
+		) {
+			return null;
+		}
+		const span = node.querySelector< HTMLElement >( '.okoskabet-date-mode' );
+		if ( span ) {
+			return span;
+		}
+		node = node.parentElement;
+	}
+	return null;
 }
 
 /**

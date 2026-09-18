@@ -262,22 +262,8 @@ function oko_render_delivery_ui(string $context = 'table'): void
 
 	$settings = o_get_settings();
 
-	// Resolve which merchant the current cart routes to so the JS-rendered
-	// checkout UI shows the right descriptions and talks to the right
-	// /sheds and /home_delivery endpoints. The router has already applied
-	// the mixed-cart-falls-back-to-default policy at this point — every
-	// cart resolves to exactly one merchant.
-	$resolved = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')
-		? \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_cart()
-		: array('merchant_id' => '', 'merchant' => null, 'is_mixed' => false, 'fell_back_to_default' => false, 'merchant_ids' => array(), 'per_product' => array());
-
-	$merchant = $resolved['merchant'] ?? null;
-
-	// If we have no merchant we still want the legacy fallback so a fresh
-	// install (where the migration hasn't fired yet) doesn't break.
-	if (! $merchant) {
-		$merchant = o_get_merchant();
-	}
+	$resolved = oko_resolve_checkout_merchant();
+	$merchant = $resolved['merchant'];
 
 	if (empty($merchant['api_key'])) {
 		return;
@@ -518,6 +504,33 @@ function oko_delivery_ui_action(): void
 	oko_render_delivery_ui('block');
 }
 
+/**
+ * The merchant the current cart routes to, with the router's full answer.
+ *
+ * The JS-rendered checkout UI needs it to show the right descriptions and
+ * talk to the right /sheds and /home_delivery endpoints, and the
+ * missing-picker check needs the same merchant, or it would judge a cart by
+ * a key the cart never uses. The router has already applied the
+ * mixed-cart-falls-back-to-default policy — every cart resolves to exactly
+ * one merchant. With no merchant at all we still fall back to the legacy
+ * one, so a fresh install (where the migration hasn't fired yet) doesn't
+ * break.
+ *
+ * @return array{merchant: array{id?: string, label?: string, api_key?: string, description_shipping_okoskabet?: string, description_shipping_private?: string}, is_mixed?: bool, fell_back_to_default?: bool}
+ */
+function oko_resolve_checkout_merchant(): array
+{
+	$resolved = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')
+		? \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_cart()
+		: array('merchant_id' => '', 'merchant' => null, 'is_mixed' => false, 'fell_back_to_default' => false, 'merchant_ids' => array(), 'per_product' => array());
+
+	if (empty($resolved['merchant'])) {
+		$resolved['merchant'] = o_get_merchant();
+	}
+
+	return $resolved;
+}
+
 /** Whether the delivery UI has been drawn in this request. Latches once. */
 function oko_delivery_ui_rendered(?bool $set = null): bool
 {
@@ -579,7 +592,9 @@ function oko_note_whether_delivery_ui_rendered(): void
 		return;
 	}
 
-	$merchant = o_get_merchant();
+	// The merchant this cart routes to, as the render itself decides it: a
+	// cart whose merchant has no key renders nothing on purpose.
+	$merchant = oko_resolve_checkout_merchant()['merchant'];
 	if (empty($merchant['api_key'])) {
 		return;
 	}
