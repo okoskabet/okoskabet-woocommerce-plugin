@@ -233,7 +233,7 @@ class Delivery_Exceptions extends Base {
 				6 => array( 'enabled' => false, 'flip' => false, 'categories' => array(), 'tags' => array() ), // Sat
 			),
 
-			// only_on: list of {label, date, enabled, extend, flip, categories, tags}.
+			// only_on: list of {label, date, enabled, flip, categories, tags}.
 			'only_on'   => array(),
 
 			// What the checkout's pre-order button says, in each direction.
@@ -348,9 +348,10 @@ class Delivery_Exceptions extends Base {
 					'label'      => sanitize_text_field( (string) ( $item['label']   ?? '' ) ),
 					'date'       => sanitize_text_field( (string) ( $item['date']    ?? '' ) ),
 					'enabled'    => (bool) ( $item['enabled'] ?? true ),
-					// Off unless ticked, as for from/until: a rule saved before
-					// this existed means "only on this day", and stays that.
-					'extend'     => (bool) ( $item['extend'] ?? false ),
+					// Rows saved while this section had a per-row "offer it on
+					// top of the normal days" tick keep their date and lose the
+					// tick: the section restricts, and distance decides where
+					// the date is shown.
 					'flip'       => (bool) ( $item['flip']   ?? false ),
 					'categories' => array_map( 'intval', (array) ( $item['categories'] ?? array() ) ),
 					'tags'       => array_map( 'intval', (array) ( $item['tags']       ?? array() ) ),
@@ -568,7 +569,7 @@ class Delivery_Exceptions extends Base {
 		<?php
 		// JS templates for new rows (uses __INDEX__ placeholder).
 		echo '<script type="text/template" id="oko-template-only-on">';
-		$this->render_only_on_row( '__INDEX__', array( 'label' => '', 'date' => '', 'enabled' => true, 'extend' => false, 'categories' => array(), 'tags' => array() ), $categories, $tags );
+		$this->render_only_on_row( '__INDEX__', array( 'label' => '', 'date' => '', 'enabled' => true, 'categories' => array(), 'tags' => array() ), $categories, $tags );
 		echo '</script>';
 
 		echo '<script type="text/template" id="oko-template-from-until">';
@@ -774,7 +775,7 @@ class Delivery_Exceptions extends Base {
 			</p>
 			<div class="oko-section-body">
 				<p class="oko-help">
-					<?php esc_html_e( 'A day marked as a pre-order is not offered in the normal checkout. The customer presses the pre-order button under Shipping and then sees only the pre-order days.', O_TEXTDOMAIN ); ?>
+					<?php esc_html_e( 'A date further ahead than your normal number of delivery days is treated as a pre-order: it is not offered in the normal checkout, and the customer reaches it with the pre-order button under Shipping. A date within the normal days is simply the only day offered.', O_TEXTDOMAIN ); ?>
 				</p>
 				<div class="oko-row-row" style="margin-bottom:12px;">
 					<label><?php esc_html_e( 'Pre-order button', O_TEXTDOMAIN ); ?>:
@@ -818,10 +819,6 @@ class Delivery_Exceptions extends Base {
 				<label>
 					<input type="checkbox" name="only_on[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
 					<?php esc_html_e( 'Active', O_TEXTDOMAIN ); ?>
-				</label>
-				<label title="<?php esc_attr_e( 'Offers this date for these products even past the normal number of days, while the normal days stay open. For pre-orders: the soonest days as usual, and this day as well.', O_TEXTDOMAIN ); ?>">
-					<input type="checkbox" name="only_on[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
-					<?php esc_html_e( 'Pre-order: offer this date on top of the normal ones', O_TEXTDOMAIN ); ?>
 				</label>
 				<?php $this->render_flip_control( "only_on[$index][flip]", ! empty( $row['flip'] ) ); ?>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
@@ -1010,7 +1007,6 @@ class Delivery_Exceptions extends Base {
 				'label'      => $label,
 				'date'       => $date,
 				'enabled'    => ! empty( $row['enabled'] ),
-				'extend'     => ! empty( $row['extend'] ),
 				'flip'       => ! empty( $row['flip'] ),
 				'categories' => $this->sanitize_id_list( $row['categories'] ?? array() ),
 				'tags'       => $this->sanitize_id_list( $row['tags'] ?? array() ),
@@ -1164,12 +1160,21 @@ class Delivery_Exceptions extends Base {
 		// A pre-order shows its own days and nothing else; a normal order shows
 		// the normal days and nothing else. Mixing them put two months of
 		// dates in front of a customer who only wanted next week.
+		$ranges = self::pre_order_ranges( $applicable_rules, $config );
 		if ( $pre_order ) {
-			$ranges = self::pre_order_ranges( $applicable_rules );
 			$result = array_values( array_filter( $result, function ( string $date ) use ( $ranges ): bool {
 				return self::date_in_ranges( $date, $ranges );
 			} ) );
 		} else {
+			// A far-off only-on date is never offered in the normal checkout,
+			// however wide a display window the section is allowed. A from/until
+			// pre-order window is left alone: it opens days without closing the
+			// normal ones, so its range may well cover next week too.
+			$far    = self::far_only_on_ranges( $applicable_rules, $config );
+			$result = array_values( array_filter( $result, function ( string $date ) use ( $far ): bool {
+				return ! self::date_in_ranges( $date, $far );
+			} ) );
+
 			// Apply the configured display limit (a number of delivery days, or
 			// a calendar horizon) now that the cart's available dates are known.
 			$result = self::apply_display_limit( $result, $applicable_rules, $config );
@@ -1451,7 +1456,7 @@ class Delivery_Exceptions extends Base {
 			// only_on
 			if ( ! empty( $config['only_on_enabled'] ) ) {
 				foreach ( $config['only_on'] as $row ) {
-					if ( empty( $row['enabled'] ) || empty( $row['date'] ) || ! empty( $row['extend'] ) ) { continue; }
+					if ( empty( $row['enabled'] ) || empty( $row['date'] ) ) { continue; }
 					if ( self::rule_matches_terms( $row, $cat_ids, $tag_ids ) ) {
 						$descriptions[] = sprintf(
 							__( 'can only be delivered on %s', O_TEXTDOMAIN ),
@@ -1700,21 +1705,75 @@ class Delivery_Exceptions extends Base {
 	 * @param array $applicable_rules As collect_applicable_rules() returns them.
 	 * @return array<int,array{0:string,1:string}>
 	 */
-	public static function pre_order_ranges( array $applicable_rules ): array {
-		$ranges = array();
+	public static function pre_order_ranges( array $applicable_rules, ?array $config = null ): array {
+		$ranges = self::far_only_on_ranges( $applicable_rules, $config );
 
 		foreach ( $applicable_rules as $rule ) {
 			if ( empty( $rule['extend'] ) ) {
 				continue;
 			}
-			if ( ( $rule['type'] ?? '' ) === 'only_on' && ! empty( $rule['date'] ) ) {
-				$ranges[] = array( (string) $rule['date'], (string) $rule['date'] );
-			} elseif ( ( $rule['type'] ?? '' ) === 'from_until' && ! empty( $rule['until'] ) ) {
+			if ( ( $rule['type'] ?? '' ) === 'from_until' && ! empty( $rule['until'] ) ) {
 				$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) $rule['until'] );
 			}
 		}
 
 		return $ranges;
+	}
+
+	/**
+	 * The only-on dates this cart can reach that lie past the shop's normal
+	 * number of days. Those are pre-orders, and nobody has to tick anything for
+	 * them: the rule pins its products to the one date either way, and how far
+	 * off that date is decides only whether the customer meets it in the normal
+	 * checkout or behind the pre-order button.
+	 *
+	 * @param array $applicable_rules As collect_applicable_rules() returns them.
+	 * @return array<int,array{0:string,1:string}>
+	 */
+	private static function far_only_on_ranges( array $applicable_rules, ?array $config = null ): array {
+		$horizon = self::normal_horizon_ymd( $config ?? self::get_config() );
+		$ranges  = array();
+
+		foreach ( $applicable_rules as $rule ) {
+			if ( ( $rule['type'] ?? '' ) !== 'only_on' ) {
+				continue;
+			}
+			$date = (string) ( $rule['date'] ?? '' );
+			if ( $date !== '' && $date > $horizon ) {
+				$ranges[] = array( $date, $date );
+			}
+		}
+
+		return $ranges;
+	}
+
+	/**
+	 * The last date the checkout offers as an ordinary delivery day: today plus
+	 * the shop's normal number of days. The configured display window is that
+	 * number when the shop has set one; otherwise it is the merchant's own
+	 * `maximum_days_in_future`, which is what the checkout asks Økoskabet for.
+	 *
+	 * A display limit counted in delivery days ('count') says nothing about how
+	 * far ahead those days lie, so the merchant window decides there too.
+	 *
+	 * Per-section overrides are deliberately ignored: they exist to let a
+	 * section reach FURTHER than the normal window, and a horizon built from
+	 * them would call a far-off date normal purely because a rule mentioned it.
+	 */
+	private static function normal_horizon_ymd( array $config ): string {
+		$days = 0;
+		if ( ( $config['display_mode'] ?? 'window' ) === 'window' ) {
+			$days = max( 0, (int) ( $config['display_value'] ?? 0 ) );
+		}
+		if ( $days <= 0 ) {
+			$merchant = function_exists( 'o_get_merchant' ) ? o_get_merchant() : array();
+			$days     = max( 1, (int) ( $merchant['maximum_days_in_future'] ?? 3 ) );
+		}
+
+		$horizon = self::wp_datetime( 'today' );
+		$horizon->modify( sprintf( '+%d days', $days ) );
+
+		return $horizon->format( 'Y-m-d' );
 	}
 
 	/**
@@ -1745,7 +1804,9 @@ class Delivery_Exceptions extends Base {
 		}
 		$instance = new self();
 
-		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, self::get_config() ) ) );
+		$config = self::get_config();
+
+		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, $config ), $config ) );
 	}
 
 	/** The pre-order button's wording, as the shop set it or built in. */
@@ -1950,9 +2011,8 @@ class Delivery_Exceptions extends Base {
 					continue;
 				}
 				$applicable[] = array(
-					'type'   => 'only_on',
-					'date'   => $row['date'],
-					'extend' => ! empty( $row['extend'] ),
+					'type' => 'only_on',
+					'date' => $row['date'],
 				);
 			}
 		}
@@ -2028,11 +2088,10 @@ class Delivery_Exceptions extends Base {
 				return in_array( (int) $dt->format( 'w' ), $allowed, true );
 
 			case 'only_on':
-				// A pre-order day is offered on top of the normal days, never
-				// instead of them; apply_display_limit() lets it through.
-				if ( ! empty( $rule['extend'] ) ) {
-					return true;
-				}
+				// The section means what its heading says: these products go
+				// out on that date and on no other. Whether the date sits in
+				// the normal checkout or behind the pre-order button is decided
+				// later, by how far ahead it is (see far_only_on_ranges).
 				return $dt->format( 'Y-m-d' ) === ( $rule['date'] ?? '' );
 
 			case 'from_until':

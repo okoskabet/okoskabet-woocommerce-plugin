@@ -63,6 +63,10 @@ function oko_test_reset(): void {
 	// grouping want the rules to be the only thing narrowing the days; tests
 	// about the dates themselves set a sparse, realistic calendar.
 	$GLOBALS['oko_test_delivery_days'] = oko_test_days_ahead( 28 );
+	// As many normal days ahead as there are deliveries, so a date a test names
+	// is an ordinary delivery day unless the test says otherwise. Tests about
+	// pre-orders set their own window with oko_test_set_merchant_days().
+	oko_test_set_merchant_days( 28 );
 	oko_test_set_pre_order( false );
 	\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::purge_rules_cache();
 	oko_test_set_cart( array() );
@@ -212,6 +216,23 @@ function wc_get_product( $id ) {
 /** The plugin's own settings accessor. */
 function o_get_settings() {
 	return $GLOBALS['oko_test_settings'];
+}
+
+/**
+ * The merchant record. The exceptions only ever read the normal number of days
+ * ahead from it — the window the checkout asks Økoskabet for, and the line
+ * between an ordinary delivery day and a pre-order.
+ */
+function o_get_merchant( ?string $id = null ) {
+	return array(
+		'id'                     => 'default',
+		'maximum_days_in_future' => max( 1, (int) ( $GLOBALS['oko_test_settings']['_maximum_days_in_future'] ?? 3 ) ),
+	);
+}
+
+/** Set the shop's normal number of delivery days ahead. */
+function oko_test_set_merchant_days( int $days ): void {
+	$GLOBALS['oko_test_settings']['_maximum_days_in_future'] = $days;
 }
 
 /** A cart that answers the handful of questions the code under test asks it. */

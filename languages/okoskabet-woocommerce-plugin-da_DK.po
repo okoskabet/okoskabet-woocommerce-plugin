@@ -1190,8 +1190,8 @@ msgstr "Knap til forudbestilling"
 msgid "Back to normal order"
 msgstr "Knap tilbage til normal bestilling"
 
-msgid "A day marked as a pre-order is not offered in the normal checkout. The customer presses the pre-order button under Shipping and then sees only the pre-order days."
-msgstr "En dag markeret som forudbestilling vises ikke ved normal bestilling. Kunden trykker på forudbestillingsknappen under Forsendelse og ser så kun forudbestillingsdagene."
+msgid "A date further ahead than your normal number of delivery days is treated as a pre-order: it is not offered in the normal checkout, and the customer reaches it with the pre-order button under Shipping. A date within the normal days is simply the only day offered."
+msgstr "En dato, der ligger længere ude end jeres normale antal leveringsdage, er en forudbestilling: den vises ikke i den normale kasse, og kunden når den med forudbestillingsknappen under Forsendelse. Ligger datoen inden for de normale dage, er den blot den eneste dag, der tilbydes."
 
 msgid "Postcodes without delivery days"
 msgstr "Postnumre uden leveringsdage"

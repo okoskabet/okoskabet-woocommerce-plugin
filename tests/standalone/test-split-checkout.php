@@ -74,8 +74,13 @@ it( 'splits a basket whose items share no delivery day', function () {
 
 	$groups = oko_split()->compute_split_groups();
 	assert_same( 2, count( $groups ), 'two deliveries' );
-	assert_same( array( 'Mælk' ), oko_split_names( $groups[0] ) );
-	assert_same( array( 'Brød' ), oko_split_names( $groups[1] ) );
+
+	// One item each, and which of them comes first depends on the weekday the
+	// suite happens to run — Monday's milk leads on a Sunday, Wednesday's bread
+	// on a Tuesday. The order is its own test, just below.
+	$names = array( oko_split_names( $groups[0] ), oko_split_names( $groups[1] ) );
+	sort( $names );
+	assert_same( array( array( 'Brød' ), array( 'Mælk' ) ), $names, 'the milk alone and the bread alone' );
 } );
 
 it( 'puts the groups in the order they will happen', function () {
@@ -563,10 +568,13 @@ function oko_split_pre_order_shop(): array {
 	oko_test_add_product( OKO_SPLIT_PAK_CHOI, 'Pak Choi', array( OKO_SPLIT_CAT_WED ) );
 
 	oko_test_set_exceptions( array(
-		// The ice is the only thing that can be pre-ordered, for one day.
-		'only_on_enabled'  => true,
-		'only_on'          => array(
-			array( 'label' => 'Julelevering', 'date' => $december, 'enabled' => true, 'extend' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		// The ice is the only thing that can be pre-ordered, for one day — and
+		// it still sells on the normal days, which is what a from/until rule
+		// marked as a pre-order says. ("Delivery only on a specific day" would
+		// pin the ice to December and take it out of the ordinary checkout.)
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Julelevering', 'from' => $december, 'until' => $december, 'enabled' => true, 'extend' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
 		),
 		// Pak Choi only travels on Wednesdays, as it does on staging.
 		'weekdays_enabled' => true,
