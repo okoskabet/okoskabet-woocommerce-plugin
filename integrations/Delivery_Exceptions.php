@@ -1862,7 +1862,10 @@ class Delivery_Exceptions extends Base {
 	 * @return array{heading:string,body:string}|array{}
 	 */
 	public static function pre_order_hint_for_cart( array $product_ids, bool $pre_order ): array {
-		if ( $pre_order || ! self::cart_has_pre_order_days( $product_ids ) ) {
+		// Only when the whole basket is a pre-order. A basket where some of it
+		// could travel on an ordinary day is the split checkout's story, and
+		// its banner tells it better than a line in the date box would.
+		if ( $pre_order || ! self::cart_is_pre_order_only( $product_ids ) ) {
 			return array();
 		}
 
