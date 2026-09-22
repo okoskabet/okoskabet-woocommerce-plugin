@@ -94,6 +94,7 @@ class Split_Checkout extends Base {
 		'_split_button_split_label',
 		'_split_button_split_label_many',
 		'_split_button_reduce_label',
+		'_split_button_keep_label',
 		'_split_banner_heading',
 		'_split_banner_body',
 		'_split_banner_heading_pre_order',
@@ -797,6 +798,16 @@ class Split_Checkout extends Base {
 
 	/** What the "take things out of the basket" button says. */
 	/**
+	 * What the button beside each delivery says — the one that keeps that
+	 * delivery and takes the rest out of the basket.
+	 */
+	public static function keep_button_label(): string {
+		$label = trim( (string) ( self::settings()['_split_button_keep_label'] ?? '' ) );
+
+		return $label !== '' ? $label : __( 'Keep only this one', O_TEXTDOMAIN );
+	}
+
+	/**
 	 * The banner's headline and its explanation, as the shop wrote them or as
 	 * they read out of the box. Two baskets need two stories: one that cannot
 	 * travel on a single day, and one where only part of it can be pre-ordered.
@@ -870,6 +881,11 @@ class Split_Checkout extends Base {
 				__( 'Button: split into more than two', O_TEXTDOMAIN ),
 				__( 'What that button says when the basket needs three or more delivery days, where "i to" would not be true. Write %d where the number belongs. Leave empty for "Opdel levering i 3 leveringer".', O_TEXTDOMAIN ),
 				'Opdel levering i %d leveringer',
+			),
+			'_split_button_keep_label'       => array(
+				__( 'Button: keep only this delivery', O_TEXTDOMAIN ),
+				__( 'What the small button beside each delivery says. It keeps that delivery and takes the other items out of the basket. Leave empty for "Behold kun denne".', O_TEXTDOMAIN ),
+				'Behold kun denne',
 			),
 			'_split_banner_heading'          => array(
 				__( 'Headline: the basket needs more than one day', O_TEXTDOMAIN ),
@@ -1113,6 +1129,13 @@ class Split_Checkout extends Base {
 			.oko-split-banner .oko-split-remove-option input[type=radio] {
 				margin-top: 4px; transform: scale(1.2); flex: 0 0 auto;
 			}
+			.oko-split-banner .oko-split-keep {
+				margin-left: 8px; padding: 2px 10px; font-size: 0.85em;
+				line-height: 1.6; border: 1px solid #c44; border-radius: 3px;
+				background: #fff; color: #c44; cursor: pointer;
+				white-space: nowrap; vertical-align: baseline;
+			}
+			.oko-split-banner .oko-split-keep:hover { background: #fdf0f0; }
 			.oko-split-banner .oko-split-error {
 				color: #c44; font-weight: 600; margin: 0;
 				min-height: 1.2em;
@@ -1138,13 +1161,32 @@ class Split_Checkout extends Base {
 			. nl2br( esc_html( self::banner_body( $mixes_modes ) ) )
 			. '</p>';
 
+		// Beside each delivery, the way to have just that one. The same offers
+		// as the list further down, but read where the customer is already
+		// looking — at the two deliveries, deciding which one they came for.
+		$by_date = array();
+		foreach ( $options as $option ) {
+			$by_date[ (string) $option['date'] ] = $option;
+		}
+
 		echo '<ol>';
 		foreach ( $groups as $idx => $group ) {
+			$date = (string) ( $group['suggested_date'] ?? '' );
 			echo '<li><strong>'
 				. esc_html( $this->group_heading( $group, $idx + 1 ) )
 				. '</strong> — '
-				. esc_html( implode( ', ', $group['product_names'] ) )
-				. '</li>';
+				. esc_html( implode( ', ', $group['product_names'] ) );
+
+			if ( isset( $by_date[ $date ] ) && count( $groups ) > 1 ) {
+				printf(
+					' <button type="button" class="oko-split-keep" data-oko-keep="%s" title="%s">%s</button>',
+					esc_attr( $date ),
+					esc_attr( $by_date[ $date ]['text'] ),
+					esc_html( self::keep_button_label() )
+				);
+			}
+
+			echo '</li>';
 		}
 		echo '</ol>';
 
@@ -1287,6 +1329,17 @@ class Split_Checkout extends Base {
 					if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
 					target.setAttribute('aria-expanded', open ? 'true' : 'false');
 					clearError();
+					return;
+				}
+
+				var keep = target.closest && target.closest('.oko-split-keep');
+				if (keep) {
+					e.preventDefault();
+					post(
+						{ action: 'oko_reduce_split', date: keep.getAttribute('data-oko-keep') },
+						keep,
+						TXT_ERR_REDUCE
+					);
 					return;
 				}
 

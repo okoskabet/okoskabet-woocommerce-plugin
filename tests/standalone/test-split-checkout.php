@@ -1169,3 +1169,41 @@ it( 'offers a way out of either delivery, so the customer is not cornered', func
 	assert_same( 'normal', $given_up['Nougat ispinde'] ?? '', 'keep the cornflakes, as before' );
 	assert_same( 'pre_order', $given_up['Cornflakes'] ?? '', 'or keep the ice, as a pre-order' );
 } );
+
+it( 'puts the way to keep a delivery beside the delivery itself', function () {
+	$december = oko_test_date( 80 );
+	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
+	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
+	oko_test_set_merchant_days( 14 );
+	oko_test_set_exceptions( array(
+		'only_on_enabled' => true,
+		'only_on'         => array(
+			array( 'label' => 'Julelevering', 'date' => $december, 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		),
+	) );
+	oko_test_set_delivery_days( array( oko_test_date( 3 ), oko_test_date( 5 ), $december ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE ) );
+	oko_test_set_pre_order( false );
+	$GLOBALS['oko_test_settings']['_split_checkout_enabled'] = 'on';
+	$GLOBALS['oko_test_settings']['_split_button_keep_label'] = 'Behold kun denne';
+
+	$banner = oko_split_render_banner();
+
+	// One button per delivery, each carrying the day it keeps — which is what
+	// the server matches the customer's choice on.
+	assert_same( 2, substr_count( $banner, 'oko-split-keep' ) - substr_count( $banner, '.oko-split-keep' ), 'a button on each delivery' );
+	assert_contains( 'data-oko-keep="' . oko_test_date( 3 ) . '"', $banner, 'the ordinary delivery' );
+	assert_contains( 'data-oko-keep="' . $december . '"', $banner, 'and the pre-order' );
+	assert_contains( 'Behold kun denne', $banner, 'with the shop\'s own wording' );
+} );
+
+it( 'leaves the keep button off when there is only one delivery', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_APPLES ) );
+	$GLOBALS['oko_test_settings']['_split_checkout_enabled'] = 'on';
+
+	assert_false(
+		strpos( oko_split_render_banner(), 'data-oko-keep' ) !== false,
+		'nothing to choose between'
+	);
+} );

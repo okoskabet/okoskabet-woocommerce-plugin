@@ -1443,3 +1443,12 @@ msgstr "Overskriften, når kurven både rummer en forudbestilling og en almindel
 
 msgid "The same, for the pre-order case. Leave empty for the built-in wording."
 msgstr "Det samme, men for forudbestillinger. Lad feltet stå tomt for den indbyggede tekst."
+
+msgid "Keep only this one"
+msgstr "Behold kun denne"
+
+msgid "Button: keep only this delivery"
+msgstr "Knap: behold kun denne levering"
+
+msgid "What the small button beside each delivery says. It keeps that delivery and takes the other items out of the basket. Leave empty for \"Behold kun denne\"."
+msgstr "Hvad den lille knap ved siden af hver levering siger. Den beholder den levering og tager de øvrige varer ud af kurven. Lad feltet stå tomt for \"Behold kun denne\"."
