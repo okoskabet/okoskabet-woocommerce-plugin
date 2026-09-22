@@ -94,6 +94,10 @@ class Split_Checkout extends Base {
 		'_split_button_split_label',
 		'_split_button_split_label_many',
 		'_split_button_reduce_label',
+		'_split_banner_heading',
+		'_split_banner_body',
+		'_split_banner_heading_pre_order',
+		'_split_banner_body_pre_order',
 	);
 
 	public function initialize() {
@@ -782,6 +786,40 @@ class Split_Checkout extends Base {
 	}
 
 	/** What the "take things out of the basket" button says. */
+	/**
+	 * The banner's headline and its explanation, as the shop wrote them or as
+	 * they read out of the box. Two baskets need two stories: one that cannot
+	 * travel on a single day, and one where only part of it can be pre-ordered.
+	 *
+	 * @param bool $mixes_modes Whether the basket crosses pre-order and ordinary.
+	 */
+	public static function banner_heading( bool $mixes_modes ): string {
+		$key   = $mixes_modes ? '_split_banner_heading_pre_order' : '_split_banner_heading';
+		$shop  = trim( (string) ( self::settings()[ $key ] ?? '' ) );
+		if ( $shop !== '' ) {
+			return $shop;
+		}
+
+		return $mixes_modes
+			? __( 'Only part of your basket can be pre-ordered', O_TEXTDOMAIN )
+			// The whole of it, in one line, and true without naming a single
+			// day — which is what the list below no longer does.
+			: __( 'Your items cannot all be delivered on the same day', O_TEXTDOMAIN );
+	}
+
+	/** The paragraph under that headline. See banner_heading(). */
+	public static function banner_body( bool $mixes_modes ): string {
+		$key  = $mixes_modes ? '_split_banner_body_pre_order' : '_split_banner_body';
+		$shop = trim( (string) ( self::settings()[ $key ] ?? '' ) );
+		if ( $shop !== '' ) {
+			return $shop;
+		}
+
+		return $mixes_modes
+			? __( 'You can split the order into a pre-order for the items that can be held, and an ordinary delivery for the rest — each with its own date and its own fee. Or take the items that cannot be pre-ordered out of the basket. Choose below.', O_TEXTDOMAIN )
+			: __( 'You can split the order so each part is delivered on its own day, or take a few items out of the basket so everything else arrives together. Choose below.', O_TEXTDOMAIN );
+	}
+
 	public static function reduce_button_label(): string {
 		$label = trim( (string) ( self::settings()['_split_button_reduce_label'] ?? '' ) );
 
@@ -823,6 +861,28 @@ class Split_Checkout extends Base {
 				__( 'What that button says when the basket needs three or more delivery days, where "i to" would not be true. Write %d where the number belongs. Leave empty for "Opdel levering i 3 leveringer".', O_TEXTDOMAIN ),
 				'Opdel levering i %d leveringer',
 			),
+			'_split_banner_heading'          => array(
+				__( 'Headline: the basket needs more than one day', O_TEXTDOMAIN ),
+				__( 'The headline above the two buttons when the items in the basket cannot be delivered on the same day. Leave empty for "Varerne i din kurv kan ikke leveres på samme dag".', O_TEXTDOMAIN ),
+				'Varerne i din kurv kan ikke leveres på samme dag',
+			),
+			'_split_banner_body'             => array(
+				__( 'Text under that headline', O_TEXTDOMAIN ),
+				__( 'What the customer is being offered, in your own words. Leave empty for the built-in wording.', O_TEXTDOMAIN ),
+				'Du kan dele ordren op, så hver del leveres på sin egen dag, eller tage et par varer ud af kurven, så alt det andet kommer samlet. Vælg nedenfor.',
+				true,
+			),
+			'_split_banner_heading_pre_order' => array(
+				__( 'Headline: only part of the basket can be pre-ordered', O_TEXTDOMAIN ),
+				__( 'The headline when the basket crosses a pre-order and an ordinary delivery. Leave empty for "Kun en del af din kurv kan forudbestilles".', O_TEXTDOMAIN ),
+				'Kun en del af din kurv kan forudbestilles',
+			),
+			'_split_banner_body_pre_order'   => array(
+				__( 'Text under that headline', O_TEXTDOMAIN ),
+				__( 'The same, for the pre-order case. Leave empty for the built-in wording.', O_TEXTDOMAIN ),
+				'Du kan dele ordren op i en forudbestilling på de varer, der kan gemmes, og en almindelig levering på resten — hver med sin egen dato og sit eget gebyr. Eller du kan tage de varer ud af kurven, der ikke kan forudbestilles. Vælg nedenfor.',
+				true,
+			),
 			'_split_button_reduce_label'     => array(
 				__( 'Button: take items out of the basket', O_TEXTDOMAIN ),
 				__( 'What the second button says. It shows the customer which items to give up for the rest of the basket to be delivered on one day, with the date, and removes them when they choose. Leave empty for "Tøm fra kurven".', O_TEXTDOMAIN ),
@@ -853,11 +913,16 @@ class Split_Checkout extends Base {
 							</label>
 						</td>
 					</tr>
-					<?php foreach ( $texts as $key => list( $label, $help, $placeholder ) ) : ?>
+					<?php foreach ( $texts as $key => $field ) : ?>
+						<?php list( $label, $help, $placeholder ) = $field; ?>
 						<tr>
 							<th scope="row"><label for="<?php echo esc_attr( 'oko' . $key ); ?>"><?php echo esc_html( $label ); ?></label></th>
 							<td>
-								<input type="text" class="regular-text" id="<?php echo esc_attr( 'oko' . $key ); ?>" name="<?php echo esc_attr( $key ); ?>" value="<?php echo esc_attr( $value( $key ) ); ?>" placeholder="<?php echo esc_attr( $placeholder ); ?>" />
+								<?php if ( ! empty( $field[3] ) ) : ?>
+									<textarea class="large-text" rows="3" id="<?php echo esc_attr( 'oko' . $key ); ?>" name="<?php echo esc_attr( $key ); ?>" placeholder="<?php echo esc_attr( $placeholder ); ?>"><?php echo esc_textarea( $value( $key ) ); ?></textarea>
+								<?php else : ?>
+									<input type="text" class="regular-text" id="<?php echo esc_attr( 'oko' . $key ); ?>" name="<?php echo esc_attr( $key ); ?>" value="<?php echo esc_attr( $value( $key ) ); ?>" placeholder="<?php echo esc_attr( $placeholder ); ?>" />
+								<?php endif; ?>
 								<p class="description"><?php echo esc_html( $help ); ?></p>
 							</td>
 						</tr>
@@ -907,10 +972,16 @@ class Split_Checkout extends Base {
 		$option     = (array) get_option( $option_key, array() );
 
 		foreach ( self::SETTING_KEYS as $key ) {
-			$raw   = $posted[ $key ] ?? '';
-			$value = $key === '_split_checkout_enabled'
-				? ( $raw === 'on' ? 'on' : '' )
-				: sanitize_text_field( is_string( $raw ) ? $raw : '' );
+			$raw = $posted[ $key ] ?? '';
+			if ( $key === '_split_checkout_enabled' ) {
+				$value = $raw === 'on' ? 'on' : '';
+			} elseif ( substr( $key, -5 ) === '_body' || substr( $key, -15 ) === '_body_pre_order' ) {
+				// The explanations run to a couple of sentences and may hold
+				// line breaks, which sanitize_text_field() would eat.
+				$value = sanitize_textarea_field( is_string( $raw ) ? $raw : '' );
+			} else {
+				$value = sanitize_text_field( is_string( $raw ) ? $raw : '' );
+			}
 
 			if ( $value === '' ) {
 				unset( $option[ $key ] );
@@ -1051,22 +1122,10 @@ class Split_Checkout extends Base {
 		// answer is that only part of it can be.
 		$mixes_modes = $this->groups_mix_modes( $groups );
 
-		echo '<h3>'
-			. esc_html(
-				$mixes_modes
-					? __( 'Only part of your basket can be pre-ordered', O_TEXTDOMAIN )
-					// The whole of it, in one line, and true without naming a
-					// single day — which is what the list below no longer does.
-					: __( 'Your items cannot all be delivered on the same day', O_TEXTDOMAIN )
-			)
-			. '</h3>';
+		echo '<h3>' . esc_html( self::banner_heading( $mixes_modes ) ) . '</h3>';
 
 		echo '<p style="margin:0 0 16px;">'
-			. esc_html(
-				$mixes_modes
-					? __( 'You can split the order into a pre-order for the items that can be held, and an ordinary delivery for the rest — each with its own date and its own fee. Or take the items that cannot be pre-ordered out of the basket. Choose below.', O_TEXTDOMAIN )
-					: __( 'You can split the order so each part is delivered on its own day, or take a few items out of the basket so everything else arrives together. Choose below.', O_TEXTDOMAIN )
-			)
+			. nl2br( esc_html( self::banner_body( $mixes_modes ) ) )
 			. '</p>';
 
 		echo '<ol>';

@@ -1099,3 +1099,47 @@ it( 'offers the same split to an ordinary checkout as to a pre-order', function 
 	assert_same( 'normal|' . oko_test_date( 3 ), $modes['Cornflakes'], 'the cornflakes go the ordinary way, as soon as they can' );
 	assert_same( 'pre_order|' . $december, $modes['Nougat ispinde'], 'and the ice is a pre-order for its one day' );
 } );
+
+it( 'lets the shop write the banner in its own words', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+	$GLOBALS['oko_test_settings']['_split_checkout_enabled'] = 'on';
+	$GLOBALS['oko_test_settings']['_split_banner_heading']   = 'Din kurv skal deles';
+	$GLOBALS['oko_test_settings']['_split_banner_body']      = 'Sådan gør du hos os.';
+
+	$banner = oko_split_render_banner();
+	assert_contains( 'Din kurv skal deles', $banner, 'the shop headline' );
+	assert_contains( 'Sådan gør du hos os.', $banner, 'and its own explanation' );
+	assert_false(
+		strpos( $banner, 'cannot all be delivered on the same day' ) !== false,
+		'the built-in wording steps aside'
+	);
+} );
+
+it( 'falls back to the built-in wording when the shop wrote nothing', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+	$GLOBALS['oko_test_settings']['_split_checkout_enabled'] = 'on';
+	$GLOBALS['oko_test_settings']['_split_banner_heading']   = '   ';
+
+	assert_contains(
+		'cannot all be delivered on the same day',
+		oko_split_render_banner(),
+		'whitespace is not a headline'
+	);
+} );
+
+it( 'keeps the line breaks in an explanation the shop wrote', function () {
+	$GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings'] = array();
+
+	Split_Checkout::save_settings( array(
+		'_split_checkout_enabled' => 'on',
+		'_split_banner_body'      => "Første linje.\nAnden linje.",
+	) );
+
+	assert_same(
+		"Første linje.\nAnden linje.",
+		$GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings']['_split_banner_body'],
+		'a sentence per line survives the save'
+	);
+} );

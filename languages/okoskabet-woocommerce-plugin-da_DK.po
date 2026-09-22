@@ -1422,3 +1422,24 @@ msgstr "Varerne kan kun forudbestilles"
 
 msgid "They are delivered on a fixed day further ahead than the ordinary delivery days. Press \"%s\" above to see the date."
 msgstr "De leveres på en fast dag, der ligger længere ude end de almindelige leveringsdage. Tryk på \"%s\" ovenfor for at se datoen."
+
+msgid "Headline: the basket needs more than one day"
+msgstr "Overskrift: kurven skal bruge mere end én dag"
+
+msgid "The headline above the two buttons when the items in the basket cannot be delivered on the same day. Leave empty for \"Varerne i din kurv kan ikke leveres på samme dag\"."
+msgstr "Overskriften over de to knapper, når varerne i kurven ikke kan leveres på samme dag. Lad feltet stå tomt for \"Varerne i din kurv kan ikke leveres på samme dag\"."
+
+msgid "Text under that headline"
+msgstr "Tekst under overskriften"
+
+msgid "What the customer is being offered, in your own words. Leave empty for the built-in wording."
+msgstr "Hvad kunden bliver tilbudt, skrevet med jeres egne ord. Lad feltet stå tomt for den indbyggede tekst."
+
+msgid "Headline: only part of the basket can be pre-ordered"
+msgstr "Overskrift: kun en del af kurven kan forudbestilles"
+
+msgid "The headline when the basket crosses a pre-order and an ordinary delivery. Leave empty for \"Kun en del af din kurv kan forudbestilles\"."
+msgstr "Overskriften, når kurven både rummer en forudbestilling og en almindelig levering. Lad feltet stå tomt for \"Kun en del af din kurv kan forudbestilles\"."
+
+msgid "The same, for the pre-order case. Leave empty for the built-in wording."
+msgstr "Det samme, men for forudbestillinger. Lad feltet stå tomt for den indbyggede tekst."
