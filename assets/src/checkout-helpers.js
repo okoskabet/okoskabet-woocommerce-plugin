@@ -55,9 +55,16 @@
 								// home_delivery has results.exceptions_explanation directly,
 								// sheds has it at the top level too.
 								// A basket whose only days are pre-order days: the
-								// button above the message is the way out.
-								lastPreOrderHint = r.pre_order_hint || null;
-								if (lastPreOrderHint) { setTimeout(applyFallback, 50); }
+								// button above the message is the way out. Only a
+								// response bringing dates of its own clears the wording
+								// again — the sheds call and the home-delivery call
+								// answer in whatever order they like.
+								if (r.pre_order_hint) {
+									lastPreOrderHint = r.pre_order_hint;
+									setTimeout(applyFallback, 50);
+								} else if (r.delivery_dates && r.delivery_dates.length) {
+									lastPreOrderHint = null;
+								}
 								var exp = r.exceptions_explanation
 									|| (data.results && data.results.exceptions_explanation);
 								if (exp && exp.has_exceptions) {
@@ -68,7 +75,6 @@
 									if ((r.delivery_dates && r.delivery_dates.length)
 										|| (r.sheds && r.sheds.length)) {
 										lastExplanation = null;
-										lastPreOrderHint = null;
 										removeExplanation();
 									}
 								}
@@ -135,7 +141,7 @@
 					+ "border-left:4px solid #c44;padding:12px 14px;"
 					+ "margin:8px 0 16px;border-radius:3px;";
 				div.innerHTML = buildExplanationHtml(lastExplanation);
-				span.parentNode.replaceChild(div, span);
+				swapIn(div, span);
 			}
 		}
 
@@ -198,13 +204,30 @@
 				if (span.dataset.okoFallback === "1") { continue; }
 				var div = document.createElement("div");
 				renderPanel(div, hint);
-				span.parentNode.replaceChild(div, span);
+				swapIn(div, span);
 			}
+		}
+
+		// Hide the placeholder behind the panel rather than consume it: Svelte
+		// does not render it again, so a panel taken down after a replaceChild
+		// left a blank space where the dates should be.
+		function swapIn(div, span) {
+			span.dataset.okoFallback = "1";
+			span.dataset.okoExplained = "1";
+			span.style.display = "none";
+			span.parentNode.insertBefore(div, span);
+			div._okoSpan = span;
 		}
 
 		function removeExplanation() {
 			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback, .oko-pre-order-hint");
 			for (var i = 0; i < nodes.length; i++) {
+				var span = nodes[i]._okoSpan;
+				if (span) {
+					span.style.display = "";
+					delete span.dataset.okoFallback;
+					delete span.dataset.okoExplained;
+				}
 				nodes[i].parentNode.removeChild(nodes[i]);
 			}
 		}
