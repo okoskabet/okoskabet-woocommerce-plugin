@@ -153,31 +153,51 @@
 		// button sitting right above (pre_order_hint); or the dates really are
 		// gone — a date window too narrow, or nothing back from the API — and
 		// the customer is asked to contact the shop.
-		function applyFallback() {
-			if (lastExplanation) { return; }
-			var hint = lastPreOrderHint;
+		function renderPanel(div, hint) {
 			var heading = (hint && hint.heading)
 				|| STR.noDatesHeading
 				|| "No delivery dates available right now";
 			var body = (hint && hint.body)
 				|| STR.noDatesBody
 				|| "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
+			div.className = hint ? "oko-pre-order-hint" : "oko-no-dates-fallback";
+			div.dataset.okoFallback = "1";
+			div.dataset.okoHint = hint ? "1" : "0";
+			// A way onwards is not an error, so the panel is calm, not red.
+			div.style.cssText = hint
+				? "background:#f4f8f4;border:1px solid #cfe0cf;"
+					+ "border-left:4px solid #4a7;padding:12px 14px;"
+					+ "margin:8px 0 16px;border-radius:3px;"
+				: "background:#fff5f5;border:1px solid #f0c0c0;"
+					+ "border-left:4px solid #c44;padding:12px 14px;"
+					+ "margin:8px 0 16px;border-radius:3px;";
+			div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
+				+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
+		}
+
+		function applyFallback() {
+			if (lastExplanation) { return; }
+			var hint = lastPreOrderHint;
+
+			// The dates response and the placeholder do not arrive in a fixed
+			// order: the panel is often already on screen, saying "contact the
+			// shop", when the pre-order wording turns up. Rewrite it rather
+			// than leave the customer with the wrong advice.
+			if (hint) {
+				var shown = document.querySelectorAll("[data-oko-fallback=\"1\"]");
+				for (var j = 0; j < shown.length; j++) {
+					if (shown[j].dataset.okoHint !== "1") {
+						renderPanel(shown[j], hint);
+					}
+				}
+			}
+
 			var spans = findPlaceholders();
 			for (var i = 0; i < spans.length; i++) {
 				var span = spans[i];
 				if (span.dataset.okoFallback === "1") { continue; }
 				var div = document.createElement("div");
-				div.className = hint ? "oko-pre-order-hint" : "oko-no-dates-fallback";
-				div.dataset.okoFallback = "1";
-				div.style.cssText = hint
-					? "background:#f4f8f4;border:1px solid #cfe0cf;"
-						+ "border-left:4px solid #4a7;padding:12px 14px;"
-						+ "margin:8px 0 16px;border-radius:3px;"
-					: "background:#fff5f5;border:1px solid #f0c0c0;"
-						+ "border-left:4px solid #c44;padding:12px 14px;"
-						+ "margin:8px 0 16px;border-radius:3px;";
-				div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
-					+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
+				renderPanel(div, hint);
 				span.parentNode.replaceChild(div, span);
 			}
 		}
