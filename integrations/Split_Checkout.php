@@ -605,29 +605,39 @@ class Split_Checkout extends Base {
 			return array();
 		}
 
-		$wanted_mode = $this->is_pre_order_mode() ? self::MODE_PRE_ORDER : self::MODE_NORMAL;
-
-		$candidate_dates = array();
+		// One candidate per delivery the basket would otherwise need, each with
+		// the kind of order it is.
+		//
+		// In an ordinary checkout both kinds belong here. A basket split into
+		// carrots now and ice in December must be able to give up either side,
+		// or the customer who came for the ice is cornered: the only way on
+		// would be to abandon the thing they came for. Giving up the carrots
+		// leaves a basket that can only be pre-ordered, and the checkout says
+		// so by itself.
+		//
+		// Inside a pre-order it is the other way round. The customer asked for
+		// one, and "remove the ice and the rest can be delivered on Wednesday"
+		// would quietly take it away from them. The way back is the button.
+		$in_pre_order = $this->is_pre_order_mode();
+		$candidates   = array();
 		foreach ( $this->compute_delivery_groups() as $group ) {
 			$date = (string) ( $group['suggested_date'] ?? '' );
-			// A day belonging to the other kind of order needs no filtering out
-			// here: a line only counts as kept below if it travels as the kind
-			// the customer chose, so such a day keeps nothing and falls out as
-			// an empty offer. Two guards for one rule is how the two drift.
-			if ( $date !== '' ) {
-				$candidate_dates[ $date ] = true;
+			$mode = (string) ( $group['mode'] ?? self::MODE_NORMAL );
+			if ( $date === '' || ( $in_pre_order && $mode !== self::MODE_PRE_ORDER ) ) {
+				continue;
 			}
+			$candidates[ $date ] = $mode;
 		}
 
 		$options = array();
-		foreach ( array_keys( $candidate_dates ) as $date ) {
+		foreach ( $candidates as $date => $mode ) {
 			$keep   = array();
 			$remove = array();
 			foreach ( $lines as $key => $line ) {
 				// A line only counts as kept if it can travel on this day AS
 				// this kind of order. In a pre-order, a line that has ordinary
 				// days but no pre-order day is precisely what has to go.
-				if ( $line['mode'] === $wanted_mode && in_array( $date, $line['dates'], true ) ) {
+				if ( $line['mode'] === $mode && in_array( $date, $line['dates'], true ) ) {
 					$keep[] = $key;
 				} else {
 					$remove[] = $key;
@@ -654,7 +664,7 @@ class Split_Checkout extends Base {
 				'date'           => (string) $date,
 				'date_label'     => \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::format_date_human( (string) $date ),
 				'possible_dates' => array_values( (array) $shared ),
-				'mode'           => $wanted_mode,
+				'mode'           => $mode,
 				'remove_keys'    => $remove,
 				'remove_names'   => $this->names_for_keys( $remove ),
 				'keep_names'     => $this->names_for_keys( $keep ),
