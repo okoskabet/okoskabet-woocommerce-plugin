@@ -1416,3 +1416,9 @@ msgstr "Opdelt levering er gemt."
 
 msgid "Save split delivery"
 msgstr "Gem opdelt levering"
+
+msgid "These items can only be pre-ordered"
+msgstr "Varerne kan kun forudbestilles"
+
+msgid "They are delivered on a fixed day further ahead than the ordinary delivery days. Press \"%s\" above to see the date."
+msgstr "De leveres på en fast dag, der ligger længere ude end de almindelige leveringsdage. Tryk på \"%s\" ovenfor for at se datoen."

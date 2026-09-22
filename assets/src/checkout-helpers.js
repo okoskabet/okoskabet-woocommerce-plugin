@@ -38,6 +38,7 @@
 	(function () {
 		var STR = window._okoskabet_overlay_strings || {};
 		var lastExplanation = null;
+		var lastPreOrderHint = null;
 		var origFetch = window.fetch;
 
 		window.fetch = function (input, init) {
@@ -53,6 +54,10 @@
 								if (!r) { return; }
 								// home_delivery has results.exceptions_explanation directly,
 								// sheds has it at the top level too.
+								// A basket whose only days are pre-order days: the
+								// button above the message is the way out.
+								lastPreOrderHint = r.pre_order_hint || null;
+								if (lastPreOrderHint) { setTimeout(applyFallback, 50); }
 								var exp = r.exceptions_explanation
 									|| (data.results && data.results.exceptions_explanation);
 								if (exp && exp.has_exceptions) {
@@ -63,6 +68,7 @@
 									if ((r.delivery_dates && r.delivery_dates.length)
 										|| (r.sheds && r.sheds.length)) {
 										lastExplanation = null;
+										lastPreOrderHint = null;
 										removeExplanation();
 									}
 								}
@@ -141,26 +147,35 @@
 				.replace(/"/g, "&quot;");
 		}
 
-		// Generic fallback for when the customer sees the empty-dates
-		// placeholder but no Delivery_Exceptions explanation is active —
-		// typically because the merchant's date window is too narrow or
-		// the API genuinely returned nothing. Replace the bare placeholder
-		// with a "please contact the shop" message rather than leaving it
-		// as an inscrutable "no dates available." line.
+		// What replaces the bare "no dates available" placeholder when no
+		// Delivery_Exceptions explanation is active. Two cases: the basket can
+		// be pre-ordered, and the server sent the wording that points at the
+		// button sitting right above (pre_order_hint); or the dates really are
+		// gone — a date window too narrow, or nothing back from the API — and
+		// the customer is asked to contact the shop.
 		function applyFallback() {
 			if (lastExplanation) { return; }
-			var heading = STR.noDatesHeading || "No delivery dates available right now";
-			var body = STR.noDatesBody || "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
+			var hint = lastPreOrderHint;
+			var heading = (hint && hint.heading)
+				|| STR.noDatesHeading
+				|| "No delivery dates available right now";
+			var body = (hint && hint.body)
+				|| STR.noDatesBody
+				|| "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
 			var spans = findPlaceholders();
 			for (var i = 0; i < spans.length; i++) {
 				var span = spans[i];
 				if (span.dataset.okoFallback === "1") { continue; }
 				var div = document.createElement("div");
-				div.className = "oko-no-dates-fallback";
+				div.className = hint ? "oko-pre-order-hint" : "oko-no-dates-fallback";
 				div.dataset.okoFallback = "1";
-				div.style.cssText = "background:#fff5f5;border:1px solid #f0c0c0;"
-					+ "border-left:4px solid #c44;padding:12px 14px;"
-					+ "margin:8px 0 16px;border-radius:3px;";
+				div.style.cssText = hint
+					? "background:#f4f8f4;border:1px solid #cfe0cf;"
+						+ "border-left:4px solid #4a7;padding:12px 14px;"
+						+ "margin:8px 0 16px;border-radius:3px;"
+					: "background:#fff5f5;border:1px solid #f0c0c0;"
+						+ "border-left:4px solid #c44;padding:12px 14px;"
+						+ "margin:8px 0 16px;border-radius:3px;";
 				div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
 					+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
 				span.parentNode.replaceChild(div, span);
@@ -168,7 +183,7 @@
 		}
 
 		function removeExplanation() {
-			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback");
+			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback, .oko-pre-order-hint");
 			for (var i = 0; i < nodes.length; i++) {
 				nodes[i].parentNode.removeChild(nodes[i]);
 			}

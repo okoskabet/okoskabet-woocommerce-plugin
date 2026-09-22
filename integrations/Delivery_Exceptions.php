@@ -1809,6 +1809,33 @@ class Delivery_Exceptions extends Base {
 		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, $config ), $config ) );
 	}
 
+	/**
+	 * What to tell a customer whose ordinary checkout has no delivery day left
+	 * because everything their basket can reach is a pre-order day. Without it
+	 * they read "no dates available, please contact the shop" while the button
+	 * that solves it sits right above the message.
+	 *
+	 * Empty when the basket has nothing to pre-order, or when the customer is
+	 * already looking at the pre-order days.
+	 *
+	 * @param int[] $product_ids
+	 * @return array{heading:string,body:string}|array{}
+	 */
+	public static function pre_order_hint_for_cart( array $product_ids, bool $pre_order ): array {
+		if ( $pre_order || ! self::cart_has_pre_order_days( $product_ids ) ) {
+			return array();
+		}
+
+		return array(
+			'heading' => __( 'These items can only be pre-ordered', O_TEXTDOMAIN ),
+			'body'    => sprintf(
+				/* translators: %s: the shop's wording for the pre-order button, e.g. "Pre-order". */
+				__( 'They are delivered on a fixed day further ahead than the ordinary delivery days. Press "%s" above to see the date.', O_TEXTDOMAIN ),
+				self::pre_order_label()
+			),
+		);
+	}
+
 	/** The pre-order button's wording, as the shop set it or built in. */
 	public static function pre_order_label( ?array $config = null ): string {
 		$config = $config ?? self::get_config();
