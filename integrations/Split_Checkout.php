@@ -1313,7 +1313,22 @@ class Split_Checkout extends Base {
 
 			document.addEventListener('click', function (e) {
 				var target = e.target;
-				if (!target || !target.id) { return; }
+				if (!target) { return; }
+
+				// Ahead of the id check below: there is one of these per
+				// delivery, so they are found by class rather than by id.
+				var keep = target.closest && target.closest('.oko-split-keep');
+				if (keep) {
+					e.preventDefault();
+					post(
+						{ action: 'oko_reduce_split', date: keep.getAttribute('data-oko-keep') },
+						keep,
+						TXT_ERR_REDUCE
+					);
+					return;
+				}
+
+				if (!target.id) { return; }
 
 				if (target.id === 'oko-split-continue') {
 					e.preventDefault();
@@ -1329,17 +1344,6 @@ class Split_Checkout extends Base {
 					if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
 					target.setAttribute('aria-expanded', open ? 'true' : 'false');
 					clearError();
-					return;
-				}
-
-				var keep = target.closest && target.closest('.oko-split-keep');
-				if (keep) {
-					e.preventDefault();
-					post(
-						{ action: 'oko_reduce_split', date: keep.getAttribute('data-oko-keep') },
-						keep,
-						TXT_ERR_REDUCE
-					);
 					return;
 				}
 
