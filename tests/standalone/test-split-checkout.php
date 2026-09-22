@@ -1068,3 +1068,34 @@ it( 'accepts nothing but "on" as switching the feature on', function () {
 	$saved = $GLOBALS['oko_test_options']['okoskabet-woocommerce-plugin-settings'];
 	assert_false( isset( $saved['_split_checkout_enabled'] ), 'anything else is off' );
 } );
+
+it( 'offers the same split to an ordinary checkout as to a pre-order', function () {
+	// The ice is held to one December day and to no other, so an ordinary
+	// checkout has nothing to offer it. The basket still splits: the carrots
+	// travel now, the ice in December. Before, the customer standing in the
+	// ordinary checkout was told to take the ice out of the basket, and only
+	// found the split by pressing a button they had no reason to press.
+	$december = oko_test_date( 80 );
+	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
+	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
+	oko_test_set_merchant_days( 14 );
+	oko_test_set_exceptions( array(
+		'only_on_enabled' => true,
+		'only_on'         => array(
+			array( 'label' => 'Julelevering', 'date' => $december, 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		),
+	) );
+	oko_test_set_delivery_days( array( oko_test_date( 3 ), oko_test_date( 5 ), $december ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE ) );
+	oko_test_set_pre_order( false );
+
+	$groups = oko_split()->compute_split_groups();
+	assert_same( 2, count( $groups ), 'two deliveries, not one delivery and a demand' );
+
+	$modes = array();
+	foreach ( $groups as $group ) {
+		$modes[ implode( ',', oko_split_names( $group ) ) ] = $group['mode'] . '|' . $group['suggested_date'];
+	}
+	assert_same( 'normal|' . oko_test_date( 3 ), $modes['Cornflakes'], 'the cornflakes go the ordinary way, as soon as they can' );
+	assert_same( 'pre_order|' . $december, $modes['Nougat ispinde'], 'and the ice is a pre-order for its one day' );
+} );

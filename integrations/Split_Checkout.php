@@ -306,6 +306,24 @@ class Split_Checkout extends Base {
 			if ( $days === null ) {
 				return array();
 			}
+
+			// The mirror of the case above: an ordinary checkout holding
+			// something that can only be pre-ordered. Without this the line has
+			// no day at all, the basket cannot be split, and the only way on is
+			// to take the goods out — while the very same basket splits cleanly
+			// once the customer has pressed the pre-order button. The offer
+			// should not depend on which side of that button they stand.
+			if ( empty( $days ) && ! $pre_order_mode ) {
+				$pre_days = $this->delivery_days_for_product( $pid, true );
+				if ( $pre_days === null ) {
+					return array();
+				}
+				if ( ! empty( $pre_days ) ) {
+					$out[ $key ] = array( 'mode' => self::MODE_PRE_ORDER, 'dates' => $pre_days );
+					continue;
+				}
+			}
+
 			$out[ $key ] = array( 'mode' => self::MODE_NORMAL, 'dates' => $days );
 		}
 
