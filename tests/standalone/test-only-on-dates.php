@@ -166,3 +166,33 @@ it( 'follows the shop display window when the shop has set one', function () {
 	assert_same( array( $day ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false ), 'inside the window, so ordinary' );
 	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), 'and nothing to pre-order' );
 } );
+
+it( 'knows a basket that can only be pre-ordered from one that cannot', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	oko_only_rule( oko_test_date( 30 ) );
+
+	assert_true(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_BOX ) ),
+		'the box alone has no ordinary day'
+	);
+	assert_false(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_BOX, OKO_ONLY_PRODUCT_MILK ) ),
+		'with the milk along, an ordinary order is still on the table — that is a split, not a pre-order'
+	);
+	assert_false(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_MILK ) ),
+		'and a product no rule mentions is never pre-order-only'
+	);
+} );
+
+it( 'calls a basket pinned to a near date an ordinary one', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	oko_only_rule( oko_test_date( 3 ) );
+
+	assert_false(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_BOX ) ),
+		'the day is inside the normal window, so it is simply the only day'
+	);
+} );

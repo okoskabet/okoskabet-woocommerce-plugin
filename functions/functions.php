@@ -1425,7 +1425,12 @@ function oko_pre_order_checkout_requested(): bool
 	} elseif (isset($_GET['oko_pre_order'])) {
 		$wanted = (string) wp_unslash($_GET['oko_pre_order']) === '1';
 	} else {
-		$wanted = false;
+		// Nothing said yet. A basket that can only be pre-ordered starts as
+		// one: an ordinary checkout would have no day to offer, and the
+		// customer would be left reading why instead of picking a date. The
+		// button back to an ordinary order carries oko_pre_order=0, so saying
+		// no is still saying something, and lands in the branch above.
+		$wanted = oko_cart_is_pre_order_only();
 	}
 	// phpcs:enable WordPress.Security.NonceVerification
 
@@ -1456,6 +1461,27 @@ function oko_cart_can_pre_order(): bool
 }
 
 /**
+ * Whether the basket holds nothing but goods pinned to a date further ahead
+ * than the ordinary delivery days — so an ordinary order is not on offer.
+ */
+function oko_cart_is_pre_order_only(): bool
+{
+	if (! function_exists('WC') || ! WC()->cart || ! class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
+		return false;
+	}
+
+	$product_ids = array();
+	foreach (WC()->cart->get_cart() as $item) {
+		$pid = (int) ($item['product_id'] ?? 0);
+		if ($pid > 0) {
+			$product_ids[] = $pid;
+		}
+	}
+
+	return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_is_pre_order_only($product_ids);
+}
+
+/**
  * The checkout URL for an ordinary order, and for a pre-order.
  *
  * A pre-order is a choice about the page the customer is on, so it travels in
@@ -1465,7 +1491,10 @@ function oko_checkout_url_for_mode(bool $pre_order): string
 {
 	$url = function_exists('wc_get_checkout_url') ? wc_get_checkout_url() : home_url('/');
 
-	return $pre_order ? add_query_arg('oko_pre_order', '1', $url) : remove_query_arg('oko_pre_order', $url);
+	// Both modes name themselves. "No parameter" cannot mean an ordinary order
+	// any more: a basket that can only be pre-ordered starts as a pre-order,
+	// and the way back has to outrank that.
+	return add_query_arg('oko_pre_order', $pre_order ? '1' : '0', $url);
 }
 
 /**

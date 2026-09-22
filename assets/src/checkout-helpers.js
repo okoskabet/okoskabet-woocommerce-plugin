@@ -202,10 +202,26 @@
 			for (var i = 0; i < spans.length; i++) {
 				var span = spans[i];
 				if (span.dataset.okoFallback === "1") { continue; }
+				// Every shipping method renders its own placeholder, and the
+				// ones the customer has not chosen sit collapsed in the list.
+				// Saying the same thing twice, once in a box the size of a
+				// line, reads as a bug.
+				if (!inChosenMethod(span)) { continue; }
 				var div = document.createElement("div");
 				renderPanel(div, hint);
 				swapIn(div, span);
 			}
+		}
+
+		// Is this placeholder inside the shipping method the customer picked?
+		// A placeholder outside the method list (a theme that lays the
+		// checkout out differently) counts as chosen: better one message in an
+		// odd place than none at all.
+		function inChosenMethod(node) {
+			var li = node.closest && node.closest("li");
+			if (!li || !li.closest(".woocommerce-shipping-methods")) { return true; }
+			var radio = li.querySelector("input[name^=\"shipping_method\"]");
+			return !radio || radio.checked;
 		}
 
 		// Hide the placeholder behind the panel rather than consume it: Svelte

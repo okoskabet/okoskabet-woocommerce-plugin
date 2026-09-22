@@ -1810,6 +1810,46 @@ class Delivery_Exceptions extends Base {
 	}
 
 	/**
+	 * Whether this basket can ONLY be pre-ordered: every product in it is held
+	 * to a fixed date further ahead than the ordinary delivery days, so there
+	 * is no ordinary order to be had. A basket where anything can travel on a
+	 * normal day is not this — that one is the split checkout's business.
+	 *
+	 * @param int[] $product_ids
+	 */
+	public static function cart_is_pre_order_only( array $product_ids ): bool {
+		$product_ids = array_values( array_unique( array_filter( array_map( 'intval', $product_ids ) ) ) );
+		if ( empty( $product_ids ) ) {
+			return false;
+		}
+
+		$config   = self::get_config();
+		$horizon  = self::normal_horizon_ymd( $config );
+		$instance = new self();
+
+		foreach ( $product_ids as $pid ) {
+			$dates = array();
+			foreach ( $instance->collect_applicable_rules( array( $pid ), $config ) as $rule ) {
+				if ( ( $rule['type'] ?? '' ) === 'only_on' && ! empty( $rule['date'] ) ) {
+					$dates[] = (string) $rule['date'];
+				}
+			}
+			// Nothing pins this product, or one of the days it is pinned to is
+			// an ordinary one: an ordinary order is still possible.
+			if ( empty( $dates ) ) {
+				return false;
+			}
+			foreach ( $dates as $date ) {
+				if ( $date <= $horizon ) {
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * What to tell a customer whose ordinary checkout has no delivery day left
 	 * because everything their basket can reach is a pre-order day. Without it
 	 * they read "no dates available, please contact the shop" while the button
