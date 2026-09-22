@@ -206,11 +206,20 @@
 				// ones the customer has not chosen sit collapsed in the list.
 				// Saying the same thing twice, once in a box the size of a
 				// line, reads as a bug.
-				if (!inChosenMethod(span)) { continue; }
+				if (!inChosenMethod(span) || alreadySaid(span)) { continue; }
 				var div = document.createElement("div");
 				renderPanel(div, hint);
 				swapIn(div, span);
 			}
+		}
+
+		// The delivery app can be mounted twice inside one method — beside the
+		// chosen radio and in the theme's own mount point — and each copy
+		// renders its own placeholder. The message belongs to the basket, so
+		// one per method is one too many already.
+		function alreadySaid(node) {
+			var scope = (node.closest && node.closest("li")) || document;
+			return !!scope.querySelector(".oko-pre-order-hint, .oko-no-dates-fallback");
 		}
 
 		// Is this placeholder inside the shipping method the customer picked?
