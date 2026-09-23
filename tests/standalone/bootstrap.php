@@ -372,6 +372,9 @@ function oko_test_set_cart( array $items ): void {
 require_once dirname( __DIR__, 2 ) . '/engine/Base.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Delivery_Exceptions.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Split_Checkout.php';
+// Only the gateway table is exercised here; the capture calls themselves need
+// a live gateway and belong to the wpunit suite.
+require_once dirname( __DIR__, 2 ) . '/integrations/Payment_Capture.php';
 
 /**
  * The days the shop drives on, as Økoskabet would answer for this address.

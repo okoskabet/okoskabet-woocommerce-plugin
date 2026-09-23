@@ -1479,3 +1479,6 @@ msgstr "Gælder alle varer"
 
 msgid "The window covers the whole catalogue. What cannot wait is named once, under the pre-order settings, rather than category by category here."
 msgstr "Vinduet gælder hele sortimentet. Det, der ikke kan vente, nævnes ét sted under forudbestillingsindstillingerne i stedet for kategori for kategori her."
+
+msgid "Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged."
+msgstr "Jeres betalingsløsning hæver pengene, når ordren markeres som gennemført, og ikke før. Vælg nedenfor hvilket event der skal gennemføre ordren — det er samtidig det øjeblik, kunden bliver trukket."

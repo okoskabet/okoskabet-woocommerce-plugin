@@ -999,21 +999,39 @@ class Merchants extends Base {
 							</select>
 						</td>
 					</tr>
+					<?php
+					$capture_options = array(
+						'label_printed'   => __( 'Label Printed', O_TEXTDOMAIN ),
+						'in_shed'         => __( 'In Shed', O_TEXTDOMAIN ),
+						'order_delivered' => __( 'Order Delivered', O_TEXTDOMAIN ),
+					);
+					// Hidden for a gateway that only charges on completion: see
+					// Payment_Capture::capture_events_are_useful().
+					$capture_useful = \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful(
+						(string) ( $merchant['payment_gateway'] ?? 'auto' )
+					);
+					?>
+					<?php if ( ! $capture_useful ) : ?>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Capture events', O_TEXTDOMAIN ); ?></th>
+						<td>
+							<p class="description">
+								<?php esc_html_e( 'Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged.', O_TEXTDOMAIN ); ?>
+							</p>
+						</td>
+					</tr>
+					<?php else : ?>
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Capture events', O_TEXTDOMAIN ); ?></th>
 						<td>
 							<?php
-							$capture_options = array(
-								'label_printed'   => __( 'Label Printed', O_TEXTDOMAIN ),
-								'in_shed'         => __( 'In Shed', O_TEXTDOMAIN ),
-								'order_delivered' => __( 'Order Delivered', O_TEXTDOMAIN ),
-							);
 							foreach ( $capture_options as $key => $label ) :
 								?>
 								<label style="display:block;"><input type="checkbox" name="merchant[capture_events][]" value="<?php echo esc_attr( $key ); ?>" <?php checked( in_array( $key, $merchant['capture_events'], true ) ); ?> /> <?php echo esc_html( $label ); ?></label>
 							<?php endforeach; ?>
 						</td>
 					</tr>
+					<?php endif; ?>
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Completion events', O_TEXTDOMAIN ); ?></th>
 						<td>

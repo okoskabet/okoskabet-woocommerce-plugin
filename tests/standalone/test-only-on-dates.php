@@ -269,3 +269,26 @@ it( 'leaves a window that names nothing inert, as it always was', function () {
 
 	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), 'an unfinished rule opens nothing' );
 } );
+
+describe( 'Which capture settings a shop is even shown' );
+
+it( 'hides the capture events for a gateway that only charges on completion', function () {
+	// Nexi authorises and puts the order in "processing", which WooCommerce
+	// counts as paid; the card is charged when the order is completed. A
+	// capture event would promise the shop money it never gets.
+	foreach ( array( 'nets_easy', 'dibs_easy', 'nexi_checkout' ) as $gateway ) {
+		assert_false(
+			\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful( $gateway ),
+			$gateway . ' charges on completion'
+		);
+	}
+} );
+
+it( 'keeps them for the gateways that charge when the order starts processing', function () {
+	foreach ( array( 'quickpay_gateway', 'stripe', 'pensopay', 'fallback', 'auto' ) as $gateway ) {
+		assert_true(
+			\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful( $gateway ),
+			$gateway . ' can be captured from a webhook'
+		);
+	}
+} );

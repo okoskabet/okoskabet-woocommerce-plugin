@@ -31,6 +31,49 @@ class Payment_Capture extends Base {
 	}
 
 	/**
+	 * The gateways that take the money when the order moves to "processing" —
+	 * which is the only lever this plugin has. Capture is not a WooCommerce
+	 * idea; every gateway hangs its own capture off an order status, and these
+	 * hang it off the one we can reach from a webhook.
+	 */
+	const CAPTURES_ON_PROCESSING = array(
+		'quickpay_gateway',
+		'wc_quickpay',
+		'quickpay',
+		'stripe',
+		'stripe_cc',
+		'pensopay',
+		'fallback',
+	);
+
+	/**
+	 * And the gateways that only take it once the order is COMPLETED.
+	 *
+	 * Nexi/Nets Easy authorises the payment and puts the order straight into
+	 * "processing" — which WooCommerce counts as paid — and charges the card
+	 * when the order is completed. Asking such a gateway to capture earlier is
+	 * asking for something it does not offer: for those shops the money is
+	 * taken by the completion events, not by these.
+	 */
+	const CAPTURES_ON_COMPLETION = array(
+		'nets_easy',
+		'dibs_easy',
+		'nexi_checkout',
+	);
+
+	/**
+	 * Whether the capture events mean anything for this gateway.
+	 *
+	 * False when the gateway only charges on completion: the setting would
+	 * promise the shop something that cannot happen, and a setting that does
+	 * nothing is worse than no setting at all. 'auto' is unknown until an order
+	 * arrives, so it counts as useful and is explained rather than hidden.
+	 */
+	public static function capture_events_are_useful( string $gateway ): bool {
+		return ! in_array( $gateway, self::CAPTURES_ON_COMPLETION, true );
+	}
+
+	/**
 	 * Attempt to capture payment for a WooCommerce order.
 	 * Detects the gateway used and calls the appropriate capture method.
 	 *
