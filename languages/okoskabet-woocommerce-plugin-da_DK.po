@@ -1461,3 +1461,15 @@ msgstr "Kan ikke forudbestilles: tags"
 
 msgid "Goods you will not hold for a later date — fresh produce and the like. They are never offered a pre-order day, whichever rule opens one. A basket holding them is offered the split instead: the rest as a pre-order, these on an ordinary delivery."
 msgstr "Varer, I ikke vil gemme til en senere dato — frisk frugt og grønt og den slags. De får aldrig en forudbestillingsdag, uanset hvilken regel der åbner en. En kurv med dem i får i stedet tilbudt opdelingen: resten som forudbestilling, disse med en almindelig levering."
+
+msgid "Move %1$s to %2$s"
+msgstr "Flyt %1$s til %2$s"
+
+msgid "Could not move that item. Please try again."
+msgstr "Varen kunne ikke flyttes. Prøv igen."
+
+msgid "That item cannot go in that delivery."
+msgstr "Den vare kan ikke komme med i den levering."
+
+msgid "Nothing to move"
+msgstr "Der er ikke noget at flytte"

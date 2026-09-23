@@ -57,6 +57,9 @@ class Split_Checkout extends Base {
 	/** WC session key holding the active split state. */
 	const SESSION_KEY = 'oko_split_state';
 
+	/** Where the customer's moves between deliveries live, until they order. */
+	const MOVES_KEY = 'oko_split_moves';
+
 	/** Hidden checkbox field name on checkout form. */
 	const ACK_FIELD = 'oko_split_acknowledged';
 
@@ -135,6 +138,8 @@ class Split_Checkout extends Base {
 		add_action( 'wp_ajax_nopriv_oko_resume_split', array( $this, 'ajax_resume_split' ) );
 		add_action( 'wp_ajax_oko_cancel_split',        array( $this, 'ajax_cancel_split' ) );
 		add_action( 'wp_ajax_nopriv_oko_cancel_split', array( $this, 'ajax_cancel_split' ) );
+		add_action( 'wp_ajax_oko_move_split_item',        array( $this, 'ajax_move_split_item' ) );
+		add_action( 'wp_ajax_nopriv_oko_move_split_item', array( $this, 'ajax_move_split_item' ) );
 		add_action( 'wp_ajax_oko_reduce_split',        array( $this, 'ajax_reduce_split' ) );
 		add_action( 'wp_ajax_nopriv_oko_reduce_split', array( $this, 'ajax_reduce_split' ) );
 
@@ -288,6 +293,18 @@ class Split_Checkout extends Base {
 		$pre_order_mode = $this->is_pre_order_mode();
 		$out            = array();
 
+		// Whether anything here could be pre-ordered at all. When nothing can,
+		// there is only one kind of delivery to be had, nothing to move between,
+		// and no reason to ask Økoskabet twice per product.
+		$product_ids   = array();
+		foreach ( WC()->cart->get_cart() as $item ) {
+			$pid = (int) ( $item['product_id'] ?? 0 );
+			if ( $pid > 0 ) {
+				$product_ids[] = $pid;
+			}
+		}
+		$two_kinds = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days( $product_ids );
+
 		foreach ( WC()->cart->get_cart() as $key => $item ) {
 			$pid = (int) ( $item['product_id'] ?? 0 );
 			if ( $pid <= 0 ) {
@@ -330,6 +347,188 @@ class Split_Checkout extends Base {
 			}
 
 			$out[ $key ] = array( 'mode' => self::MODE_NORMAL, 'dates' => $days );
+		}
+
+		// The days each line would have as the OTHER kind of delivery. Oats can
+		// travel now and can also wait for December; carrots cannot wait at all.
+		// This is what says which items the customer may move between the two.
+		if ( $two_kinds ) {
+			foreach ( $out as $key => $line ) {
+				$pid = (int) ( WC()->cart->get_cart()[ $key ]['product_id'] ?? 0 );
+				if ( $pid <= 0 ) {
+					continue;
+				}
+				$alt_mode = $line['mode'] === self::MODE_PRE_ORDER ? self::MODE_NORMAL : self::MODE_PRE_ORDER;
+				$alt      = $this->delivery_days_for_product( $pid, $alt_mode === self::MODE_PRE_ORDER );
+				if ( ! empty( $alt ) ) {
+					$out[ $key ]['alt_mode']  = $alt_mode;
+					$out[ $key ]['alt_dates'] = $alt;
+				}
+			}
+		}
+
+		return $out;
+	}
+
+	/** The days this line could go out on as the given kind of delivery. */
+	private static function line_dates_for_mode( array $line, string $mode ): array {
+		if ( ( $line['mode'] ?? '' ) === $mode ) {
+			return (array) ( $line['dates'] ?? array() );
+		}
+		if ( ( $line['alt_mode'] ?? '' ) === $mode ) {
+			return (array) ( $line['alt_dates'] ?? array() );
+		}
+
+		return array();
+	}
+
+	/** What the customer has moved where: cart key => "mode|date". */
+	private function moves(): array {
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return array();
+		}
+
+		return (array) WC()->session->get( self::MOVES_KEY, array() );
+	}
+
+	private function set_moves( array $moves ): void {
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->set( self::MOVES_KEY, $moves );
+		}
+	}
+
+	public function clear_moves(): void {
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->__unset( self::MOVES_KEY );
+		}
+	}
+
+	/** A group's name in a move: the kind of delivery and the day it is on. */
+	private static function group_id( array $group ): string {
+		return (string) ( $group['mode'] ?? '' ) . '|' . (string) ( $group['date'] ?? $group['suggested_date'] ?? '' );
+	}
+
+	/**
+	 * Move the lines the customer asked to move, and work out what each group
+	 * can be delivered on afterwards. A move that no longer fits — the basket
+	 * changed, or the day it pointed at is gone — is quietly dropped rather
+	 * than obeyed: the groups on screen have to be ones that can be booked.
+	 *
+	 * @param array<int, array> $groups Raw groups: keys, date, dates, mode.
+	 * @param array<string, array> $lines From lines_with_modes().
+	 * @return array<int, array>
+	 */
+	private function apply_moves( array $groups, array $lines ): array {
+		$moves = $this->moves();
+		if ( empty( $moves ) ) {
+			return $groups;
+		}
+
+		foreach ( $moves as $key => $target ) {
+			if ( ! isset( $lines[ $key ] ) || ! is_string( $target ) ) {
+				continue;
+			}
+			$moved = self::with_line_moved( $groups, $lines, (string) $key, $target );
+			if ( $moved !== null ) {
+				$groups = $moved;
+			}
+		}
+
+		return $groups;
+	}
+
+	/**
+	 * One move applied to a copy of the groups, or null when it cannot be: the
+	 * target is gone, the line cannot travel on that day, or what is left of
+	 * the group the line came from would have no day at all.
+	 *
+	 * @return array<int, array>|null
+	 */
+	private static function with_line_moved( array $groups, array $lines, string $key, string $target ): ?array {
+		$to = null;
+		foreach ( $groups as $i => $group ) {
+			if ( self::group_id( $group ) === $target ) {
+				$to = $i;
+				break;
+			}
+		}
+		if ( $to === null ) {
+			return null;
+		}
+
+		$mode = (string) $groups[ $to ]['mode'];
+		$days = self::line_dates_for_mode( $lines[ $key ], $mode );
+		if ( empty( $days ) ) {
+			return null;
+		}
+
+		foreach ( $groups as $i => $group ) {
+			$groups[ $i ]['keys'] = array_values( array_diff( (array) $group['keys'], array( $key ) ) );
+		}
+		$groups[ $to ]['keys'][] = $key;
+
+		// Every group has to keep a day the whole of it shares, or the move has
+		// made an offer nobody can accept.
+		foreach ( $groups as $i => $group ) {
+			if ( empty( $group['keys'] ) ) {
+				unset( $groups[ $i ] );
+				continue;
+			}
+			$shared = null;
+			foreach ( $group['keys'] as $member ) {
+				$member_days = self::line_dates_for_mode( $lines[ $member ], (string) $group['mode'] );
+				$shared      = $shared === null
+					? $member_days
+					: array_values( array_intersect( $shared, $member_days ) );
+			}
+			if ( empty( $shared ) ) {
+				return null;
+			}
+			sort( $shared );
+			$groups[ $i ]['dates'] = $shared;
+			$groups[ $i ]['date']  = $shared[0];
+		}
+
+		return array_values( $groups );
+	}
+
+	/**
+	 * For each cart line, the groups it could be moved to — by group id, as the
+	 * buttons in the banner name them. A line that can only travel one way, or
+	 * a basket with nothing to move it to, gets nothing.
+	 *
+	 * @param array<int, array> $groups Decorated groups, in display order.
+	 * @return array<string, array<int, array{id:string, index:int}>>
+	 */
+	public function movable_targets( array $groups ): array {
+		$lines = $this->lines_with_modes();
+		$out   = array();
+		if ( count( $groups ) < 2 ) {
+			return $out;
+		}
+
+		foreach ( $groups as $index => $group ) {
+			foreach ( (array) $group['keys'] as $key ) {
+				if ( ! isset( $lines[ $key ] ) ) {
+					continue;
+				}
+				foreach ( $groups as $other_index => $other ) {
+					if ( $other_index === $index || ( $other['mode'] ?? '' ) === '' ) {
+						continue;
+					}
+					$days = self::line_dates_for_mode( $lines[ $key ], (string) $other['mode'] );
+					if ( ! in_array( (string) $other['suggested_date'], $days, true ) ) {
+						continue;
+					}
+					$out[ $key ][] = array(
+						'id'    => (string) ( $other['mode'] ) . '|' . (string) $other['suggested_date'],
+						'index' => (int) $other_index + 1,
+						// The delivery as the customer reads it above — "Levering 1",
+						// "Forudbestilling 2" — so the button names what they see.
+						'label' => $this->group_heading( $other, (int) $other_index + 1 ),
+					);
+				}
+			}
 		}
 
 		return $out;
@@ -404,6 +603,13 @@ class Split_Checkout extends Base {
 		}
 
 		// Chronological, so the customer reads them in the order they happen.
+		usort( $groups, function ( $a, $b ) {
+			return strcmp( (string) $a['date'], (string) $b['date'] );
+		} );
+
+		$groups = $this->apply_moves( $groups, $lines );
+
+		// Moving can empty a group, and then the order of the rest is stale.
 		usort( $groups, function ( $a, $b ) {
 			return strcmp( (string) $a['date'], (string) $b['date'] );
 		} );
@@ -1034,7 +1240,13 @@ class Split_Checkout extends Base {
 		WC()->session->set( self::SESSION_KEY, $state );
 	}
 
+	/**
+	 * Both the split in progress and the arrangement that led to it. Once an
+	 * order is placed or the split is abandoned, yesterday's moves would only
+	 * rearrange the next basket behind the customer's back.
+	 */
 	private function clear_state(): void {
+		$this->clear_moves();
 		if ( ! function_exists( 'WC' ) || ! WC()->session ) { return; }
 		WC()->session->__unset( self::SESSION_KEY );
 	}
@@ -1129,6 +1341,12 @@ class Split_Checkout extends Base {
 			.oko-split-banner .oko-split-remove-option input[type=radio] {
 				margin-top: 4px; transform: scale(1.2); flex: 0 0 auto;
 			}
+			.oko-split-banner .oko-split-move {
+				margin-left: 6px; padding: 1px 8px; font-size: 0.8em;
+				line-height: 1.6; border: 1px solid #b59; border-radius: 3px;
+				background: #fff; color: #859; cursor: pointer; white-space: nowrap;
+			}
+			.oko-split-banner .oko-split-move:hover { background: #fbf5f9; }
 			.oko-split-banner .oko-split-keep {
 				margin-left: 8px; padding: 2px 10px; font-size: 0.85em;
 				line-height: 1.6; border: 1px solid #c44; border-radius: 3px;
@@ -1169,6 +1387,8 @@ class Split_Checkout extends Base {
 			$by_date[ (string) $option['date'] ] = $option;
 		}
 
+		$movable = $this->movable_targets( $groups );
+
 		echo '<ol>';
 		foreach ( $groups as $idx => $group ) {
 			$date = (string) ( $group['suggested_date'] ?? '' );
@@ -1176,6 +1396,24 @@ class Split_Checkout extends Base {
 				. esc_html( $this->group_heading( $group, $idx + 1 ) )
 				. '</strong> — '
 				. esc_html( implode( ', ', $group['product_names'] ) );
+
+			// What can travel either way, the customer decides. A line is only
+			// offered a delivery it could actually go out with.
+			foreach ( (array) $group['keys'] as $key ) {
+				foreach ( (array) ( $movable[ $key ] ?? array() ) as $option ) {
+					printf(
+						' <button type="button" class="oko-split-move" data-oko-move="%s" data-oko-target="%s">%s</button>',
+						esc_attr( $key ),
+						esc_attr( $option['id'] ),
+						esc_html( sprintf(
+							/* translators: 1 = product name, 2 = the delivery it would move to, as its heading reads */
+							__( 'Move %1$s to %2$s', O_TEXTDOMAIN ),
+							$this->names_for_keys( array( $key ) )[0] ?? '',
+							(string) ( $option['label'] ?? '' )
+						) )
+					);
+				}
+			}
 
 			if ( isset( $by_date[ $date ] ) && count( $groups ) > 1 ) {
 				printf(
@@ -1251,6 +1489,7 @@ class Split_Checkout extends Base {
 			var TXT_ERR_START  = <?php echo wp_json_encode( __( 'Could not start split checkout. Please try again.', O_TEXTDOMAIN ) ); ?>;
 			var TXT_ERR_REDUCE = <?php echo wp_json_encode( __( 'Could not remove the items. Please try again.', O_TEXTDOMAIN ) ); ?>;
 			var TXT_ERR_PICK   = <?php echo wp_json_encode( __( 'Choose one of the options first.', O_TEXTDOMAIN ) ); ?>;
+			var TXT_ERR_MOVE   = <?php echo wp_json_encode( __( 'Could not move that item. Please try again.', O_TEXTDOMAIN ) ); ?>;
 
 			function errorBox() { return document.getElementById('oko-split-error'); }
 
@@ -1317,6 +1556,21 @@ class Split_Checkout extends Base {
 
 				// Ahead of the id check below: there is one of these per
 				// delivery, so they are found by class rather than by id.
+				var move = target.closest && target.closest('.oko-split-move');
+				if (move) {
+					e.preventDefault();
+					post(
+						{
+							action: 'oko_move_split_item',
+							key: move.getAttribute('data-oko-move'),
+							target: move.getAttribute('data-oko-target')
+						},
+						move,
+						TXT_ERR_MOVE
+					);
+					return;
+				}
+
 				var keep = target.closest && target.closest('.oko-split-keep');
 				if (keep) {
 					e.preventDefault();
@@ -1837,6 +2091,50 @@ class Split_Checkout extends Base {
 	 * changed the basket in another tab — empty items the customer never agreed
 	 * to give up.
 	 */
+	/**
+	 * Move one line to another delivery. Nothing is ordered here: the customer
+	 * is arranging the two baskets before they start, so the answer is simply
+	 * the page again, with the groups as they now stand.
+	 */
+	public function ajax_move_split_item(): void {
+		$this->ensure_wc_session();
+		check_ajax_referer( $this->nonce_action(), '_wpnonce' );
+
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			wp_send_json_error( array( 'message' => __( 'WooCommerce cart not available', O_TEXTDOMAIN ) ) );
+		}
+		if ( $this->is_split_active() ) {
+			wp_send_json_error( array( 'message' => __( 'A split is already in progress', O_TEXTDOMAIN ) ) );
+		}
+
+		$key    = isset( $_POST['key'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['key'] ) ) : '';
+		$target = isset( $_POST['target'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['target'] ) ) : '';
+		if ( $key === '' || $target === '' ) {
+			wp_send_json_error( array( 'message' => __( 'Nothing to move', O_TEXTDOMAIN ) ) );
+		}
+
+		// Only a move the groups on screen actually offer. Anything else is a
+		// stale page or a hand-written request, and obeying it would build a
+		// delivery that cannot be booked.
+		$offered = $this->movable_targets( $this->compute_delivery_groups() );
+		$allowed = false;
+		foreach ( (array) ( $offered[ $key ] ?? array() ) as $option ) {
+			if ( $option['id'] === $target ) {
+				$allowed = true;
+				break;
+			}
+		}
+		if ( ! $allowed ) {
+			wp_send_json_error( array( 'message' => __( 'That item cannot go in that delivery.', O_TEXTDOMAIN ) ) );
+		}
+
+		$moves         = $this->moves();
+		$moves[ $key ] = $target;
+		$this->set_moves( $moves );
+
+		wp_send_json_success( array( 'moved' => true ) );
+	}
+
 	public function ajax_reduce_split(): void {
 		// Bootstrap session BEFORE nonce check — see ajax_start_split().
 		$this->ensure_wc_session();

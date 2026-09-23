@@ -1207,3 +1207,69 @@ it( 'leaves the keep button off when there is only one delivery', function () {
 		'nothing to choose between'
 	);
 } );
+
+describe( 'Split checkout: moving an item between the two deliveries' );
+
+/** Carrots that cannot wait, oats that can, and a box tied to one December day. */
+function oko_move_shop(): array {
+	$december = oko_test_date( 80 );
+	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
+	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
+	oko_test_set_merchant_days( 14 );
+	oko_test_set_exceptions( array(
+		'only_on_enabled'    => true,
+		'only_on'            => array(
+			array( 'label' => 'Julelevering', 'date' => $december, 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		),
+		// Everything but the ice can also be pre-ordered, right up to Christmas.
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Forudbestilling', 'from' => oko_test_date( 20 ), 'until' => oko_test_date( 90 ), 'enabled' => true, 'extend' => true, 'flip' => true, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		),
+	) );
+	oko_test_set_delivery_days( array( oko_test_date( 3 ), oko_test_date( 5 ), $december ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE ) );
+	oko_test_set_pre_order( false );
+
+	return array( 'december' => $december );
+}
+
+it( 'offers to move only what could travel the other way', function () {
+	oko_move_shop();
+
+	$split   = oko_split();
+	$targets = $split->movable_targets( $split->compute_delivery_groups() );
+
+	assert_true( isset( $targets['a'] ), 'the cornflakes can wait, so they can move' );
+	assert_false( isset( $targets['b'] ), 'the ice has one day and one only' );
+} );
+
+it( 'puts the moved item in the delivery the customer chose', function () {
+	$shop = oko_move_shop();
+
+	$split   = oko_split();
+	$targets = $split->movable_targets( $split->compute_delivery_groups() );
+	$split->ajax_move_split_item_for_test( 'a', $targets['a'][0]['id'] );
+
+	$groups = oko_split()->compute_delivery_groups();
+	assert_same( 1, count( $groups ), 'one delivery now carries the basket' );
+	assert_same( array( 'Cornflakes', 'Nougat ispinde' ), oko_split_names( $groups[0] ), 'both of them' );
+	assert_same( 'pre_order', $groups[0]['mode'], 'as a pre-order' );
+	assert_same( $shop['december'], $groups[0]['suggested_date'], 'on the day the ice is tied to' );
+} );
+
+it( 'forgets a move once the basket can no longer honour it', function () {
+	oko_move_shop();
+
+	$split   = oko_split();
+	$targets = $split->movable_targets( $split->compute_delivery_groups() );
+	$split->ajax_move_split_item_for_test( 'a', $targets['a'][0]['id'] );
+
+	// The ice leaves the basket, and with it the December delivery the
+	// cornflakes were moved into. What is left is an ordinary order.
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES ) );
+
+	$groups = oko_split()->compute_delivery_groups();
+	assert_same( 1, count( $groups ), 'one delivery' );
+	assert_same( 'normal', $groups[0]['mode'], 'and it is an ordinary one again' );
+} );

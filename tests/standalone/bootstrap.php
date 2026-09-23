@@ -420,6 +420,16 @@ class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations
 			->filter_dates_for_cart( $days, array( $product_id ), $pre_order );
 	}
 
+	/**
+	 * Move a line the way the AJAX endpoint does, without the HTTP request:
+	 * the endpoint itself only checks the nonce and answers in JSON.
+	 */
+	public function ajax_move_split_item_for_test( string $key, string $target ): void {
+		$moves         = (array) $GLOBALS['oko_test_wc']->session->get( 'oko_split_moves', array() );
+		$moves[ $key ] = $target;
+		$GLOBALS['oko_test_wc']->session->set( 'oko_split_moves', $moves );
+	}
+
 	/** The banner's own wording for a group, which is otherwise internal. */
 	public function heading_for( array $group, int $number ): string {
 		return $this->group_heading( $group, $number );
