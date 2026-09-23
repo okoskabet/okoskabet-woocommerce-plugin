@@ -455,6 +455,18 @@ class Split_Checkout extends Base {
 		return ( $groups[0]['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER;
 	}
 
+	/**
+	 * The checkout, as a pre-order, as an ordinary order, or with nothing said.
+	 * Not oko_checkout_url_for_mode(): that lives in the plugin's front-end
+	 * functions, which an admin-ajax request need not have loaded.
+	 */
+	private static function checkout_url( ?bool $pre_order ): string {
+		$url = function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/' );
+		$url = remove_query_arg( 'oko_pre_order', $url );
+
+		return $pre_order === null ? $url : add_query_arg( 'oko_pre_order', $pre_order ? '1' : '0', $url );
+	}
+
 	/** A group's name in a move: the kind of delivery and the day it is on. */
 	private static function group_id( array $group ): string {
 		return (string) ( $group['mode'] ?? '' ) . '|' . (string) ( $group['date'] ?? $group['suggested_date'] ?? '' );
@@ -2201,14 +2213,16 @@ class Split_Checkout extends Base {
 			);
 		}
 
-		if ( $settled !== null && $settled !== $this->is_pre_order_mode() && function_exists( '\oko_checkout_url_for_mode' ) ) {
-			wp_send_json_success( array(
-				'moved'    => true,
-				'redirect' => \oko_checkout_url_for_mode( $settled ),
-			) );
-		}
-
-		wp_send_json_success( array( 'moved' => true ) );
+		// Always somewhere, never back to the same address. The page the
+		// customer came from may say oko_pre_order=0 from an earlier choice,
+		// and reloading it would be them saying no to the very arrangement
+		// they just made — which drops it again. So the move names the page:
+		// the kind of order it settled on, or a plain checkout while the
+		// question is still open.
+		wp_send_json_success( array(
+			'moved'    => true,
+			'redirect' => self::checkout_url( $settled ),
+		) );
 	}
 
 	public function ajax_reduce_split(): void {
