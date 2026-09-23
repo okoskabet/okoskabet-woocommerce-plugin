@@ -1273,3 +1273,18 @@ it( 'forgets a move once the basket can no longer honour it', function () {
 	assert_same( 1, count( $groups ), 'one delivery' );
 	assert_same( 'normal', $groups[0]['mode'], 'and it is an ordinary one again' );
 } );
+
+it( 'lets a move settle what kind of order the checkout is', function () {
+	oko_move_shop();
+
+	// Two deliveries: the question is still open.
+	assert_same( null, oko_split()->mode_settled_by_moves(), 'nothing settled yet' );
+
+	$split   = oko_split();
+	$targets = $split->movable_targets( $split->compute_delivery_groups() );
+	$split->ajax_move_split_item_for_test( 'a', $targets['a'][0]['id'] );
+
+	// With the cornflakes sent to December, the basket is one pre-order — and
+	// an ordinary checkout would have no day at all to show for it.
+	assert_true( oko_split()->mode_settled_by_moves(), 'the basket is a pre-order now' );
+} );

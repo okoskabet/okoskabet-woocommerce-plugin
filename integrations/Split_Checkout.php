@@ -403,6 +403,23 @@ class Split_Checkout extends Base {
 		}
 	}
 
+	/**
+	 * Whether the arrangement has settled what kind of order this is: true for
+	 * a pre-order, false for an ordinary one, null while the basket still needs
+	 * more than one delivery and the question is open.
+	 *
+	 * Moving the last ordinary item in with a pre-order answers it — and the
+	 * checkout has to follow, or the customer is left on a page with no date.
+	 */
+	public function mode_settled_by_moves(): ?bool {
+		$groups = $this->compute_delivery_groups();
+		if ( count( $groups ) !== 1 ) {
+			return null;
+		}
+
+		return ( $groups[0]['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER;
+	}
+
 	/** A group's name in a move: the kind of delivery and the day it is on. */
 	private static function group_id( array $group ): string {
 		return (string) ( $group['mode'] ?? '' ) . '|' . (string) ( $group['date'] ?? $group['suggested_date'] ?? '' );
@@ -1539,6 +1556,10 @@ class Split_Checkout extends Base {
 					return r.json();
 				}).then(function (data) {
 					if (data && data.success) {
+						// A move that leaves one delivery also decides whether
+						// this is a pre-order; the answer travels in the URL.
+						var to = data.data && data.data.redirect;
+						if (to) { window.location.href = to; return; }
 						window.location.reload();
 						return;
 					}
@@ -2131,6 +2152,19 @@ class Split_Checkout extends Base {
 		$moves         = $this->moves();
 		$moves[ $key ] = $target;
 		$this->set_moves( $moves );
+
+		// A move can settle the whole question: with everything in one delivery
+		// there is nothing left to split, and the kind of order that delivery
+		// is has to be the kind of order the checkout is. Otherwise the
+		// customer lands back on a page with no date and no banner to explain
+		// it — an ordinary checkout holding a basket they just sent to December.
+		$settled = $this->mode_settled_by_moves();
+		if ( $settled !== null && $settled !== $this->is_pre_order_mode() && function_exists( '\oko_checkout_url_for_mode' ) ) {
+			wp_send_json_success( array(
+				'moved'    => true,
+				'redirect' => \oko_checkout_url_for_mode( $settled ),
+			) );
+		}
 
 		wp_send_json_success( array( 'moved' => true ) );
 	}
