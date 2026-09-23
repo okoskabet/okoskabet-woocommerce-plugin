@@ -448,6 +448,73 @@ class Split_Checkout extends Base {
 	}
 
 	/**
+	 * Whether this basket is a pre-order before anyone has said anything.
+	 *
+	 * Sausages that can travel now and ice tied to 10 December have no ordinary
+	 * day between them — but they do share 10 December as a pre-order. That is
+	 * not a basket that cannot be delivered; it is a basket that has to wait,
+	 * and the checkout should open as the pre-order it is, with the ordinary
+	 * button still there for a customer who would rather split it.
+	 *
+	 * False when an ordinary order works, and false when neither kind has a day
+	 * the whole basket shares — that one belongs to the split banner.
+	 *
+	 * Answered from the products' own days, never from the current mode: this
+	 * is read while the checkout is working out what mode it is in.
+	 */
+	public function basket_wants_pre_order(): bool {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart || WC()->cart->is_empty() ) {
+			return false;
+		}
+		if ( ! \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::is_in_use() ) {
+			return false;
+		}
+
+		$product_ids = array();
+		foreach ( WC()->cart->get_cart() as $item ) {
+			$pid = (int) ( $item['product_id'] ?? 0 );
+			if ( $pid > 0 ) {
+				$product_ids[] = $pid;
+			}
+		}
+		// Nothing to wait for: an ordinary order is the only kind there is.
+		if ( ! \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days( $product_ids ) ) {
+			return false;
+		}
+
+		// The basket travels together today, so there is nothing to decide.
+		if ( ! empty( $this->shared_days( $product_ids, false ) ) ) {
+			return false;
+		}
+
+		return ! empty( $this->shared_days( $product_ids, true ) );
+	}
+
+	/**
+	 * The days every one of these products could go out on, as one kind of
+	 * order. Empty when they share none — or when Økoskabet could not be asked,
+	 * which is not the same thing but leads to the same careful answer.
+	 *
+	 * @param int[] $product_ids
+	 * @return string[]
+	 */
+	private function shared_days( array $product_ids, bool $pre_order ): array {
+		$shared = null;
+		foreach ( array_unique( $product_ids ) as $pid ) {
+			$days = $this->delivery_days_for_product( (int) $pid, $pre_order );
+			if ( $days === null ) {
+				return array();
+			}
+			$shared = $shared === null ? $days : array_values( array_intersect( $shared, $days ) );
+			if ( empty( $shared ) ) {
+				return array();
+			}
+		}
+
+		return (array) $shared;
+	}
+
+	/**
 	 * Whether the arrangement has settled what kind of order this is: true for
 	 * a pre-order, false for an ordinary one, null while the basket still needs
 	 * more than one delivery and the question is open.

@@ -1303,3 +1303,43 @@ it( 'lets a move settle what kind of order the checkout is', function () {
 	// an ordinary checkout would have no day at all to show for it.
 	assert_true( oko_split()->mode_settled_by_moves(), 'the basket is a pre-order now' );
 } );
+
+it( 'calls a basket that only shares a pre-order day what it is', function () {
+	// Sausages that can travel now and can also wait; ice tied to one December
+	// day. No ordinary day carries both — but December carries all of it.
+	$december = oko_test_date( 80 );
+	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Grillpølser', array() );
+	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
+	oko_test_set_merchant_days( 14 );
+	oko_test_set_exceptions( array(
+		'only_on_enabled'    => true,
+		'only_on'            => array(
+			array( 'label' => 'Julelevering', 'date' => $december, 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		),
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Forudbestilling', 'from' => oko_test_date( 20 ), 'until' => oko_test_date( 90 ), 'enabled' => true, 'extend' => true, 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+	oko_test_set_delivery_days( array( oko_test_date( 3 ), oko_test_date( 5 ), $december ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE ) );
+	oko_test_set_pre_order( false );
+
+	assert_true( oko_split()->basket_wants_pre_order(), 'the basket is a pre-order, not an impossibility' );
+} );
+
+it( 'leaves a basket that can be delivered today alone', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_APPLES ) );
+
+	assert_false( oko_split()->basket_wants_pre_order(), 'an ordinary day carries it' );
+} );
+
+it( 'leaves a basket with no day at all to the split banner', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+
+	// Monday and Wednesday, and nothing to pre-order: two deliveries, and the
+	// banner is the one that has something to say about it.
+	assert_false( oko_split()->basket_wants_pre_order(), 'not a pre-order either' );
+} );

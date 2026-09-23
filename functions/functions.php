@@ -1448,7 +1448,19 @@ function oko_pre_order_checkout_requested(): bool
 	} elseif ($settled !== null) {
 		$wanted = $settled;
 	} else {
-		$wanted = false;
+		// Nobody has said anything, and the basket has no ordinary day its
+		// whole contents share — but it does share one as a pre-order. Then
+		// that is what it is, and the ordinary button is still there for the
+		// customer who would rather split it and have part of it now.
+		// Asked once per request, through one instance: working it out means
+		// asking Økoskabet for each product's days, and this function is called
+		// many times while a checkout renders.
+		static $basket_wants = null;
+		if ($basket_wants === null) {
+			$basket_wants = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Split_Checkout')
+				&& ( new \okoskabet_woocommerce_plugin\Integrations\Split_Checkout() )->basket_wants_pre_order();
+		}
+		$wanted = $basket_wants;
 	}
 
 	if ($settled !== null && $settled !== $wanted) {
