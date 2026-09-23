@@ -388,6 +388,7 @@ class Delivery_Exceptions extends Base {
 					// year of dates in front of that merchant's customers.
 					'extend'     => (bool) ( $item['extend'] ?? false ),
 					'flip'       => (bool) ( $item['flip']   ?? false ),
+					'all'        => (bool) ( $item['all']    ?? false ),
 					'categories' => array_map( 'intval', (array) ( $item['categories'] ?? array() ) ),
 					'tags'       => array_map( 'intval', (array) ( $item['tags']       ?? array() ) ),
 				);
@@ -912,6 +913,10 @@ class Delivery_Exceptions extends Base {
 				<label title="<?php esc_attr_e( 'Shows these products every date up to the until date, even past the normal number of days. For pre-orders: the soonest days as usual, and Christmas as well.', O_TEXTDOMAIN ); ?>">
 					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
 					<?php esc_html_e( 'Pre-order: offer these dates on top of the normal ones', O_TEXTDOMAIN ); ?>
+				</label>
+				<label title="<?php esc_attr_e( 'The window covers the whole catalogue. What cannot wait is named once, under the pre-order settings, rather than category by category here.', O_TEXTDOMAIN ); ?>">
+					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][all]" value="1" <?php checked( ! empty( $row['all'] ) ); ?> />
+					<?php esc_html_e( 'Applies to every product', O_TEXTDOMAIN ); ?>
 				</label>
 				<?php $this->render_flip_control( "from_until[$index][flip]", ! empty( $row['flip'] ) ); ?>
 				<button type="button" class="button-link oko-remove-row" style="color:#a00;">
@@ -1583,6 +1588,11 @@ class Delivery_Exceptions extends Base {
 	 * of the chosen categories or tags. That is what lets a shop say "everything
 	 * except frost is Wednesday-only" without listing every other category.
 	 *
+	 * With `all` ticked ("Gælder alle varer") it applies to every product, and
+	 * the selection is beside the point. That is how a shop says "everything
+	 * can be pre-ordered in this window" — the goods that cannot wait are named
+	 * once, in the pre-order section, not category by category in every rule.
+	 *
 	 * A rule that selects NOTHING applies to nothing, flipped or not. Without
 	 * that floor, ticking the flip before choosing any category would silently
 	 * turn the rule on for every product in the shop — a shop-wide restriction
@@ -1595,6 +1605,10 @@ class Delivery_Exceptions extends Base {
 	 * @param array<int,bool>      $tag_ids The product's tag ids, as a lookup map.
 	 */
 	private static function rule_matches_terms( array $rule, array $cat_ids, array $tag_ids ): bool {
+		if ( ! empty( $rule['all'] ) ) {
+			return true;
+		}
+
 		$rule_cats = (array) ( $rule['categories'] ?? array() );
 		$rule_tags = (array) ( $rule['tags'] ?? array() );
 		if ( empty( $rule_cats ) && empty( $rule_tags ) ) {

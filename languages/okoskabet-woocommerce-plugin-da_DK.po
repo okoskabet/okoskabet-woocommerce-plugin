@@ -1473,3 +1473,9 @@ msgstr "Den vare kan ikke komme med i den levering."
 
 msgid "Nothing to move"
 msgstr "Der er ikke noget at flytte"
+
+msgid "Applies to every product"
+msgstr "Gælder alle varer"
+
+msgid "The window covers the whole catalogue. What cannot wait is named once, under the pre-order settings, rather than category by category here."
+msgstr "Vinduet gælder hele sortimentet. Det, der ikke kan vente, nævnes ét sted under forudbestillingsindstillingerne i stedet for kategori for kategori her."

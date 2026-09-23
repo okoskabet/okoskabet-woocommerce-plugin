@@ -229,3 +229,43 @@ it( 'leaves the pre-order alone when the shop has listed nothing', function () {
 
 	assert_same( array( oko_test_date( 30 ) ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), 'unchanged' );
 } );
+
+it( 'opens a from/until window to the whole catalogue when the shop says so', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	$from  = oko_test_date( 20 );
+	$until = oko_test_date( 60 );
+	oko_test_set_exceptions( array(
+		'from_until_enabled'      => true,
+		// Everything can be pre-ordered in the window; the milk is named once
+		// as something the shop will not hold, and that is the only exception.
+		'no_pre_order_categories' => array( OKO_ONLY_CAT_FRESH ),
+		'from_until'              => array(
+			array( 'label' => 'Jul', 'from' => $from, 'until' => $until, 'enabled' => true, 'extend' => true, 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	// A product no rule names by category or tag still gets the window.
+	$pre = oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true );
+	assert_true( count( $pre ) > 1, 'the box can be pre-ordered' );
+	assert_same( $from, $pre[0], 'from the first day of the window' );
+
+	// And it still travels the ordinary way, so the checkout has both buttons.
+	assert_true( count( oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false ) ) > 1, 'and it can also come now' );
+
+	// The listed goods are still out of it.
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), true ), 'the milk waits for nothing' );
+} );
+
+it( 'leaves a window that names nothing inert, as it always was', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Halvfærdig', 'from' => oko_test_date( 20 ), 'until' => oko_test_date( 60 ), 'enabled' => true, 'extend' => true, 'flip' => false, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), 'an unfinished rule opens nothing' );
+} );
