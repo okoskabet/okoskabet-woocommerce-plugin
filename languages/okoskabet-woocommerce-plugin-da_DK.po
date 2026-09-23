@@ -1452,3 +1452,12 @@ msgstr "Knap: behold kun denne levering"
 
 msgid "What the small button beside each delivery says. It keeps that delivery and takes the other items out of the basket. Leave empty for \"Behold kun denne\"."
 msgstr "Hvad den lille knap ved siden af hver levering siger. Den beholder den levering og tager de øvrige varer ud af kurven. Lad feltet stå tomt for \"Behold kun denne\"."
+
+msgid "Cannot be pre-ordered: categories"
+msgstr "Kan ikke forudbestilles: kategorier"
+
+msgid "Cannot be pre-ordered: tags"
+msgstr "Kan ikke forudbestilles: tags"
+
+msgid "Goods you will not hold for a later date — fresh produce and the like. They are never offered a pre-order day, whichever rule opens one. A basket holding them is offered the split instead: the rest as a pre-order, these on an ordinary delivery."
+msgstr "Varer, I ikke vil gemme til en senere dato — frisk frugt og grønt og den slags. De får aldrig en forudbestillingsdag, uanset hvilken regel der åbner en. En kurv med dem i får i stedet tilbudt opdelingen: resten som forudbestilling, disse med en almindelig levering."

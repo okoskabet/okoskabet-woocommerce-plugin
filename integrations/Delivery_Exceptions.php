@@ -243,6 +243,12 @@ class Delivery_Exceptions extends Base {
 
 			// A note shown above the buttons while a pre-order is chosen, e.g.
 			// what cannot be pre-ordered. Off until the shop turns it on.
+			// Goods the shop will not hold: fresh produce and the like. They
+			// have no pre-order day whatever else the rules open, so a basket
+			// holding them cannot be pre-ordered whole — which is exactly what
+			// puts the split in front of the customer.
+			'no_pre_order_categories'  => array(),
+			'no_pre_order_tags'        => array(),
 			'pre_order_notice_enabled' => false,
 			'pre_order_notice'         => '',
 
@@ -296,6 +302,11 @@ class Delivery_Exceptions extends Base {
 		foreach ( array( 'pre_order_label', 'normal_order_label' ) as $k ) {
 			if ( isset( $stored[ $k ] ) ) {
 				$defaults[ $k ] = sanitize_text_field( (string) $stored[ $k ] );
+			}
+		}
+		foreach ( array( 'no_pre_order_categories', 'no_pre_order_tags' ) as $key ) {
+			if ( isset( $stored[ $key ] ) && is_array( $stored[ $key ] ) ) {
+				$defaults[ $key ] = array_values( array_filter( array_map( 'intval', $stored[ $key ] ) ) );
 			}
 		}
 		$defaults['pre_order_notice_enabled'] = ! empty( $stored['pre_order_notice_enabled'] );
@@ -792,6 +803,21 @@ class Delivery_Exceptions extends Base {
 					</label><br />
 					<textarea name="pre_order_notice" rows="2" style="width:100%;max-width:520px;margin-top:6px;" placeholder="<?php esc_attr_e( 'e.g. Fresh vegetables and dairy cannot be pre-ordered.', O_TEXTDOMAIN ); ?>"><?php echo esc_textarea( $config['pre_order_notice'] ); ?></textarea>
 				</div>
+				<div style="margin-bottom:12px;">
+					<p class="oko-help" style="margin-bottom:6px;">
+						<?php esc_html_e( 'Goods you will not hold for a later date — fresh produce and the like. They are never offered a pre-order day, whichever rule opens one. A basket holding them is offered the split instead: the rest as a pre-order, these on an ordinary delivery.', O_TEXTDOMAIN ); ?>
+					</p>
+					<div class="oko-row-fields">
+						<div>
+							<label><?php esc_html_e( 'Cannot be pre-ordered: categories', O_TEXTDOMAIN ); ?></label>
+							<?php $this->render_term_select( 'no_pre_order_categories[]', $categories, (array) ( $config['no_pre_order_categories'] ?? array() ) ); ?>
+						</div>
+						<div>
+							<label><?php esc_html_e( 'Cannot be pre-ordered: tags', O_TEXTDOMAIN ); ?></label>
+							<?php $this->render_term_select( 'no_pre_order_tags[]', $tags, (array) ( $config['no_pre_order_tags'] ?? array() ) ); ?>
+						</div>
+					</div>
+				</div>
 				<?php $this->render_section_limit_control( $config, 'only_on' ); ?>
 				<div id="only_on_rows">
 					<?php foreach ( $rows as $i => $row ) : ?>
@@ -967,6 +993,8 @@ class Delivery_Exceptions extends Base {
 		}
 		$config['pre_order_notice_enabled'] = ! empty( $_POST['pre_order_notice_enabled'] );
 		$config['pre_order_notice']         = isset( $_POST['pre_order_notice'] ) ? sanitize_textarea_field( (string) wp_unslash( $_POST['pre_order_notice'] ) ) : ''; // phpcs:ignore
+		$config['no_pre_order_categories']  = $this->sanitize_id_list( wp_unslash( $_POST['no_pre_order_categories'] ?? array() ) ); // phpcs:ignore
+		$config['no_pre_order_tags']        = $this->sanitize_id_list( wp_unslash( $_POST['no_pre_order_tags'] ?? array() ) ); // phpcs:ignore
 
 		// Display settings.
 		$posted_display_mode = isset( $_POST['display_mode'] ) ? sanitize_text_field( (string) wp_unslash( $_POST['display_mode'] ) ) : ''; // phpcs:ignore
@@ -1160,6 +1188,13 @@ class Delivery_Exceptions extends Base {
 		// A pre-order shows its own days and nothing else; a normal order shows
 		// the normal days and nothing else. Mixing them put two months of
 		// dates in front of a customer who only wanted next week.
+		// Goods the shop will not hold have no pre-order day at all, so neither
+		// does a basket holding them. Saying so here rather than only in the
+		// split banner is what keeps fresh produce out of a December delivery.
+		if ( $pre_order && self::cart_has_goods_that_cannot_wait( $product_ids, $config ) ) {
+			return array();
+		}
+
 		$ranges = self::pre_order_ranges( $applicable_rules, $config );
 		if ( $pre_order ) {
 			$result = array_values( array_filter( $result, function ( string $date ) use ( $ranges ): bool {
@@ -1807,6 +1842,32 @@ class Delivery_Exceptions extends Base {
 		$config = self::get_config();
 
 		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, $config ), $config ) );
+	}
+
+	/**
+	 * Whether any of these products is one the shop will not hold: goods the
+	 * merchant has listed as impossible to pre-order. One of them in a basket
+	 * is enough — the basket has no pre-order day the whole of it can share.
+	 *
+	 * @param int[] $product_ids
+	 */
+	public static function cart_has_goods_that_cannot_wait( array $product_ids, ?array $config = null ): bool {
+		$config = $config ?? self::get_config();
+		$cats   = array_map( 'intval', (array) ( $config['no_pre_order_categories'] ?? array() ) );
+		$tags   = array_map( 'intval', (array) ( $config['no_pre_order_tags'] ?? array() ) );
+		if ( empty( $cats ) && empty( $tags ) ) {
+			return false;
+		}
+
+		$rule = array( 'categories' => $cats, 'tags' => $tags );
+		foreach ( $product_ids as $pid ) {
+			$terms = self::product_terms( (int) $pid );
+			if ( self::rule_matches_terms( $rule, $terms['cats'], $terms['tags'] ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

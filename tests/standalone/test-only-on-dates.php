@@ -196,3 +196,36 @@ it( 'calls a basket pinned to a near date an ordinary one', function () {
 		'the day is inside the normal window, so it is simply the only day'
 	);
 } );
+
+it( 'never offers a pre-order day to goods the shop will not hold', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	$december = oko_test_date( 30 );
+	oko_test_set_exceptions( array(
+		'only_on_enabled'         => true,
+		'no_pre_order_categories' => array( OKO_ONLY_CAT_FRESH ),
+		'only_on'                 => array(
+			array( 'label' => 'Jul', 'date' => $december, 'enabled' => true, 'flip' => false, 'categories' => array( OKO_ONLY_CAT_XMAS ), 'tags' => array() ),
+		),
+	) );
+
+	// The box on its own pre-orders as before.
+	assert_same( array( $december ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), 'the box is held' );
+
+	// With the milk along, there is no day the basket shares as a pre-order —
+	// which is what hands the customer the split instead of quietly sending
+	// fresh milk out in December.
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX, OKO_ONLY_PRODUCT_MILK ), true ), 'not with the milk' );
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), true ), 'and the milk alone has nothing to pre-order' );
+
+	// Ordinary delivery is untouched: this says nothing about today.
+	assert_true( count( oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), false ) ) > 1, 'the milk still travels now' );
+} );
+
+it( 'leaves the pre-order alone when the shop has listed nothing', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	oko_only_rule( oko_test_date( 30 ) );
+
+	assert_same( array( oko_test_date( 30 ) ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), 'unchanged' );
+} );
