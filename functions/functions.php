@@ -1432,13 +1432,27 @@ function oko_pre_order_checkout_requested(): bool
 		return true;
 	}
 
+	// What the customer arranged for themselves, when moving items between the
+	// two deliveries left only one. It is read before anything is decided, so
+	// an explicit choice below can overrule it — and when it does, the
+	// arrangement is dropped rather than left to fight the next page.
+	$settled = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Split_Checkout')
+		? \okoskabet_woocommerce_plugin\Integrations\Split_Checkout::settled_mode()
+		: null;
+
 	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
 	if (isset($_POST['billing_okoskabet_pre_order']) || isset($_POST['post_data'])) {
 		$wanted = oko_is_pre_order_checkout();
 	} elseif (isset($_GET['oko_pre_order'])) {
 		$wanted = (string) wp_unslash($_GET['oko_pre_order']) === '1';
+	} elseif ($settled !== null) {
+		$wanted = $settled;
 	} else {
 		$wanted = false;
+	}
+
+	if ($settled !== null && $settled !== $wanted) {
+		\okoskabet_woocommerce_plugin\Integrations\Split_Checkout::forget_settled_mode();
 	}
 	// phpcs:enable WordPress.Security.NonceVerification
 

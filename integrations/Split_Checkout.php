@@ -60,6 +60,16 @@ class Split_Checkout extends Base {
 	/** Where the customer's moves between deliveries live, until they order. */
 	const MOVES_KEY = 'oko_split_moves';
 
+	/**
+	 * And what those moves decided the order is, when they left one delivery.
+	 *
+	 * Written where the groups are already known, and read by the checkout on
+	 * every later page. It cannot be worked out on the way in: the grouping
+	 * asks what kind of order this is, so asking the grouping would be asking
+	 * the question with the answer.
+	 */
+	const MOVES_MODE_KEY = 'oko_split_moves_mode';
+
 	/** Hidden checkbox field name on checkout form. */
 	const ACK_FIELD = 'oko_split_acknowledged';
 
@@ -400,6 +410,31 @@ class Split_Checkout extends Base {
 	public function clear_moves(): void {
 		if ( function_exists( 'WC' ) && WC()->session ) {
 			WC()->session->__unset( self::MOVES_KEY );
+			WC()->session->__unset( self::MOVES_MODE_KEY );
+		}
+	}
+
+	/**
+	 * What the customer's arrangement decided: true for a pre-order, false for
+	 * an ordinary order, null when they have arranged nothing that settles it.
+	 *
+	 * Reads only the session, so the checkout can ask it while working out what
+	 * kind of order it is.
+	 */
+	public static function settled_mode(): ?bool {
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return null;
+		}
+		$stored = WC()->session->get( self::MOVES_MODE_KEY, null );
+
+		return $stored === null || $stored === '' ? null : ( $stored === self::MODE_PRE_ORDER );
+	}
+
+	/** Forget the arrangement, but keep nothing about it half-remembered. */
+	public static function forget_settled_mode(): void {
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->__unset( self::MOVES_KEY );
+			WC()->session->__unset( self::MOVES_MODE_KEY );
 		}
 	}
 
@@ -2159,6 +2194,13 @@ class Split_Checkout extends Base {
 		// customer lands back on a page with no date and no banner to explain
 		// it — an ordinary checkout holding a basket they just sent to December.
 		$settled = $this->mode_settled_by_moves();
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->set(
+				self::MOVES_MODE_KEY,
+				$settled === null ? '' : ( $settled ? self::MODE_PRE_ORDER : self::MODE_NORMAL )
+			);
+		}
+
 		if ( $settled !== null && $settled !== $this->is_pre_order_mode() && function_exists( '\oko_checkout_url_for_mode' ) ) {
 			wp_send_json_success( array(
 				'moved'    => true,
