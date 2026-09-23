@@ -1007,8 +1007,9 @@ class Merchants extends Base {
 					);
 					// Hidden for a gateway that only charges on completion: see
 					// Payment_Capture::capture_events_are_useful().
-					$capture_useful = \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful(
-						(string) ( $merchant['payment_gateway'] ?? 'auto' )
+					$capture_useful = \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop(
+						(string) ( $merchant['payment_gateway'] ?? 'auto' ),
+						\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::enabled_gateway_ids()
 					);
 					?>
 					<?php if ( ! $capture_useful ) : ?>

@@ -292,3 +292,28 @@ it( 'keeps them for the gateways that charge when the order starts processing', 
 		);
 	}
 } );
+
+it( 'reads "automatic" from the methods the shop has switched on', function () {
+	$useful = function ( array $enabled ) {
+		return \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop( 'auto', $enabled );
+	};
+
+	// Gaardmester: a Nexi checkout and a bank transfer. Nothing here can be
+	// captured on a webhook, so the setting is hidden.
+	assert_false( $useful( array( 'dibs_easy', 'bacs' ) ), 'Nexi and bank transfer' );
+
+	// A shop with Quickpay alongside it can, so it is shown.
+	assert_true( $useful( array( 'dibs_easy', 'quickpay_gateway' ) ), 'Quickpay is capturable' );
+
+	// Offline only: no card was ever authorised, so there is nothing to take.
+	assert_false( $useful( array( 'bacs', 'cod' ) ), 'nothing to capture at all' );
+
+	// Something we have never heard of gets the benefit of the doubt.
+	assert_true( $useful( array( 'some_new_gateway' ) ), 'unknown gateways keep the setting' );
+
+	// An explicit choice still wins over what is switched on.
+	assert_false(
+		\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop( 'nets_easy', array( 'quickpay_gateway' ) ),
+		'the shop said Nets Easy'
+	);
+} );

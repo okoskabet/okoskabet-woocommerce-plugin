@@ -257,7 +257,10 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		// COMPLETED, so for them this list would promise something that never
 		// happens — the completion events below are what fetches the money.
 		$oko_gateway = (string) (o_get_settings()['_payment_gateway'] ?? 'auto');
-		if (\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful($oko_gateway)) {
+		if (\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop(
+			$oko_gateway,
+			\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::enabled_gateway_ids()
+		)) {
 			$cmb->add_field(
 				array(
 					'name'    => __('Capture events', O_TEXTDOMAIN),
