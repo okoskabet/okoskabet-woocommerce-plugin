@@ -1056,7 +1056,9 @@ class Delivery_Exceptions extends Base {
 			$label = sanitize_text_field( (string) ( $row['label'] ?? '' ) );
 			$from  = sanitize_text_field( (string) ( $row['from']  ?? '' ) );
 			$until = sanitize_text_field( (string) ( $row['until'] ?? '' ) );
-			if ( $label === '' && $from === '' && $until === '' && empty( $row['categories'] ) && empty( $row['tags'] ) ) {
+			// A row for the whole catalogue selects nothing by design, so the
+			// tick counts as content and must not be swept away as an empty row.
+			if ( $label === '' && $from === '' && $until === '' && empty( $row['categories'] ) && empty( $row['tags'] ) && empty( $row['all'] ) ) {
 				continue;
 			}
 			$config['from_until'][] = array(
@@ -1066,6 +1068,7 @@ class Delivery_Exceptions extends Base {
 				'enabled'    => ! empty( $row['enabled'] ),
 				'extend'     => ! empty( $row['extend'] ),
 				'flip'       => ! empty( $row['flip'] ),
+				'all'        => ! empty( $row['all'] ),
 				'categories' => $this->sanitize_id_list( $row['categories'] ?? array() ),
 				'tags'       => $this->sanitize_id_list( $row['tags'] ?? array() ),
 			);
