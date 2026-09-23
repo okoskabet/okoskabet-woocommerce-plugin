@@ -1560,6 +1560,7 @@ class Split_Checkout extends Base {
 			var TXT_ERR_REDUCE = <?php echo wp_json_encode( __( 'Could not remove the items. Please try again.', O_TEXTDOMAIN ) ); ?>;
 			var TXT_ERR_PICK   = <?php echo wp_json_encode( __( 'Choose one of the options first.', O_TEXTDOMAIN ) ); ?>;
 			var TXT_ERR_MOVE   = <?php echo wp_json_encode( __( 'Could not move that item. Please try again.', O_TEXTDOMAIN ) ); ?>;
+			var PRE_ORDER      = <?php echo wp_json_encode( $this->is_pre_order_mode() ? '1' : '0' ); ?>;
 
 			function errorBox() { return document.getElementById('oko-split-error'); }
 
@@ -1592,6 +1593,10 @@ class Split_Checkout extends Base {
 
 				var fd = new FormData();
 				fd.append('_wpnonce', NONCE);
+				// Which checkout the customer is looking at. Without it the
+				// request is answered as an ordinary order, and the option they
+				// pressed — worked out for a pre-order — matches nothing.
+				fd.append('oko_pre_order', PRE_ORDER);
 				Object.keys(fields).forEach(function (name) {
 					fd.append(name, fields[name]);
 				});
