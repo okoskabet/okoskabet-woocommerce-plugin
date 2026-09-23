@@ -633,19 +633,25 @@ it( 'offers to remove exactly the items that cannot be pre-ordered', function ()
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
 	oko_test_set_pre_order( true );
 
-	$options = oko_split()->compute_removal_options();
-	assert_same( 1, count( $options ), 'one way to keep the pre-order' );
+	// Both ways out are worked out — the buttons beside each delivery offer
+	// either — and this is the one that keeps the pre-order.
+	$options = array();
+	foreach ( oko_split()->compute_removal_options() as $option ) {
+		$options[ $option['mode'] ] = $option;
+	}
+	assert_true( isset( $options['pre_order'] ), 'a way to keep the pre-order' );
+	$option = $options['pre_order'];
 
-	$names = $options[0]['remove_names'];
+	$names = $option['remove_names'];
 	sort( $names );
 	assert_same( array( 'Cornflakes', 'Pak Choi' ), $names, 'the two that cannot be held' );
-	assert_same( array( 'Nougat ispinde' ), $options[0]['keep_names'] );
-	assert_same( $shop['pre_order_day'], $options[0]['date'] );
+	assert_same( array( 'Nougat ispinde' ), $option['keep_names'] );
+	assert_same( $shop['pre_order_day'], $option['date'] );
 
 	// And it says pre-order, not delivery — the customer is choosing to keep a
 	// pre-order, not to be delivered on 10 December.
-	assert_contains( 'pre-ordered together for', $options[0]['text'] );
-	assert_contains( $options[0]['date_label'], $options[0]['text'] );
+	assert_contains( 'pre-ordered together for', $option['text'] );
+	assert_contains( $option['date_label'], $option['text'] );
 } );
 
 it( 'does not offer to quietly drop the customer out of the pre-order', function () {
@@ -655,10 +661,19 @@ it( 'does not offer to quietly drop the customer out of the pre-order', function
 
 	// "Remove the ice and the rest can be delivered on Wednesday" would be true
 	// and would take the customer back out of the pre-order they asked for. The
-	// way back is the ordinary-order button, not a line in this list.
+	// list they read is kept to the kind of order they asked for; the way out
+	// is the button, or the ordinary delivery's own "keep only this".
+	$GLOBALS['oko_test_settings']['_split_checkout_enabled'] = 'on';
+	$banner = oko_split_render_banner();
+
 	foreach ( oko_split()->compute_removal_options() as $option ) {
-		assert_same( 'pre_order', $option['mode'] );
-		assert_false( in_array( 'Nougat ispinde', $option['remove_names'], true ), 'the pre-orderable item is never the one to give up' );
+		$offered_in_list = strpos( $banner, 'value="' . $option['date'] . '"' ) !== false;
+		if ( $option['mode'] === 'normal' ) {
+			assert_false( $offered_in_list, 'the ordinary way out is not a line in the list' );
+			continue;
+		}
+		assert_true( $offered_in_list, 'the pre-order way out is' );
+		assert_false( in_array( 'Nougat ispinde', $option['remove_names'], true ), 'and it never gives up the pre-orderable item' );
 	}
 } );
 

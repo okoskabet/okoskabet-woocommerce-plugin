@@ -249,6 +249,15 @@ class Split_Checkout extends Base {
 			}
 		}
 
+		// An action fired from the banner says which checkout it came from. Its
+		// nonce is checked before anything is read, and without it the request
+		// would be answered as an ordinary order — which is not the basket the
+		// customer was looking at, so their choice would match nothing.
+		// phpcs:ignore WordPress.Security.NonceVerification -- checked by the handler before this is read.
+		if ( isset( $_POST['oko_pre_order'] ) ) {
+			return (string) wp_unslash( $_POST['oko_pre_order'] ) === '1'; // phpcs:ignore
+		}
+
 		return function_exists( 'oko_pre_order_checkout_requested' ) && \oko_pre_order_checkout_requested();
 	}
 
@@ -877,24 +886,21 @@ class Split_Checkout extends Base {
 		}
 
 		// One candidate per delivery the basket would otherwise need, each with
-		// the kind of order it is.
+		// the kind of order it is — both kinds, always. A basket split into a
+		// melon now and a roast in December must be able to give up either
+		// side, or whoever came for the roast is cornered, and whoever came for
+		// the melon cannot have it on its own.
 		//
-		// In an ordinary checkout both kinds belong here. A basket split into
-		// carrots now and ice in December must be able to give up either side,
-		// or the customer who came for the ice is cornered: the only way on
-		// would be to abandon the thing they came for. Giving up the carrots
-		// leaves a basket that can only be pre-ordered, and the checkout says
-		// so by itself.
-		//
-		// Inside a pre-order it is the other way round. The customer asked for
-		// one, and "remove the ice and the rest can be delivered on Wednesday"
-		// would quietly take it away from them. The way back is the button.
-		$in_pre_order = $this->is_pre_order_mode();
-		$candidates   = array();
+		// Which of them the customer is SHOWN still depends on where they are:
+		// the list under "take items out" keeps to the kind of order they asked
+		// for, so it never quietly takes a pre-order away from them, while the
+		// button beside each delivery may offer either — there it is the
+		// delivery itself they are pointing at.
+		$candidates = array();
 		foreach ( $this->compute_delivery_groups() as $group ) {
 			$date = (string) ( $group['suggested_date'] ?? '' );
 			$mode = (string) ( $group['mode'] ?? self::MODE_NORMAL );
-			if ( $date === '' || ( $in_pre_order && $mode !== self::MODE_PRE_ORDER ) ) {
+			if ( $date === '' ) {
 				continue;
 			}
 			$candidates[ $date ] = $mode;
@@ -1713,7 +1719,16 @@ class Split_Checkout extends Base {
 			. esc_html__( 'Choose what you would rather do without this time. We take those items out of the basket, and everything else is delivered on the same day.', O_TEXTDOMAIN )
 			. '</p>';
 
+		$wanted_mode = $this->is_pre_order_mode() ? self::MODE_PRE_ORDER : self::MODE_NORMAL;
+
 		foreach ( $options as $option ) {
+			// "Remove the roast and the rest can be delivered on Wednesday" is
+			// true, and inside a pre-order it would take away the very thing
+			// the customer pressed the button for. The way out of a pre-order
+			// is the button, or the delivery's own "keep only this".
+			if ( ( $option['mode'] ?? self::MODE_NORMAL ) !== $wanted_mode ) {
+				continue;
+			}
 			echo '<label class="oko-split-remove-option">';
 			printf(
 				'<input type="radio" name="oko_split_remove_option" value="%s" />',
@@ -2283,7 +2298,15 @@ class Split_Checkout extends Base {
 			'notice'
 		);
 
-		wp_send_json_success( array( 'redirect' => wc_get_checkout_url() ) );
+		// What is left is the delivery the customer chose to keep, so the
+		// checkout has to be the kind of order that delivery was. Keeping the
+		// December one and landing in an ordinary checkout would show them a
+		// basket with no day again.
+		$this->clear_moves();
+
+		wp_send_json_success( array(
+			'redirect' => self::checkout_url( ( $chosen['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER ),
+		) );
 	}
 
 	public function ajax_resume_split(): void {
