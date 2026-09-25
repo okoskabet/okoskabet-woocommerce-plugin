@@ -1501,8 +1501,14 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
  * Økoskabet files those under a catch-all, which is where things nobody
  * categorised are supposed to show up.
  *
+ * The variation travels in `variant_title`, beside the product's own name,
+ * rather than written into it. WooCommerce names a variation line after both
+ * ("Hakkebøffer, 8 stk. - 3 pakker"), and a packing room that cannot tell the
+ * two apart cannot leave the variation off a label when the shop asks it to.
+ * Shopify has always sent them apart; now so do we.
+ *
  * @param \WC_Order $order
- * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,sku:string,quantity:int}>
+ * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,variant_title:string|null,sku:string,quantity:int}>
  */
 function oko_order_line_items(\WC_Order $order): array
 {
@@ -1517,9 +1523,11 @@ function oko_order_line_items(\WC_Order $order): array
 			continue;
 		}
 
-		$product_id = 0;
-		$variant_id = 0;
-		$sku        = '';
+		$product_id    = 0;
+		$variant_id    = 0;
+		$sku           = '';
+		$name          = (string) $item->get_name();
+		$variant_title = null;
 
 		if ($item instanceof \WC_Order_Item_Product) {
 			$product_id = (int) $item->get_product_id();
@@ -1531,14 +1539,33 @@ function oko_order_line_items(\WC_Order $order): array
 			if ($product instanceof \WC_Product) {
 				$sku = (string) $product->get_sku();
 			}
+
+			// A variation line: the goods are the parent product, and what the
+			// customer chose is the variation. Both are read off the product
+			// rather than off the line's name, which is the two run together.
+			// A deleted variation leaves the name as it was written — better a
+			// name with the variation in it than a line with no name at all.
+			if ($variant_id > 0 && $product instanceof \WC_Product_Variation) {
+				$parent = wc_get_product($product->get_parent_id());
+				if ($parent instanceof \WC_Product) {
+					$name = (string) $parent->get_name();
+				}
+
+				$formatted = wc_get_formatted_variation($product, true, false);
+				$formatted = trim(wp_strip_all_tags((string) $formatted));
+				if ($formatted !== '') {
+					$variant_title = $formatted;
+				}
+			}
 		}
 
 		$lines[] = array(
-			'product_id' => $product_id > 0 ? $product_id : null,
-			'variant_id' => $variant_id > 0 ? $variant_id : null,
-			'name'       => (string) $item->get_name(),
-			'sku'        => $sku,
-			'quantity'   => $quantity,
+			'product_id'    => $product_id > 0 ? $product_id : null,
+			'variant_id'    => $variant_id > 0 ? $variant_id : null,
+			'name'          => $name,
+			'variant_title' => $variant_title,
+			'sku'           => $sku,
+			'quantity'      => $quantity,
 		);
 	}
 
