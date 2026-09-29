@@ -2320,3 +2320,63 @@ function oko_packing_slip_delivery_row($document_type, $order): void
 		esc_html($where === '' ? $shown : $shown . ' — ' . $where)
 	);
 }
+
+add_filter('woocommerce_get_order_item_totals', 'oko_add_delivery_date_to_order_totals', 10, 2);
+
+/**
+ * The delivery date in the customer's own order summary.
+ *
+ * The order email, the thank-you page and the order view under My account all
+ * build the block under the items from the same list, so one row reaches all
+ * three. It goes straight after the shipping line, where the customer is
+ * already reading how the goods get to them.
+ *
+ * Until this version the date reached the customer only because we wrote it
+ * into the note field, where it sat under a heading that said "Bemærkning".
+ * This is the same fact, in the place it belongs.
+ *
+ * @param array<string,array{label:string,value:string}> $total_rows
+ * @param mixed                                          $order
+ * @return array<string,array{label:string,value:string}>
+ */
+function oko_add_delivery_date_to_order_totals($total_rows, $order): array
+{
+	$total_rows = (array) $total_rows;
+
+	if (! $order instanceof \WC_Order) {
+		return $total_rows;
+	}
+
+	$date = (string) $order->get_meta('_billing_okoskabet_delivery_date', true);
+	if ($date === '' || isset($total_rows['okoskabet_delivery_date'])) {
+		return $total_rows;
+	}
+
+	$timestamp = strtotime($date);
+	$row       = array(
+		'label' => esc_html__('Delivery date', O_TEXTDOMAIN) . ':',
+		'value' => esc_html($timestamp === false ? $date : date_i18n(get_option('date_format'), $timestamp)),
+	);
+
+	// After the shipping row, which is where the customer is reading about the
+	// delivery. A shop can hide that row — free shipping, or a layout of its
+	// own — so when it is not there the date goes in front of the total rather
+	// than falling off the end below it.
+	$after = isset($total_rows['shipping']) ? 'shipping' : null;
+	if ($after === null) {
+		$after = isset($total_rows['order_total']) ? null : array_key_last($total_rows);
+	}
+
+	$rebuilt = array();
+	foreach ($total_rows as $key => $value) {
+		if ($key === 'order_total' && $after === null) {
+			$rebuilt['okoskabet_delivery_date'] = $row;
+		}
+		$rebuilt[$key] = $value;
+		if ($key === $after) {
+			$rebuilt['okoskabet_delivery_date'] = $row;
+		}
+	}
+
+	return isset($rebuilt['okoskabet_delivery_date']) ? $rebuilt : $rebuilt + array('okoskabet_delivery_date' => $row);
+}
