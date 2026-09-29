@@ -72,6 +72,25 @@ class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertNull( $lines[0]['variant_title'], 'nothing was chosen, so nothing is sent' );
 	}
 
+	public function test_a_fee_is_not_something_the_packing_room_can_pack() {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Lakridsruller' );
+		$product->save();
+
+		$order = $this->order_with( array( $product ) );
+		$fee   = new \WC_Order_Item_Fee();
+		$fee->set_name( 'Emballage' );
+		$fee->set_amount( '10' );
+		$fee->set_total( '10' );
+		$order->add_item( $fee );
+		$order->save();
+
+		$lines = oko_order_line_items( wc_get_order( $order->get_id() ) );
+
+		$this->assertCount( 1, $lines, 'the packaging fee is not a line to count' );
+		$this->assertSame( 'Lakridsruller', $lines[0]['name'] );
+	}
+
 	public function test_a_line_whose_variation_is_gone_keeps_the_name_it_was_sold_under() {
 		list( , $variation ) = $this->variable_product( 'Frugtkasse', 'Størrelse', 'Stor', 'FK-S' );
 		$order = $this->order_with( array( $variation ) );

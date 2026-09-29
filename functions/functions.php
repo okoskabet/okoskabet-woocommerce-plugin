@@ -1497,9 +1497,11 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
  * two variations of one product are the same goods to a warehouse. The
  * variation is kept beside it for the SKU it explains.
  *
- * Fees and deposits have no product behind them and are included anyway —
- * Økoskabet files those under a catch-all, which is where things nobody
- * categorised are supposed to show up.
+ * Fees and deposits are left out. They are not goods: nobody put them in the
+ * basket, and nobody packs them. But a packing room counts lines — the label
+ * has a limit on how many it will print, and the dispatch note lists them — so
+ * an order of one product and a packaging fee reads as two things to pack.
+ * Only `line_item` is asked for, which is what makes the count match the box.
  *
  * The variation travels in `variant_title`, beside the product's own name,
  * rather than written into it. WooCommerce names a variation line after both
@@ -1514,7 +1516,7 @@ function oko_order_line_items(\WC_Order $order): array
 {
 	$lines = array();
 
-	foreach ($order->get_items(array('line_item', 'fee')) as $item) {
+	foreach ($order->get_items('line_item') as $item) {
 		$quantity = (int) $item->get_quantity();
 
 		// A line for nothing is not something a shop sends, and a refund line
