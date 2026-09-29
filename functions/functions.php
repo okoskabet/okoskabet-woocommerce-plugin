@@ -1828,16 +1828,29 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			throw new \Exception($error_text);
 		}
 
-		$customer_note = $order->get_customer_note() ?: '';
-		$oko_order_note = OKO_ORDER_NOTE_PREFIX . ($order_delivery_date !== '' ? $order_delivery_date : __('without delivery date', O_TEXTDOMAIN));
+		// Where this one is going, kept as the order's own fact. It used to be
+		// written in front of the customer's note, which put a line meant for
+		// the packing table on the customer's order confirmation and buried
+		// what the customer had written underneath it. The note field belongs
+		// to the customer; this belongs to the order.
 		if ($is_store_pickup) {
-			$oko_order_note .= ' ' . __('Store pickup', O_TEXTDOMAIN);
+			$oko_delivery_summary = __('Store pickup', O_TEXTDOMAIN);
 		} elseif (empty($order_shed)) {
-			$oko_order_note .= ' Hjemmelevering';
+			$oko_delivery_summary = __('Home delivery', O_TEXTDOMAIN);
 		} else {
-			$oko_order_note .= ' ' . $order_shed;
+			$oko_delivery_summary = (string) $order_shed;
 		}
-		$order->set_customer_note($oko_order_note . "\n" . $customer_note, 0);
+		$order->update_meta_data(OKO_DELIVERY_SUMMARY_META, $oko_delivery_summary);
+
+		// And the same thing once more where the shop's staff read an order's
+		// history. A private note: visible in the admin, never in an email and
+		// never on a packing slip.
+		$order->add_order_note(sprintf(
+			/* translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup". */
+			__('Sent to Økoskabet — %1$s, %2$s', O_TEXTDOMAIN),
+			$order_delivery_date !== '' ? $order_delivery_date : __('without delivery date', O_TEXTDOMAIN),
+			$oko_delivery_summary
+		));
 
 		$order->update_meta_data('billing_okoskabet_done', true);
 
@@ -1864,25 +1877,58 @@ const OKO_SHIPMENT_LOCKED_META = '_okoskabet_shipment_locked';
 /** The `error_code` Økoskabet uses for a shipment that can no longer change. */
 const OKO_ERROR_CODE_LOCKED = 'shipment_locked';
 
-/** First word of the line we put in front of the customer's note once the order is sent. */
+/** First word of the line older versions put in front of the customer's note. */
 const OKO_ORDER_NOTE_PREFIX = 'ØKOSKABET ';
+
+/** Where an order is going, as one line: a shed's name, home delivery or store pickup. */
+const OKO_DELIVERY_SUMMARY_META = '_okoskabet_delivery_summary';
 
 /**
  * The order note as the customer wrote it.
  *
- * Once Økoskabet has the order we put a line of our own in front of the note
- * ("ØKOSKABET 2026-12-24 Hjemmelevering"), for the shop's staff. That line is
- * not the customer's, and it goes stale the moment the date is moved — so it
- * is left out of anything we send.
+ * Until this version, sending an order put a line of our own in front of the
+ * note ("ØKOSKABET 2026-12-24 Hjemmelevering"). Orders placed back then still
+ * carry it, and it is not the customer's text: it is read off here so an old
+ * order reads like a new one, on the packing slip and everywhere else.
  */
 function oko_customer_note_as_written(\WC_Order $order): string
 {
-	$note = (string) $order->get_customer_note();
+	return oko_note_without_our_old_line((string) $order->get_customer_note());
+}
+
+/**
+ * The same, for a note already read off an order.
+ *
+ * Takes the string rather than the order, because the filter below is handed
+ * the value on its way out — asking the order for it again there would come
+ * straight back through this filter.
+ */
+function oko_note_without_our_old_line(string $note): string
+{
 	if (strpos($note, OKO_ORDER_NOTE_PREFIX) !== 0) {
 		return $note;
 	}
 	$newline = strpos($note, "\n");
 	return $newline === false ? '' : substr($note, $newline + 1);
+}
+
+add_filter('woocommerce_order_get_customer_note', 'oko_hide_our_old_line_from_the_note', 10, 1);
+
+/**
+ * Old orders read like new ones.
+ *
+ * The shop prints packing slips from orders placed before the line moved out
+ * of the note, and on those the customer's own words sit under ours. Reading
+ * the note through here means the packing slip, the admin screen and the
+ * emails all show what the customer wrote — without touching what is stored,
+ * so nothing is lost if the shop ever wants the old line back.
+ *
+ * @param string $note
+ * @return string
+ */
+function oko_hide_our_old_line_from_the_note($note): string
+{
+	return oko_note_without_our_old_line((string) $note);
 }
 
 /**
@@ -2230,4 +2276,47 @@ function okoskabet_woocommerce_plugin_stamp_merchant_on_order($order, $data): vo
 			sanitize_key($mid)
 		);
 	}
+}
+
+add_action('wpo_wcpdf_after_order_data', 'oko_packing_slip_delivery_row', 10, 2);
+
+/**
+ * The delivery date on the packing slip, beside the order's own data.
+ *
+ * The packing table works from this sheet, and until now the only place the
+ * date appeared on it was the line we wrote into the customer's note — which
+ * is exactly the line that buried what the customer had written. So it goes
+ * where it belongs: in the block that already carries the order number, the
+ * order date and the shipping method.
+ *
+ * Hooked to the PDF Invoices & Packing Slips plugin. A shop without it never
+ * fires the action and never notices this exists.
+ *
+ * @param string $document_type Which document is being printed.
+ * @param mixed  $order         The order it is printed from.
+ * @return void
+ */
+function oko_packing_slip_delivery_row($document_type, $order): void
+{
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	$date = (string) $order->get_meta('_billing_okoskabet_delivery_date', true);
+	if ($date === '') {
+		return;
+	}
+
+	$timestamp = strtotime($date);
+	$shown     = $timestamp === false ? $date : date_i18n(get_option('date_format'), $timestamp);
+
+	// The summary is missing on orders sent before it was stored. The date is
+	// the part that was asked for, so the row is printed either way.
+	$where = (string) $order->get_meta(OKO_DELIVERY_SUMMARY_META, true);
+
+	printf(
+		'<tr class="okoskabet-delivery-date"><th>%s</th><td>%s</td></tr>',
+		esc_html__('Delivery date', O_TEXTDOMAIN),
+		esc_html($where === '' ? $shown : $shown . ' — ' . $where)
+	);
 }
