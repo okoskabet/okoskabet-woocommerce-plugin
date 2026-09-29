@@ -1253,3 +1253,25 @@ msgstr "Se indstillingerne"
 #. translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup".
 msgid "Sent to Økoskabet — %1$s, %2$s"
 msgstr "Sendt til Økoskabet — %1$s, %2$s"
+
+msgid "Label printed"
+msgstr "Etiket printet"
+
+#. The fallback list, used only until Økoskabet publishes the steps itself.
+msgid "Registered"
+msgstr "Registreret"
+
+msgid "Ready for dispatch"
+msgstr "Klar til afsendelse"
+
+msgid "Received"
+msgstr "Modtaget"
+
+msgid "In shed"
+msgstr "I skabet"
+
+msgid "Fulfilled"
+msgstr "Udleveret"
+
+msgid "Removed"
+msgstr "Fjernet"

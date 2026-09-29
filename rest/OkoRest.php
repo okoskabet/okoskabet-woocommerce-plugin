@@ -933,28 +933,26 @@ class OkoRest extends Base
 		$raw_event          = isset($params['event']) ? sanitize_text_field($params['event']) : '';
 		$shipment_reference = isset($params['shipment_reference']) ? sanitize_text_field($params['shipment_reference']) : '';
 
+		// A status is its own event, under the name Økoskabet reports it by.
+		// It used to be three names translated by hand here, which meant a step
+		// nobody had written a branch for could never reach a shop — and one of
+		// the three, `delivered`, is a status Økoskabet has never sent, so the
+		// choice built on it could not fire at all.
 		$internal_event = null;
 		if ($raw_event === 'reservation_updated') {
 			$parcels_previous = isset($params['changes']['parcels']['previous']) ? $params['changes']['parcels']['previous'] : null;
 			$parcels_value    = isset($params['changes']['parcels']['value']) ? $params['changes']['parcels']['value'] : null;
 			if (is_array($parcels_previous) && is_array($parcels_value)
 				&& count($parcels_previous) === 0 && count($parcels_value) > 0) {
+				// Not a status: the moment the boxes come into being.
 				$internal_event = 'label_printed';
 			} elseif (!empty($params['changes']['status']['value'])) {
-				$new_status = sanitize_text_field($params['changes']['status']['value']);
-				if ($new_status === 'fulfilled') {
-					$internal_event = 'in_shed';
-				} elseif ($new_status === 'delivered') {
-					$internal_event = 'order_delivered';
-				}
+				$internal_event = sanitize_text_field($params['changes']['status']['value']);
 			}
 		}
 
-		// Backwards-compat: still remap legacy label_created at runtime.
-		$webhook_events_raw = (array) ($merchant['webhook_events'] ?? array());
-		$capture_events_raw = (array) ($merchant['capture_events'] ?? array());
-		$webhook_events = array_map(function ($e) { return $e === 'label_created' ? 'in_shed' : $e; }, $webhook_events_raw);
-		$capture_events = array_map(function ($e) { return $e === 'label_created' ? 'in_shed' : $e; }, $capture_events_raw);
+		$webhook_events = oko_status_events_as_chosen((array) ($merchant['webhook_events'] ?? array()));
+		$capture_events = oko_status_events_as_chosen((array) ($merchant['capture_events'] ?? array()));
 
 		if ($internal_event === null) {
 			if (defined('WP_DEBUG') && WP_DEBUG) {

@@ -167,7 +167,9 @@ class Merchants extends Base {
 			'maximum_days_in_future'          => 3,
 			'payment_gateway'                 => 'auto',
 			'capture_events'                  => array( 'label_printed' ),
-			'webhook_events'                  => array( 'order_delivered' ),
+			// The step where the customer has the goods. It was `order_delivered`,
+			// a name Økoskabet never reports, so the default did nothing at all.
+			'webhook_events'                  => array( 'fulfilled' ),
 			'product_categories'              => array(),
 			'product_tags'                    => array(),
 			'shipping_zones'                  => array(),
@@ -216,6 +218,7 @@ class Merchants extends Base {
 		$ids = array_keys( (array) ( $normalised['merchants'] ?? array() ) );
 		$ids[] = 'default';
 		foreach ( array_unique( $ids ) as $id ) {
+			delete_transient( \o_configuration_transient_key( (string) $id ) );
 			delete_transient( \o_shipping_methods_transient_key( (string) $id ) );
 		}
 	}
@@ -307,20 +310,26 @@ class Merchants extends Base {
 		return $base;
 	}
 
+	/**
+	 * The events a shop has ticked.
+	 *
+	 * Not checked against a list written here. The choices are the steps
+	 * Økoskabet publishes for this account, plus `label_printed`, and a list
+	 * kept here would quietly drop a step Økoskabet added after this release —
+	 * the shop would tick it, save, and find it gone with nothing to explain
+	 * why. So anything shaped like an event name is kept, and the old names
+	 * are rewritten to what they always meant.
+	 */
 	private static function sanitize_event_list( array $list ): array {
-		$allowed = array( 'label_printed', 'in_shed', 'order_delivered' );
-		$out     = array();
+		$out = array();
 		foreach ( $list as $event ) {
-			$event = sanitize_text_field( (string) $event );
-			if ( $event === 'label_created' ) {
-				// Legacy event name still around in some stored payloads.
-				$event = 'in_shed';
-			}
-			if ( in_array( $event, $allowed, true ) ) {
+			$event = sanitize_key( (string) $event );
+			if ( $event !== '' ) {
 				$out[] = $event;
 			}
 		}
-		return array_values( array_unique( $out ) );
+
+		return \oko_status_events_as_chosen( array_values( array_unique( $out ) ) );
 	}
 
 	private static function sanitize_id_list( array $list ): array {
@@ -1003,11 +1012,15 @@ class Merchants extends Base {
 						<th scope="row"><?php esc_html_e( 'Capture events', O_TEXTDOMAIN ); ?></th>
 						<td>
 							<?php
-							$capture_options = array(
-								'label_printed'   => __( 'Label Printed', O_TEXTDOMAIN ),
-								'in_shed'         => __( 'In Shed', O_TEXTDOMAIN ),
-								'order_delivered' => __( 'Order Delivered', O_TEXTDOMAIN ),
-							);
+							// Read off the merchant's own account rather than written
+							// out here: a step Økoskabet adds later has to reach
+							// these choices without a plugin release, and a step the
+							// shop is never told about is one it can never pick.
+							// Printing the label is not a step a shipment passes —
+							// it is the moment the boxes come into being — so it is
+							// the one entry that stays ours.
+							$capture_options = array( 'label_printed' => __( 'Label printed', O_TEXTDOMAIN ) )
+								+ \oko_merchant_statuses( (string) ( $merchant['id'] ?? '' ) );
 							foreach ( $capture_options as $key => $label ) :
 								?>
 								<label style="display:block;"><input type="checkbox" name="merchant[capture_events][]" value="<?php echo esc_attr( $key ); ?>" <?php checked( in_array( $key, $merchant['capture_events'], true ) ); ?> /> <?php echo esc_html( $label ); ?></label>
