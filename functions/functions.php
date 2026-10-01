@@ -2599,7 +2599,7 @@ function oko_product_property(string $key, string $label, array $values): ?array
 		if (is_array($value) || is_object($value)) {
 			continue;
 		}
-		$value = trim(wp_strip_all_tags((string) $value));
+		$value = oko_plain_text((string) $value);
 		if ($value !== '') {
 			$clean[] = $value;
 		}
@@ -2609,9 +2609,27 @@ function oko_product_property(string $key, string $label, array $values): ?array
 		return null;
 	}
 
+	$label = oko_plain_text($label);
+
 	return array(
 		'key'    => $key,
 		'label'  => $label !== '' ? $label : $key,
 		'values' => array_values(array_unique($clean)),
 	);
+}
+
+/**
+ * Text as a person wrote it, ready to be printed by somebody else.
+ *
+ * WordPress keeps an ampersand in a term name as `&amp;`, and stripping tags
+ * leaves it that way. Sent on untouched, a packing slip prints "Hansen &amp;
+ * Søn" in full. Økoskabet escapes again when it shows the text, so what it
+ * needs from us is the plain characters.
+ *
+ * @param string $text
+ * @return string
+ */
+function oko_plain_text(string $text): string
+{
+	return trim(html_entity_decode(wp_strip_all_tags($text), ENT_QUOTES, 'UTF-8'));
 }

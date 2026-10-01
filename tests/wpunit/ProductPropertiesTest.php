@@ -111,6 +111,26 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 		);
 	}
 
+	/**
+	 * WordPress keeps an ampersand in a term name as `&amp;`. Sent on as it is
+	 * stored, the packing slip would print the entity itself.
+	 */
+	public function test_a_name_with_an_ampersand_arrives_as_the_shop_wrote_it() {
+		register_taxonomy( 'product_brand', 'product', array( 'hierarchical' => false, 'label' => 'Mærker' ) );
+		wp_insert_term( 'Hansen & Søn', 'product_brand' );
+
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Pølser' );
+		$product->save();
+		wp_set_object_terms( $product->get_id(), 'Hansen & Søn', 'product_brand' );
+
+		$properties = oko_product_properties( wc_get_product( $product->get_id() ) );
+		$found      = $this->find( $properties, 'taxonomy:product_brand' );
+
+		$this->assertNotNull( $found );
+		$this->assertSame( array( 'Hansen & Søn' ), $found['values'] );
+	}
+
 	public function test_a_product_with_nothing_to_say_sends_nothing() {
 		$product = new \WC_Product_Simple();
 		$product->set_name( 'Lakridsruller' );
