@@ -2487,3 +2487,131 @@ function oko_status_events_as_chosen(array $events): array
 
 	return array_values(array_unique($out));
 }
+
+/**
+ * What the shop knows about a product, beyond its name.
+ *
+ * A packing slip has to name the producer and the country the goods come from.
+ * No two shops keep those in the same place: one has a global attribute called
+ * "Producent", the next writes it straight on the product, a third has a brand
+ * taxonomy from some other plugin. So nothing is assumed here — everything the
+ * product carries is sent, and Økoskabet lets the shop point at the two fields
+ * that matter.
+ *
+ * `key` is what the shop's choice is stored under at Økoskabet, so it has to
+ * stay the same when a field is renamed: it is built from the taxonomy or the
+ * attribute slug, never from the label. `label` is what the shop sees in
+ * WooCommerce, and it is the text they pick from.
+ *
+ * Tags are left out. They travel in their own field and would otherwise be
+ * offered twice.
+ *
+ * @param \WC_Product $product
+ * @return array<int,array{key:string,label:string,values:array<int,string>}>
+ */
+function oko_product_properties(\WC_Product $product): array
+{
+	$properties = array();
+	$product_id = (int) $product->get_id();
+
+	// Tags have their own field; attribute taxonomies are read as attributes
+	// below, where the shop's own label for them lives.
+	$covered = array('product_tag' => true);
+
+	foreach ($product->get_attributes() as $attribute) {
+		if (! $attribute instanceof \WC_Product_Attribute) {
+			continue;
+		}
+
+		if ($attribute->is_taxonomy()) {
+			$taxonomy            = (string) $attribute->get_taxonomy();
+			$covered[$taxonomy]  = true;
+			$key                 = 'attribute:' . $taxonomy;
+			$label               = (string) wc_attribute_label($taxonomy, $product);
+			$values              = (array) wc_get_product_terms($product_id, $taxonomy, array('fields' => 'names'));
+		} else {
+			// Written straight on the product. The name is all there is, so the
+			// key is built from it — renaming such an attribute really is a
+			// different field, which is the one case where the key may move.
+			$name   = (string) $attribute->get_name();
+			$key    = 'attribute:' . sanitize_title($name);
+			$label  = $name;
+			$values = (array) $attribute->get_options();
+		}
+
+		$property = oko_product_property($key, $label, $values);
+		if ($property !== null) {
+			$properties[] = $property;
+		}
+	}
+
+	// Everything else the shop files its products under: brands, categories,
+	// whatever a plugin has registered. Asked of WordPress rather than listed
+	// here, so a shop that keeps its producer somewhere we have never heard of
+	// still gets to point at it.
+	$taxonomies = \function_exists('get_object_taxonomies')
+		? (array) get_object_taxonomies('product', 'objects')
+		: array();
+
+	foreach ($taxonomies as $taxonomy => $object) {
+		$taxonomy = (string) $taxonomy;
+		if (isset($covered[$taxonomy]) || strpos($taxonomy, 'pa_') === 0) {
+			continue;
+		}
+
+		$label = '';
+		if (is_object($object)) {
+			$label = (string) ($object->labels->singular_name ?? '');
+			if ($label === '') {
+				$label = (string) ($object->label ?? '');
+			}
+		}
+
+		$property = oko_product_property(
+			'taxonomy:' . $taxonomy,
+			$label !== '' ? $label : $taxonomy,
+			(array) wp_get_post_terms($product_id, $taxonomy, array('fields' => 'names'))
+		);
+		if ($property !== null) {
+			$properties[] = $property;
+		}
+	}
+
+	return $properties;
+}
+
+/**
+ * One field, or nothing when there is nothing to say.
+ *
+ * A field the product has no value in is left out rather than sent empty: the
+ * shop picks the producer field from this list, and a field that is blank on
+ * every product it meets is not one anybody can choose usefully.
+ *
+ * @param string            $key
+ * @param string            $label
+ * @param array<int,mixed>  $values
+ * @return array{key:string,label:string,values:array<int,string>}|null
+ */
+function oko_product_property(string $key, string $label, array $values): ?array
+{
+	$clean = array();
+	foreach ($values as $value) {
+		if (is_array($value) || is_object($value)) {
+			continue;
+		}
+		$value = trim(wp_strip_all_tags((string) $value));
+		if ($value !== '') {
+			$clean[] = $value;
+		}
+	}
+
+	if ($key === '' || empty($clean)) {
+		return null;
+	}
+
+	return array(
+		'key'    => $key,
+		'label'  => $label !== '' ? $label : $key,
+		'values' => array_values(array_unique($clean)),
+	);
+}
