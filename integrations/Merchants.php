@@ -1019,6 +1019,17 @@ class Merchants extends Base {
 							<p class="description">
 								<?php esc_html_e( 'Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged.', O_TEXTDOMAIN ); ?>
 							</p>
+							<?php
+							// Carried through the save, hidden. Whether the
+							// fields are shown is worked out from the gateways
+							// switched on at the moment the page renders, and a
+							// shop whose card gateway is off for an hour would
+							// otherwise lose its capture events for good by
+							// saving an unrelated field.
+							foreach ( (array) $merchant['capture_events'] as $kept ) :
+								?>
+								<input type="hidden" name="merchant[capture_events][]" value="<?php echo esc_attr( (string) $kept ); ?>" />
+							<?php endforeach; ?>
 						</td>
 					</tr>
 					<?php else : ?>

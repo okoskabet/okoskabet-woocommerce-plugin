@@ -13,6 +13,7 @@
 namespace okoskabet_woocommerce_plugin\Integrations;
 
 use okoskabet_woocommerce_plugin\Engine\Base;
+use okoskabet_woocommerce_plugin\Integrations\Merchant_Router;
 
 /**
  * Delivery Exceptions
@@ -1203,7 +1204,7 @@ class Delivery_Exceptions extends Base {
 			return array();
 		}
 
-		$ranges = self::pre_order_ranges( $applicable_rules, $config );
+		$ranges = self::pre_order_ranges( $applicable_rules, $config, $dates, $product_ids );
 		if ( $pre_order ) {
 			$result = array_values( array_filter( $result, function ( string $date ) use ( $ranges ): bool {
 				return self::date_in_ranges( $date, $ranges );
@@ -1757,8 +1758,8 @@ class Delivery_Exceptions extends Base {
 	 * @param array $applicable_rules As collect_applicable_rules() returns them.
 	 * @return array<int,array{0:string,1:string}>
 	 */
-	public static function pre_order_ranges( array $applicable_rules, ?array $config = null ): array {
-		$ranges = self::far_only_on_ranges( $applicable_rules, $config );
+	public static function pre_order_ranges( array $applicable_rules, ?array $config = null, array $dates = array(), array $product_ids = array() ): array {
+		$ranges = self::far_only_on_ranges( $applicable_rules, $config, $dates, $product_ids );
 
 		foreach ( $applicable_rules as $rule ) {
 			if ( empty( $rule['extend'] ) ) {
@@ -1782,8 +1783,8 @@ class Delivery_Exceptions extends Base {
 	 * @param array $applicable_rules As collect_applicable_rules() returns them.
 	 * @return array<int,array{0:string,1:string}>
 	 */
-	private static function far_only_on_ranges( array $applicable_rules, ?array $config = null ): array {
-		$horizon = self::normal_horizon_ymd( $config ?? self::get_config() );
+	private static function far_only_on_ranges( array $applicable_rules, ?array $config = null, array $dates = array(), array $product_ids = array() ): array {
+		$horizon = self::normal_horizon_ymd( $config ?? self::get_config(), $dates, $product_ids );
 		$ranges  = array();
 
 		foreach ( $applicable_rules as $rule ) {
@@ -1812,13 +1813,30 @@ class Delivery_Exceptions extends Base {
 	 * section reach FURTHER than the normal window, and a horizon built from
 	 * them would call a far-off date normal purely because a rule mentioned it.
 	 */
-	private static function normal_horizon_ymd( array $config ): string {
+	private static function normal_horizon_ymd( array $config, array $dates = array(), array $product_ids = array() ): string {
+		// Counting days, not calendar days: the ordinary checkout shows the
+		// first N delivery days, and the Nth of them can be weeks out. Reading
+		// the horizon as "today plus N" would call a day the customer sees as
+		// an ordinary delivery day a pre-order, and charge the fee for it.
+		if ( ( $config['display_mode'] ?? 'window' ) === 'count' ) {
+			$count = max( 1, (int) ( $config['display_value'] ?? 0 ) );
+			$days  = self::strip_past_dates( $dates );
+			if ( ! empty( $days ) ) {
+				sort( $days );
+
+				return (string) ( $days[ min( $count, count( $days ) ) - 1 ] );
+			}
+		}
+
 		$days = 0;
 		if ( ( $config['display_mode'] ?? 'window' ) === 'window' ) {
 			$days = max( 0, (int) ( $config['display_value'] ?? 0 ) );
 		}
 		if ( $days <= 0 ) {
-			$merchant = function_exists( 'o_get_merchant' ) ? o_get_merchant() : array();
+			// This basket's merchant, not whichever one is the default. A shop
+			// routing products to several Økoskabet accounts has a window per
+			// account, and the REST side already resolves the right one.
+			$merchant = self::merchant_for_products( $product_ids );
 			$days     = max( 1, (int) ( $merchant['maximum_days_in_future'] ?? 3 ) );
 		}
 
@@ -1826,6 +1844,23 @@ class Delivery_Exceptions extends Base {
 		$horizon->modify( sprintf( '+%d days', $days ) );
 
 		return $horizon->format( 'Y-m-d' );
+	}
+
+	/**
+	 * The merchant these products are routed to, falling back to the default.
+	 *
+	 * @param int[] $product_ids
+	 * @return array<string,mixed>
+	 */
+	private static function merchant_for_products( array $product_ids ): array {
+		if ( ! empty( $product_ids ) && class_exists( Merchant_Router::class ) ) {
+			$resolved = Merchant_Router::resolve_for_products( $product_ids );
+			if ( is_array( $resolved ) && ! empty( $resolved ) ) {
+				return $resolved;
+			}
+		}
+
+		return function_exists( 'o_get_merchant' ) ? o_get_merchant() : array();
 	}
 
 	/**
@@ -1858,7 +1893,21 @@ class Delivery_Exceptions extends Base {
 
 		$config = self::get_config();
 
-		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, $config ), $config ) );
+		// Goods the shop will not hold are left out of the reckoning: the
+		// button is about what CAN be pre-ordered, and offering it for a basket
+		// whose only item is a fresh one leads to an empty list of dates.
+		$can_wait = array_values( array_filter(
+			$product_ids,
+			static function ( $pid ) use ( $config ) {
+				return ! self::cart_has_goods_that_cannot_wait( array( $pid ), $config );
+			}
+		) );
+
+		if ( empty( $can_wait ) ) {
+			return false;
+		}
+
+		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $can_wait, $config ), $config, array(), $can_wait ) );
 	}
 
 	/**
@@ -1901,8 +1950,18 @@ class Delivery_Exceptions extends Base {
 			return false;
 		}
 
-		$config   = self::get_config();
-		$horizon  = self::normal_horizon_ymd( $config );
+		$config = self::get_config();
+
+		// Goods that cannot wait make a pre-order impossible for the whole
+		// basket, so it is not a pre-order-only one. Without this the checkout
+		// hides the ordinary button, puts the customer in a pre-order, and the
+		// fresh item in their basket still cannot go — nothing left to press
+		// and nothing saying why.
+		if ( self::cart_has_goods_that_cannot_wait( $product_ids, $config ) ) {
+			return false;
+		}
+
+		$horizon  = self::normal_horizon_ymd( $config, array(), $product_ids );
 		$instance = new self();
 
 		foreach ( $product_ids as $pid ) {

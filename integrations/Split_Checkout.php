@@ -434,9 +434,32 @@ class Split_Checkout extends Base {
 		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
 			return null;
 		}
+
 		$stored = WC()->session->get( self::MOVES_MODE_KEY, null );
 
-		return $stored === null || $stored === '' ? null : ( $stored === self::MODE_PRE_ORDER );
+		// Only for the basket it was made for. An arrangement outlives the
+		// basket in the session, and without this a customer who sent their
+		// cornflakes to December and then came back with something else would
+		// meet an ordinary checkout opening as a pre-order, fee and all.
+		if ( ! is_array( $stored ) || ( $stored['cart'] ?? '' ) !== self::cart_signature() ) {
+			return null;
+		}
+
+		$mode = (string) ( $stored['mode'] ?? '' );
+
+		return $mode === '' ? null : ( $mode === self::MODE_PRE_ORDER );
+	}
+
+	/** The basket's lines, as a fingerprint an arrangement can be checked against. */
+	private static function cart_signature(): string {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return '';
+		}
+
+		$keys = array_map( 'strval', array_keys( WC()->cart->get_cart() ) );
+		sort( $keys );
+
+		return md5( implode( ',', $keys ) );
 	}
 
 	/** Forget the arrangement, but keep nothing about it half-remembered. */
@@ -970,18 +993,28 @@ class Split_Checkout extends Base {
 			if ( $date === '' ) {
 				continue;
 			}
-			$candidates[ $date ] = $mode;
+			// The keys the group actually shows, so a line the customer moved
+			// into this delivery counts as part of it. Matching only on the
+			// line's own mode and dates would throw out what they just moved
+			// in: they press "keep only this" on the delivery they built, and
+			// the thing they built it out of is removed.
+			$candidates[ $date ] = array(
+				'mode' => $mode,
+				'keys' => (array) ( $group['keys'] ?? array() ),
+			);
 		}
 
 		$options = array();
-		foreach ( $candidates as $date => $mode ) {
+		foreach ( $candidates as $date => $candidate ) {
+			$mode   = (string) $candidate['mode'];
 			$keep   = array();
 			$remove = array();
 			foreach ( $lines as $key => $line ) {
-				// A line only counts as kept if it can travel on this day AS
-				// this kind of order. In a pre-order, a line that has ordinary
-				// days but no pre-order day is precisely what has to go.
-				if ( $line['mode'] === $mode && in_array( $date, $line['dates'], true ) ) {
+				// Either the customer put it in this delivery, or it can travel
+				// on this day AS this kind of order. In a pre-order, a line that
+				// has ordinary days but no pre-order day is what has to go.
+				if ( in_array( $key, $candidate['keys'], true )
+					|| ( $line['mode'] === $mode && in_array( $date, $line['dates'], true ) ) ) {
 					$keep[] = $key;
 				} else {
 					$remove[] = $key;
@@ -999,9 +1032,12 @@ class Split_Checkout extends Base {
 			// can promise a day only where there is exactly one to promise.
 			$shared = null;
 			foreach ( $keep as $key ) {
+				// The days this line has in the delivery's own kind of order,
+				// which is not the same list as the one it was sorted under.
+				$days   = self::line_dates_for_mode( $lines[ $key ], $mode );
 				$shared = $shared === null
-					? $lines[ $key ]['dates']
-					: array_values( array_intersect( $shared, $lines[ $key ]['dates'] ) );
+					? $days
+					: array_values( array_intersect( $shared, $days ) );
 			}
 
 			$options[] = array(
@@ -2296,7 +2332,10 @@ class Split_Checkout extends Base {
 		if ( function_exists( 'WC' ) && WC()->session ) {
 			WC()->session->set(
 				self::MOVES_MODE_KEY,
-				$settled === null ? '' : ( $settled ? self::MODE_PRE_ORDER : self::MODE_NORMAL )
+				array(
+					'mode' => $settled === null ? '' : ( $settled ? self::MODE_PRE_ORDER : self::MODE_NORMAL ),
+					'cart' => self::cart_signature(),
+				)
 			);
 		}
 
@@ -2456,7 +2495,12 @@ class Split_Checkout extends Base {
 	 * state so the thank-you banner knows what's been completed.
 	 */
 	public function on_order_processed( int $order_id ): void {
-		if ( ! $this->is_split_active() ) { return; }
+		if ( ! $this->is_split_active() ) {
+			// Nothing was split, so nothing is half-done — but an arrangement
+			// the customer made before ordering must not outlive the order.
+			$this->clear_moves();
+			return;
+		}
 		$state = $this->get_state();
 		$state['completed_orders'][] = $order_id;
 		$this->set_state( $state );

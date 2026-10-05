@@ -29,6 +29,7 @@ class Upgrades extends Base {
 	private $migrations = array(
 		'rewrite_label_created_events_v1' => 'migrate_label_created_events',
 		'seed_default_merchant_v1'        => 'migrate_seed_default_merchant',
+		'only_on_extend_to_window_v1'     => 'migrate_only_on_extend_rows',
 	);
 
 	/**
@@ -72,6 +73,73 @@ class Upgrades extends Base {
 		if ( $dirty ) {
 			update_option( self::COMPLETED_OPTION, array_values( array_unique( $completed ) ) );
 		}
+	}
+
+	/**
+	 * Migration: a pensioned tick becomes the rule it used to describe.
+	 *
+	 * "Levering kun på en bestemt dag" had a per-row tick that opened the
+	 * ordinary days again, which is the opposite of what the section heading
+	 * promised, so it is gone. A row saved with it ticked now means something
+	 * else than it did the day the shop saved it: the date stops being an
+	 * extra day on top and becomes the only day.
+	 *
+	 * Rather than change those rows' meaning in silence, each one is rewritten
+	 * as what it actually described — a from/until window of one day that
+	 * extends the ordinary list — so the shop's own setup keeps behaving the
+	 * way they set it up. Only builds from before the tick was retired can
+	 * have such rows; a shop that never saw it has nothing here to convert.
+	 */
+	private function migrate_only_on_extend_rows(): void {
+		$option_key = Delivery_Exceptions::OPTION_KEY;
+		$stored     = get_option( $option_key, array() );
+
+		if ( ! is_array( $stored ) || empty( $stored['only_on'] ) || ! is_array( $stored['only_on'] ) ) {
+			return;
+		}
+
+		$kept      = array();
+		$converted = array();
+
+		foreach ( $stored['only_on'] as $row ) {
+			if ( ! is_array( $row ) || empty( $row['extend'] ) ) {
+				$kept[] = $row;
+				continue;
+			}
+
+			$date = (string) ( $row['date'] ?? '' );
+			if ( $date === '' ) {
+				continue;
+			}
+
+			$converted[] = array(
+				'label'      => (string) ( $row['label'] ?? '' ),
+				'from'       => $date,
+				'until'      => $date,
+				'enabled'    => ! empty( $row['enabled'] ),
+				'extend'     => true,
+				'flip'       => ! empty( $row['flip'] ),
+				'all'        => ! empty( $row['all'] ),
+				'categories' => (array) ( $row['categories'] ?? array() ),
+				'tags'       => (array) ( $row['tags'] ?? array() ),
+			);
+		}
+
+		if ( empty( $converted ) ) {
+			return;
+		}
+
+		$stored['only_on']    = array_values( $kept );
+		$stored['from_until'] = array_merge(
+			array_values( (array) ( $stored['from_until'] ?? array() ) ),
+			$converted
+		);
+
+		if ( ! empty( $converted ) ) {
+			$stored['from_until_enabled'] = true;
+		}
+
+		update_option( $option_key, $stored );
 	}
 
 	/**
