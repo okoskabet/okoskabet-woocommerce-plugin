@@ -1698,7 +1698,18 @@ class Delivery_Exceptions extends Base {
 		}
 
 		$instance = new self();
-		$ranges   = self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, self::get_config() ) );
+		$config   = self::get_config();
+
+		// The basket's own products decide the horizon, as everywhere else: a
+		// shop routing to several Økoskabet accounts has a window per account,
+		// and reading the default one would call an ordinary day a pre-order
+		// and charge the fee for it.
+		$ranges = self::pre_order_ranges(
+			$instance->collect_applicable_rules( $product_ids, $config ),
+			$config,
+			array(),
+			$product_ids
+		);
 
 		return self::date_in_ranges( $date, $ranges );
 	}
