@@ -1326,6 +1326,18 @@ add_filter('woocommerce_checkout_get_value', 'oko_checkout_starts_without_last_o
  */
 function oko_is_pre_order_checkout(): bool
 {
+	// The date decides, not the hidden field. The field is the customer's
+	// browser talking, and the pre-order fee hangs off this answer: emptying it
+	// while still asking for a December date paid the ordinary fee. A date past
+	// the ordinary window is a pre-order whatever the form says.
+	$date = oko_posted_delivery_date();
+	if ($date !== '') {
+		return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::date_is_pre_order(
+			$date,
+			oko_cart_product_ids()
+		);
+	}
+
 	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
 	if (isset($_POST['billing_okoskabet_pre_order'])) {
 		return (string) wp_unslash($_POST['billing_okoskabet_pre_order']) === '1';
@@ -1337,6 +1349,48 @@ function oko_is_pre_order_checkout(): bool
 	}
 	// phpcs:enable WordPress.Security.NonceVerification
 	return false;
+}
+
+/**
+ * The product ids in the basket right now.
+ *
+ * @return int[]
+ */
+function oko_cart_product_ids(): array
+{
+	$product_ids = array();
+
+	if (function_exists('WC') && WC()->cart) {
+		foreach (WC()->cart->get_cart() as $cart_item) {
+			$pid = (int) ($cart_item['product_id'] ?? 0);
+			if ($pid > 0) {
+				$product_ids[] = $pid;
+			}
+		}
+	}
+
+	return array_values(array_unique($product_ids));
+}
+
+/**
+ * The delivery date the checkout is posting, however it is posting it.
+ *
+ * @return string Y-m-d, or an empty string when there is none.
+ */
+function oko_posted_delivery_date(): string
+{
+	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
+	if (isset($_POST['billing_okoskabet_delivery_date'])) {
+		return sanitize_text_field((string) wp_unslash($_POST['billing_okoskabet_delivery_date']));
+	}
+	if (isset($_POST['post_data']) && is_string($_POST['post_data'])) {
+		$fields = array();
+		parse_str(wp_unslash($_POST['post_data']), $fields);
+		return sanitize_text_field((string) ($fields['billing_okoskabet_delivery_date'] ?? ''));
+	}
+	// phpcs:enable WordPress.Security.NonceVerification
+
+	return '';
 }
 
 /**
@@ -1509,7 +1563,14 @@ function oko_order_line_items(\WC_Order $order): array
 	$lines = array();
 
 	foreach ($order->get_items(array('line_item', 'fee')) as $item) {
-		$quantity = (int) $item->get_quantity();
+		// Minus whatever has been refunded. WooCommerce only lets a line be
+		// edited while an order is pending or on hold, so on an order that has
+		// been sent, refunding a line IS how the shop takes it off. Reading the
+		// ordered quantity alone leaves the packing room packing three when the
+		// customer is only getting two. `get_qty_refunded_for_item` answers in
+		// negatives, hence the addition.
+		$quantity = (int) $item->get_quantity()
+			+ (int) $order->get_qty_refunded_for_item( $item->get_id(), $item->get_type() );
 
 		// A line for nothing is not something a shop sends, and a refund line
 		// is not something a packer can put in a box.
@@ -1870,6 +1931,21 @@ function oko_shipment_fingerprint(array $payload): string
 }
 
 add_action('woocommerce_update_order', 'oko_resend_shipment_on_update', 20, 1);
+
+// A refund is how a line is taken off an order that has already been sent, and
+// the order itself is not always saved when one is made. Without this the
+// packing room keeps the quantity the customer no longer gets.
+add_action('woocommerce_order_refunded', 'oko_resend_shipment_on_refund', 20, 2);
+
+/**
+ * @param int $order_id
+ * @param int $refund_id
+ * @return void
+ */
+function oko_resend_shipment_on_refund($order_id, $refund_id): void
+{
+	oko_resend_shipment_on_update((int) $order_id);
+}
 
 /**
  * Send an edited order to Økoskabet again.
