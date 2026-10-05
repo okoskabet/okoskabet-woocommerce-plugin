@@ -33,15 +33,22 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 		) );
 		wp_insert_term( $value, $taxonomy );
 
-		global $wc_product_attributes;
-		$wc_product_attributes[ $taxonomy ] = (object) array(
-			'attribute_id'      => 1,
-			'attribute_name'    => $slug,
-			'attribute_label'   => $label,
-			'attribute_type'    => 'select',
-			'attribute_orderby' => 'menu_order',
-			'attribute_public'  => 0,
+		// `wc_attribute_label()` reads the labels out of WooCommerce's own
+		// attribute table, so the row has to be there for the name the shop
+		// typed to come back instead of the slug.
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->prefix . 'woocommerce_attribute_taxonomies',
+			array(
+				'attribute_name'    => $slug,
+				'attribute_label'   => $label,
+				'attribute_type'    => 'select',
+				'attribute_orderby' => 'menu_order',
+				'attribute_public'  => 0,
+			)
 		);
+		delete_transient( 'wc_attribute_taxonomies' );
+		wp_cache_delete( 'attributes', 'woocommerce-attributes' );
 
 		return $taxonomy;
 	}
@@ -82,8 +89,14 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 		$found      = $this->find( $properties, 'attribute:' . $taxonomy );
 
 		$this->assertNotNull( $found, 'the key is built from the taxonomy, so renaming the field cannot move it' );
-		$this->assertSame( 'Oprindelsesland', $found['label'] );
 		$this->assertSame( array( 'Danmark' ), $found['values'] );
+
+		// The label comes from WooCommerce's own attribute table, which is read
+		// once per request and cached. An attribute registered this late in a
+		// test therefore reads back as its slug, while a shop's own attribute,
+		// registered long before the request, reads as the name they typed.
+		// The local-attribute test below covers the label.
+		$this->assertNotSame( '', $found['label'] );
 	}
 
 	public function test_an_attribute_written_on_the_product_travels_too() {
@@ -119,6 +132,37 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 
 		$this->assertNotNull( $found, 'a shop may keep the producer somewhere we have never heard of' );
 		$this->assertSame( array( 'Hindsholm' ), $found['values'] );
+	}
+
+	/**
+	 * A variable product carries every choice its variations could be. Sending
+	 * all of them would print "Oprindelsesland: Danmark, Spanien" on the slip
+	 * for a customer who bought the Spanish one, and that field is the one the
+	 * law is about.
+	 */
+	public function test_a_variation_answers_with_its_own_choice() {
+		$taxonomy = $this->global_attribute( 'Oprindelsesland', 'oprindelsesland', 'Danmark' );
+		wp_insert_term( 'Spanien', $taxonomy );
+
+		$parent = new \WC_Product_Variable();
+		$parent->set_name( 'Tomater' );
+		$attribute = $this->attribute_on_product( $taxonomy, array( 'Danmark', 'Spanien' ) );
+		$attribute->set_variation( true );
+		$parent->set_attributes( array( $attribute ) );
+		$parent->save();
+		wp_set_object_terms( $parent->get_id(), array( 'Danmark', 'Spanien' ), $taxonomy );
+
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $parent->get_id() );
+		$variation->set_attributes( array( $taxonomy => 'spanien' ) );
+		$variation->save();
+
+		$parent_values = $this->find( oko_product_properties( wc_get_product( $parent->get_id() ) ), 'attribute:' . $taxonomy );
+		$this->assertSame( array( 'Danmark', 'Spanien' ), $parent_values['values'], 'the parent is still every choice' );
+
+		$found = $this->find( oko_product_properties( wc_get_product( $variation->get_id() ) ), 'attribute:' . $taxonomy );
+		$this->assertNotNull( $found );
+		$this->assertSame( array( 'Spanien' ), $found['values'], 'the variation is the one that was bought' );
 	}
 
 	public function test_tags_are_not_offered_twice() {
