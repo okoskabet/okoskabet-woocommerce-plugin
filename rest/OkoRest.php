@@ -787,15 +787,24 @@ class OkoRest extends Base
 			return new \WP_Error('signature_invalid', 'Invalid HMAC signature', array('status' => 401));
 		}
 
-		// Inside the signature, not beside it. A timestamp in a header would
-		// be free to replace, which is the same as not having one.
-		$timestamp = (int) $request->get_param('timestamp');
+		// Inside the signature, not beside it, and read out of the signed body
+		// rather than with `get_param()`: that merges the query
+		// string in on top, and a body sent as text/plain is not parsed as JSON
+		// at all, so the query string wins. A captured signed request could
+		// otherwise be replayed with a fresh timestamp and any ids at all, and
+		// answer with every product in the shop, drafts included.
+		$signed = json_decode($request->get_body(), true);
+		if (!is_array($signed)) {
+			return new \WP_Error('invalid_body', 'Signed body must be JSON', array('status' => 400));
+		}
+
+		$timestamp = (int) ($signed['timestamp'] ?? 0);
 		if (abs(time() - $timestamp) > self::PRODUCTS_CLOCK_SKEW) {
 			return new \WP_Error('timestamp_out_of_range', 'Timestamp outside the accepted window', array('status' => 401));
 		}
 
 		$ids = array();
-		foreach ((array) $request->get_param('ids') as $id) {
+		foreach ((array) ($signed['ids'] ?? array()) as $id) {
 			$id = (int) $id;
 			if ($id > 0) {
 				$ids[$id] = $id;

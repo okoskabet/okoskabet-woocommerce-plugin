@@ -1680,6 +1680,29 @@ class Delivery_Exceptions extends Base {
 		return ! empty( self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, self::get_config() ) ) );
 	}
 
+	/**
+	 * Whether this date is one the customer can only have as a pre-order.
+	 *
+	 * Asked of the date rather than of a form field, because the fee hangs on
+	 * the answer: a checkout that posts a December date with the pre-order flag
+	 * emptied would otherwise pay the ordinary fee for it.
+	 *
+	 * @param int[] $product_ids
+	 */
+	public static function date_is_pre_order( string $date, array $product_ids ): bool {
+		$date        = trim( $date );
+		$product_ids = array_values( array_filter( array_map( 'intval', $product_ids ) ) );
+
+		if ( $date === '' || empty( $product_ids ) ) {
+			return false;
+		}
+
+		$instance = new self();
+		$ranges   = self::pre_order_ranges( $instance->collect_applicable_rules( $product_ids, self::get_config() ) );
+
+		return self::date_in_ranges( $date, $ranges );
+	}
+
 	/** The pre-order button's wording, as the shop set it or built in. */
 	public static function pre_order_label( ?array $config = null ): string {
 		$config = $config ?? self::get_config();
