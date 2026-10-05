@@ -1893,7 +1893,10 @@ const OKO_DELIVERY_SUMMARY_META = '_okoskabet_delivery_summary';
  */
 function oko_customer_note_as_written(\WC_Order $order): string
 {
-	return oko_note_without_our_old_line((string) $order->get_customer_note());
+	// The stored value, not the filtered one. Reading it in view context would
+	// hand us a note the filter below has already shortened, and shortening it
+	// again can take a line of the customer's with it.
+	return oko_note_without_our_old_line((string) $order->get_customer_note('edit'));
 }
 
 /**
@@ -1905,11 +1908,14 @@ function oko_customer_note_as_written(\WC_Order $order): string
  */
 function oko_note_without_our_old_line(string $note): string
 {
-	if (strpos($note, OKO_ORDER_NOTE_PREFIX) !== 0) {
-		return $note;
-	}
-	$newline = strpos($note, "\n");
-	return $newline === false ? '' : substr($note, $newline + 1);
+	// Only the line older versions actually wrote. Matching on the first word
+	// alone would eat a customer's own opening line: "ØKOSKABET ved Netto er
+	// fint" starts the same way and is the customer's text. Every version that
+	// ever wrote the line wrote it as the word, a date or the "no date" phrase,
+	// and then the place.
+	$ours = '/^ØKOSKABET (?:\d{4}-\d{2}-\d{2}|without delivery date|uden leveringsdato)(?: [^\n]*)?(?:\n|$)/u';
+
+	return (string) preg_replace($ours, '', $note, 1);
 }
 
 add_filter('woocommerce_order_get_customer_note', 'oko_hide_our_old_line_from_the_note', 10, 1);
@@ -1928,7 +1934,46 @@ add_filter('woocommerce_order_get_customer_note', 'oko_hide_our_old_line_from_th
  */
 function oko_hide_our_old_line_from_the_note($note): string
 {
+	// Not while the order is being written. WooCommerce reads the note in view
+	// context on its way to storage — the posts data store does it on every
+	// status change, HPOS does it when it syncs, and the admin order screen
+	// puts the same value in the text box that "Update" saves. A filter meant
+	// for the eye would therefore delete the old line from the database for
+	// good, and removing the filter afterwards would not bring it back.
+	if (oko_order_save_depth() > 0) {
+		return (string) $note;
+	}
+
 	return oko_note_without_our_old_line((string) $note);
+}
+
+add_action('woocommerce_before_order_object_save', 'oko_order_save_started', PHP_INT_MIN);
+add_action('woocommerce_after_order_object_save', 'oko_order_save_finished', PHP_INT_MAX);
+
+/** @return void */
+function oko_order_save_started(): void
+{
+	oko_order_save_depth(1);
+}
+
+/** @return void */
+function oko_order_save_finished(): void
+{
+	oko_order_save_depth(-1);
+}
+
+/**
+ * How many order saves are in progress, counted so nested saves behave.
+ *
+ * @param int $delta
+ * @return int
+ */
+function oko_order_save_depth(int $delta = 0): int
+{
+	static $depth = 0;
+	$depth = max(0, $depth + $delta);
+
+	return $depth;
 }
 
 /**
@@ -2298,7 +2343,9 @@ add_action('wpo_wcpdf_after_order_data', 'oko_packing_slip_delivery_row', 10, 2)
  */
 function oko_packing_slip_delivery_row($document_type, $order): void
 {
-	if (! $order instanceof \WC_Order) {
+	// The Simple template fires this from invoice.php as well, so without this
+	// the customer's own invoice would carry the packing table's row too.
+	if ($document_type !== 'packing-slip' || ! $order instanceof \WC_Order) {
 		return;
 	}
 
@@ -2310,14 +2357,15 @@ function oko_packing_slip_delivery_row($document_type, $order): void
 	$timestamp = strtotime($date);
 	$shown     = $timestamp === false ? $date : date_i18n(get_option('date_format'), $timestamp);
 
-	// The summary is missing on orders sent before it was stored. The date is
-	// the part that was asked for, so the row is printed either way.
-	$where = (string) $order->get_meta(OKO_DELIVERY_SUMMARY_META, true);
-
+	// The date and nothing else. The place used to be printed beside it, read
+	// from what was stored when the order was sent, and it was wrong twice
+	// over: a shed is stored as its id rather than its name, so the slip said
+	// "shed-7f3a", and a date moved later would be printed next to the place
+	// the order left with. The date is what the packing table was asking for.
 	printf(
 		'<tr class="okoskabet-delivery-date"><th>%s</th><td>%s</td></tr>',
 		esc_html__('Delivery date', O_TEXTDOMAIN),
-		esc_html($where === '' ? $shown : $shown . ' — ' . $where)
+		esc_html($shown)
 	);
 }
 

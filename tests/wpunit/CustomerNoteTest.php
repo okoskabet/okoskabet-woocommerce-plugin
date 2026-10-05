@@ -60,6 +60,37 @@ class CustomerNoteTest extends \Codeception\TestCase\WPTestCase {
 	}
 
 	/**
+	 * WooCommerce reads the note in view context on its way to storage: the
+	 * posts data store does it on every status change, HPOS does it when it
+	 * syncs. A filter meant for the eye must not become a rewrite of the row.
+	 */
+	public function test_saving_an_order_does_not_rewrite_the_stored_note() {
+		$order = $this->order_with_note( "ØKOSKABET 2026-10-01 Hjemmelevering\nRing på" );
+
+		$order->update_status( 'completed' );
+
+		$this->assertStringContainsString(
+			'ØKOSKABET 2026-10-01',
+			wc_get_order( $order->get_id() )->get_customer_note( 'edit' ),
+			'a status change must not delete the old line for good'
+		);
+	}
+
+	/**
+	 * A customer who writes about the shed on the corner starts their note
+	 * with the same word we did.
+	 */
+	public function test_a_customer_line_that_starts_with_our_word_is_kept() {
+		$order = $this->order_with_note( "ØKOSKABET ved Netto er fint\nRing på" );
+
+		$this->assertSame(
+			"ØKOSKABET ved Netto er fint\nRing på",
+			$order->get_customer_note(),
+			'only the line we wrote looks like the line we wrote'
+		);
+	}
+
+	/**
 	 * The stored value is untouched, so nothing is lost: a shop that wants the
 	 * old line back only has to stop filtering.
 	 */
