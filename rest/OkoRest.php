@@ -938,7 +938,21 @@ class OkoRest extends Base
 		}
 
 		// --- Step 3: Map Økoskabet's event semantics to internal names ---
-		$params             = $request->get_params();
+		// Read out of the signed body and nothing else. `get_params()` merges
+		// the query string in on top, and a body sent as text/plain is not
+		// parsed as JSON at all, so the query string wins outright. Anyone
+		// holding one captured signed request could therefore keep the
+		// signature and replace the fields it was supposed to protect: point
+		// it at another order, say the parcel was delivered, and have the
+		// order completed and the card charged.
+		$params = json_decode($raw_body, true);
+		if (!is_array($params)) {
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				error_log('Økoskabet webhook: REJECTED — signed body is not JSON');
+			}
+			return new \WP_Error('invalid_body', 'Signed body must be JSON', array('status' => 400));
+		}
+
 		$raw_event          = isset($params['event']) ? sanitize_text_field($params['event']) : '';
 		$shipment_reference = isset($params['shipment_reference']) ? sanitize_text_field($params['shipment_reference']) : '';
 
