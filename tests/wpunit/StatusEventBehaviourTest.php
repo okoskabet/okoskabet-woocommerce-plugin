@@ -16,20 +16,19 @@ class StatusEventBehaviourTest extends \Codeception\TestCase\WPTestCase {
 	public function setUp(): void {
 		parent::setUp();
 		do_action( 'plugins_loaded' );
-		do_action( 'rest_api_init' );
 
 		delete_option( OKO_SETTINGS_SAVED_OPTION );
 	}
 
 	private function configure( array $webhook_events ): void {
-		$settings = (array) get_option( O_TEXTDOMAIN . '_options', array() );
+		$settings = (array) get_option( O_TEXTDOMAIN . '-settings', array() );
 
 		$settings['_webhook_enabled'] = 'on';
 		$settings['_webhook_secret']  = self::SECRET;
 		$settings['_webhook_events']  = $webhook_events;
 		$settings['_capture_events']  = array();
 
-		update_option( O_TEXTDOMAIN . '_options', $settings );
+		update_option( O_TEXTDOMAIN . '-settings', $settings );
 	}
 
 	private function order( string $status ): \WC_Order {
@@ -40,8 +39,15 @@ class StatusEventBehaviourTest extends \Codeception\TestCase\WPTestCase {
 		return $order;
 	}
 
-	/** A status change, signed the way Økoskabet signs one. */
-	private function send_status( \WC_Order $order, string $status ): \WP_REST_Response {
+	/**
+	 * A status change, signed the way Økoskabet signs one.
+	 *
+	 * The handler is called directly rather than through `rest_do_request`:
+	 * WPLoader boots WordPress past the point where the plugin registers its
+	 * routes, so the route does not exist in the harness. What the route adds
+	 * is the URL; everything this test is about happens inside the handler.
+	 */
+	private function send_status( \WC_Order $order, string $status ) {
 		$raw = wp_json_encode( array(
 			'event'              => 'reservation_updated',
 			'shipment_reference' => (string) $order->get_id(),
@@ -53,7 +59,7 @@ class StatusEventBehaviourTest extends \Codeception\TestCase\WPTestCase {
 		$request->set_header( 'x-hmac-sha256', hash_hmac( 'sha256', $raw, self::SECRET ) );
 		$request->set_body( $raw );
 
-		return rest_do_request( $request );
+		return ( new \okoskabet_woocommerce_plugin\Rest\OkoRest() )->handle_webhook( $request );
 	}
 
 	/**
@@ -139,7 +145,7 @@ class StatusEventBehaviourTest extends \Codeception\TestCase\WPTestCase {
 	}
 
 	public function test_a_shop_that_has_saved_can_leave_it_empty() {
-		do_action( 'cmb2_save_options-page_fields_' . O_TEXTDOMAIN . '_options' );
+		oko_remember_settings_were_saved();
 
 		$this->assertSame(
 			array(),
