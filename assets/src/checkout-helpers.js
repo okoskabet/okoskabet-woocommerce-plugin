@@ -655,6 +655,14 @@
 		}
 
 		function buildUI(locations) {
+			// What the customer already chose. The checkout rebuilds itself on
+			// every address edit, coupon and order-type button, and rebuilding
+			// from scratch would write the first place and the first date into
+			// the hidden fields — which is what gets booked.
+			var keepPlace = chosenLocationId;
+			var keepDateField = document.getElementById(FIELD_DATE);
+			var keepDate = keepDateField ? keepDateField.value : "";
+
 			removeUI();
 			if (!isStorePickup()) { return; }
 			var t = strings();
@@ -698,6 +706,10 @@
 					placeSel.appendChild(o);
 				});
 				chosenLocationId = String(locations[0].id);
+				if (keepPlace && locations.some(function (l) { return String(l.id) === keepPlace; })) {
+					placeSel.value = keepPlace;
+					chosenLocationId = keepPlace;
+				}
 				wrapper.appendChild(row(t.place, placeSel));
 			}
 
@@ -728,6 +740,10 @@
 						o.textContent = formatDate(d);
 						dateSel.appendChild(o);
 					});
+					if (keepDate && dates.indexOf(keepDate) !== -1) {
+						dateSel.value = keepDate;
+						keepDate = "";
+					}
 				}
 				syncHiddenFields();
 			}
