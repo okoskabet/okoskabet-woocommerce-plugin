@@ -369,7 +369,10 @@ class Packaging_Fee extends Base {
 	 * the cart page never has the button — so anywhere else the answer is no.
 	 */
 	private static function is_pre_order(): bool {
-		return \function_exists( 'oko_is_pre_order_checkout' ) && \oko_is_pre_order_checkout();
+		// The date, not the form field: a checkout that posts a December date
+		// with the pre-order field emptied is still a pre-order, and the fee
+		// for one is what it owes.
+		return \function_exists( 'oko_pre_order_for_pricing' ) && \oko_pre_order_for_pricing();
 	}
 
 	/**
