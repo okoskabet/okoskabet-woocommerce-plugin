@@ -59,6 +59,47 @@ class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertSame( 'HAK-3', $lines[0]['sku'], 'the SKU still belongs to the variation' );
 	}
 
+	/**
+	 * An attribute a variation leaves as "any" is recorded on the line and
+	 * nowhere else. Reading the variation instead loses it, and the packing
+	 * room is not told which colour to put in the box.
+	 */
+	public function test_an_any_attribute_is_read_off_the_line() {
+		list( $parent, $variation ) = $this->variable_product( 'Æg', 'Farve', 'Rød', 'AEG' );
+
+		$variation->set_attributes( array( 'farve' => '' ) );
+		$variation->save();
+
+		$order = $this->order_with( array( $variation ) );
+		$item  = $order->get_items()[ array_key_first( $order->get_items() ) ];
+		$item->add_meta_data( 'farve', 'Rød', true );
+		$item->save();
+
+		$lines = oko_order_line_items( wc_get_order( $order->get_id() ) );
+
+		$this->assertSame( 'Rød', $lines[0]['variant_title'], 'the choice only exists on the line' );
+	}
+
+	/**
+	 * Shops reuse variations: "Uge 40" becomes "Uge 41". Reading the live
+	 * variation would have the packing room pack the new one.
+	 */
+	public function test_a_variation_edited_after_the_order_sends_what_was_bought() {
+		list( , $variation ) = $this->variable_product( 'Hakkebøffer', 'Størrelse', '3 pakker', 'HAK-3' );
+		$order = $this->order_with( array( $variation ) );
+
+		$variation->set_attributes( array( 'storrelse' => '6 pakker' ) );
+		$variation->save();
+
+		$lines = oko_order_line_items( wc_get_order( $order->get_id() ) );
+
+		$this->assertSame(
+			'3 pakker',
+			$lines[0]['variant_title'],
+			'the customer bought three, whatever the catalogue says now'
+		);
+	}
+
 	public function test_a_simple_product_sends_no_variation_at_all() {
 		$product = new \WC_Product_Simple();
 		$product->set_name( 'Lakridsruller' );

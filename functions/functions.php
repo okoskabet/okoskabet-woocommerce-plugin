@@ -1545,17 +1545,34 @@ function oko_order_line_items(\WC_Order $order): array
 			// A variation line: the goods are the parent product, and what the
 			// customer chose is the variation. Both are read off the product
 			// rather than off the line's name, which is the two run together.
-			// A deleted variation leaves the name as it was written — better a
-			// name with the variation in it than a line with no name at all.
+			// A variation deleted after the order is refused by WooCommerce when
+			// the line loads, so the line answers with the parent and never
+			// gets here: it keeps the name it was sold under, variation and all.
 			if ($variant_id > 0 && $product instanceof \WC_Product_Variation) {
 				$parent = wc_get_product($product->get_parent_id());
 				if ($parent instanceof \WC_Product) {
 					$name = (string) $parent->get_name();
 				}
 
-				$formatted = wc_get_formatted_variation($product, true, false);
-				$formatted = trim(wp_strip_all_tags((string) $formatted));
-				if ($formatted !== '') {
+				// What the customer chose is read off the line, where
+				// WooCommerce wrote it when the order was placed. The variation
+				// itself can be edited afterwards — a shop that reuses "Uge 40"
+				// as "Uge 41" would otherwise have the packing room pack the new
+				// one — and an attribute left as "any" is only ever recorded on
+				// the line, never on the variation.
+				$chosen = array();
+				foreach ($product->get_attributes() as $key => $value) {
+					$on_line      = (string) $item->get_meta($key, true);
+					$chosen[$key] = $on_line !== '' ? $on_line : (string) $value;
+				}
+
+				$formatted = wc_get_formatted_variation($chosen, true, false);
+				$formatted = trim(html_entity_decode(wp_strip_all_tags((string) $formatted), ENT_QUOTES, 'UTF-8'));
+
+				// Only beside a name that is the parent's. Without the parent
+				// the line keeps the name it was sold under, variation and all,
+				// and repeating the variation next to it says it twice.
+				if ($formatted !== '' && $parent instanceof \WC_Product) {
 					$variant_title = $formatted;
 				}
 			}
