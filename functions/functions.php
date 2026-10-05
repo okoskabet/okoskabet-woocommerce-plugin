@@ -2511,6 +2511,14 @@ function oko_status_events_as_chosen(array $events): array
  */
 function oko_product_properties(\WC_Product $product): array
 {
+	// A variation is one choice out of the parent's list. Answering with the
+	// parent's whole list would put "Danmark, Spanien" on the packing slip for
+	// a customer who bought the Spanish one, and country of origin is the one
+	// field that has to be right.
+	if ($product instanceof \WC_Product_Variation) {
+		return oko_variation_properties($product);
+	}
+
 	$properties = array();
 	$product_id = (int) $product->get_id();
 
@@ -2520,6 +2528,14 @@ function oko_product_properties(\WC_Product $product): array
 
 	foreach ($product->get_attributes() as $attribute) {
 		if (! $attribute instanceof \WC_Product_Attribute) {
+			continue;
+		}
+
+		// Only what the shop shows its own customers. An attribute kept off
+		// the product page is the shop's own bookkeeping — a buying price, a
+		// supplier — and not something to hand a third party. Producer and
+		// country of origin are on the page, because the law puts them there.
+		if (! $attribute->get_visible()) {
 			continue;
 		}
 
@@ -2534,7 +2550,12 @@ function oko_product_properties(\WC_Product $product): array
 			// key is built from it — renaming such an attribute really is a
 			// different field, which is the one case where the key may move.
 			$name   = (string) $attribute->get_name();
-			$key    = 'attribute:' . sanitize_title($name);
+			// Through Danish accent folding whatever language the site is in.
+			// `sanitize_title` folds accents by locale, so "Fødeland" keys as
+			// `fodeland` under English and `foedeland` under Danish, and the
+			// shop's choice at Økoskabet would fall away the day the site
+			// changed language.
+			$key    = 'attribute:' . sanitize_title(remove_accents($name, 'da_DK'));
 			$label  = $name;
 			$values = (array) $attribute->get_options();
 		}
@@ -2556,6 +2577,14 @@ function oko_product_properties(\WC_Product $product): array
 	foreach ($taxonomies as $taxonomy => $object) {
 		$taxonomy = (string) $taxonomy;
 		if (isset($covered[$taxonomy]) || strpos($taxonomy, 'pa_') === 0) {
+			continue;
+		}
+
+		// Public ones only. WooCommerce files its own bookkeeping as
+		// taxonomies — product_type, product_visibility, shipping class — and
+		// other plugins keep suppliers and buying prices the same way. None of
+		// that is ours to send on.
+		if (! is_object($object) || empty($object->public)) {
 			continue;
 		}
 
@@ -2631,5 +2660,49 @@ function oko_product_property(string $key, string $label, array $values): ?array
  */
 function oko_plain_text(string $text): string
 {
-	return trim(html_entity_decode(wp_strip_all_tags($text), ENT_QUOTES, 'UTF-8'));
+	// A non-breaking space survives an ordinary trim, and `&nbsp;` in a field
+	// nobody filled in would then travel as a value with something in it.
+	return (string) preg_replace('/^\s+|\s+$/u', '', html_entity_decode(wp_strip_all_tags($text), ENT_QUOTES, 'UTF-8'));
+}
+
+/**
+ * What the shop knows about one variation.
+ *
+ * The parent carries the list of everything that variation could have been.
+ * The variation itself is one choice out of it, so each attribute the
+ * variation pins is answered with that value alone. "Any" leaves the parent's
+ * list standing, because that really is still the whole answer.
+ *
+ * @param \WC_Product_Variation $variation
+ * @return array<int,array{key:string,label:string,values:array<int,string>}>
+ */
+function oko_variation_properties(\WC_Product_Variation $variation): array
+{
+	$parent = wc_get_product($variation->get_parent_id());
+	if (! $parent instanceof \WC_Product || $parent instanceof \WC_Product_Variation) {
+		return array();
+	}
+
+	$properties = oko_product_properties($parent);
+
+	foreach ($variation->get_attributes() as $name => $value) {
+		$value = (string) $value;
+		if ($value === '') {
+			continue;
+		}
+
+		$name = (string) $name;
+		if (taxonomy_exists($name)) {
+			$term  = get_term_by('slug', $value, $name);
+			$value = $term ? (string) $term->name : $value;
+		}
+
+		foreach ($properties as $i => $property) {
+			if ($property['key'] === 'attribute:' . $name) {
+				$properties[$i]['values'] = array(oko_plain_text($value));
+			}
+		}
+	}
+
+	return $properties;
 }

@@ -16,17 +16,45 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 		do_action( 'plugins_loaded' );
 	}
 
-	/** A global attribute, the kind WooCommerce stores as its own taxonomy. */
+	/**
+	 * A global attribute, the kind WooCommerce stores as its own taxonomy.
+	 *
+	 * Registered by hand rather than through `wc_create_attribute()`, which
+	 * lives in a WooCommerce include the test harness does not load, and the
+	 * lookup table filled at init is written to directly for the same reason.
+	 */
 	private function global_attribute( string $label, string $slug, string $value ): string {
-		$attribute_id = wc_create_attribute( array( 'name' => $label, 'slug' => $slug ) );
-		$taxonomy     = wc_attribute_taxonomy_name( $slug );
+		$taxonomy = wc_attribute_taxonomy_name( $slug );
 
-		register_taxonomy( $taxonomy, 'product', array( 'hierarchical' => false, 'label' => $label ) );
+		register_taxonomy( $taxonomy, 'product', array(
+			'hierarchical' => false,
+			'public'       => true,
+			'label'        => $label,
+		) );
 		wp_insert_term( $value, $taxonomy );
 
-		$this->assertIsInt( $attribute_id );
+		global $wc_product_attributes;
+		$wc_product_attributes[ $taxonomy ] = (object) array(
+			'attribute_id'      => 1,
+			'attribute_name'    => $slug,
+			'attribute_label'   => $label,
+			'attribute_type'    => 'select',
+			'attribute_orderby' => 'menu_order',
+			'attribute_public'  => 0,
+		);
 
 		return $taxonomy;
+	}
+
+	/** The same attribute, as it sits on a product. */
+	private function attribute_on_product( string $taxonomy, array $values ): \WC_Product_Attribute {
+		$attribute = new \WC_Product_Attribute();
+		$attribute->set_id( 1 );
+		$attribute->set_name( $taxonomy );
+		$attribute->set_options( $values );
+		$attribute->set_visible( true );
+
+		return $attribute;
 	}
 
 	private function find( array $properties, string $key ): ?array {
@@ -47,11 +75,7 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 		$product->save();
 		wp_set_object_terms( $product->get_id(), 'Danmark', $taxonomy );
 
-		$attribute = new \WC_Product_Attribute();
-		$attribute->set_id( wc_attribute_taxonomy_id_by_name( $taxonomy ) );
-		$attribute->set_name( $taxonomy );
-		$attribute->set_options( array( 'Danmark' ) );
-		$product->set_attributes( array( $attribute ) );
+		$product->set_attributes( array( $this->attribute_on_product( $taxonomy, array( 'Danmark' ) ) ) );
 		$product->save();
 
 		$properties = oko_product_properties( wc_get_product( $product->get_id() ) );
@@ -82,7 +106,7 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 	}
 
 	public function test_a_taxonomy_from_some_other_plugin_is_offered_as_well() {
-		register_taxonomy( 'product_brand', 'product', array( 'hierarchical' => false, 'label' => 'Mærker' ) );
+		register_taxonomy( 'product_brand', 'product', array( 'hierarchical' => false, 'public' => true, 'label' => 'Mærker' ) );
 		wp_insert_term( 'Hindsholm', 'product_brand' );
 
 		$product = new \WC_Product_Simple();
@@ -116,7 +140,7 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 	 * stored, the packing slip would print the entity itself.
 	 */
 	public function test_a_name_with_an_ampersand_arrives_as_the_shop_wrote_it() {
-		register_taxonomy( 'product_brand', 'product', array( 'hierarchical' => false, 'label' => 'Mærker' ) );
+		register_taxonomy( 'product_brand', 'product', array( 'hierarchical' => false, 'public' => true, 'label' => 'Mærker' ) );
 		wp_insert_term( 'Hansen & Søn', 'product_brand' );
 
 		$product = new \WC_Product_Simple();
