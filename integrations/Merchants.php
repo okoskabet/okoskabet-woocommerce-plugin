@@ -329,7 +329,10 @@ class Merchants extends Base {
 			}
 		}
 
-		return \oko_status_events_as_chosen( array_values( array_unique( $out ) ) );
+		// Saved as ticked. The old names are rewritten once by the migration;
+		// doing it again on every save would turn a shop's freshly chosen
+		// "I skabet" into "Udleveret" and make the real step unreachable.
+		return array_values( array_unique( $out ) );
 	}
 
 	private static function sanitize_id_list( array $list ): array {
