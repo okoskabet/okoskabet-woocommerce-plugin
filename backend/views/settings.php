@@ -263,8 +263,10 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				'desc'    => __('Choose which events from Økoskabet should capture the payment.', O_TEXTDOMAIN),
 				'id'      => '_capture_events',
 				'type'    => 'multicheck',
-				'options' => $oko_status_event_options,
-				'default' => array('label_printed'),
+				'options'    => $oko_status_event_options,
+				'default_cb' => function () {
+					return oko_event_default(array('label_printed'));
+				},
 			)
 		);
 
@@ -275,7 +277,9 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				'id'               => '_webhook_events',
 				'type'             => 'multicheck',
 				'options'          => $oko_status_event_options,
-				'default'          => array('fulfilled'),
+				'default_cb'       => function () {
+					return oko_event_default(array('fulfilled'));
+				},
 			)
 		);
 	}

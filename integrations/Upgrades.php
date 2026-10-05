@@ -95,7 +95,13 @@ class Upgrades extends Base {
 	 * merchant in the multi-merchant config.
 	 */
 	private function migrate_status_events(): void {
-		$option_key = O_TEXTDOMAIN . '_options';
+		// The settings live in `<textdomain>-settings`. `<textdomain>_options`
+		// is CMB2's id for the box that renders them, not the row they are
+		// saved in, and reading that one finds nothing at all. The older
+		// `label_created` migration above has the same mistake; it is left as
+		// it is, because it is marked done on every install that has run it
+		// and changing the key now would not reach them.
+		$option_key = O_TEXTDOMAIN . '-settings';
 		$settings   = get_option( $option_key, array() );
 
 		if ( is_array( $settings ) ) {

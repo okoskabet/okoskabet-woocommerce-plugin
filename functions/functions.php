@@ -2706,3 +2706,34 @@ function oko_variation_properties(\WC_Product_Variation $variation): array
 
 	return $properties;
 }
+
+/** Set once the shop has saved the plugin settings at least once. */
+const OKO_SETTINGS_SAVED_OPTION = 'okoskabet_settings_saved_once';
+
+add_action('cmb2_save_options-page_fields_' . O_TEXTDOMAIN . '_options', 'oko_remember_settings_were_saved', 5);
+
+/**
+ * Remember that the shop has been through the settings form.
+ *
+ * CMB2 shows a field's default whenever nothing is stored, and a multicheck
+ * with every box unticked stores nothing. Without this, a shop that turns
+ * completion off has it ticked again on the next page load, and there is no
+ * way to say "no event completes my orders". Knowing the form has been saved
+ * is what separates "never configured" from "configured as empty".
+ *
+ * @return void
+ */
+function oko_remember_settings_were_saved(): void
+{
+	update_option(OKO_SETTINGS_SAVED_OPTION, 1, false);
+}
+
+/**
+ * The default for one of the two event lists, for a shop that has never saved.
+ *
+ * @param array<string,mixed> $suggested What a fresh install should start with.
+ * @return array<int,string>
+ */
+function oko_event_default(array $suggested): array
+{
+	return get_option(OKO_SETTINGS_SAVED_OPTION) ? array() : $suggested;}
