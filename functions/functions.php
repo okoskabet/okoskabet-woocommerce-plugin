@@ -416,14 +416,19 @@ function custom_content_for_custom_shipping_checkout(): void
 		&& \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days($product_ids)
 	) {
 		// Both choices side by side, the current one marked with the theme's
-		// primary button style.
-		$pre_order = oko_is_pre_order_checkout();
-		$button    = '<button type="button" class="button okoskabet-pre-order-toggle%s" data-pre-order="%s" aria-pressed="%s">%s</button>';
-		$notice = $pre_order ? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_notice() : '';
+		// primary button style — but only choices the basket actually has. A
+		// basket held to a date further ahead than the ordinary delivery days
+		// has no ordinary order to go back to, and a button that leads to an
+		// empty date list is worse than no button.
+		$pre_order  = oko_is_pre_order_checkout();
+		$only_pre   = oko_cart_is_pre_order_only();
+		$button     = '<button type="button" class="button okoskabet-pre-order-toggle%s" data-pre-order="%s" aria-pressed="%s">%s</button>';
+		$notice     = $pre_order ? \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_notice() : '';
+		$normal_btn = $only_pre ? '' : sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label()));
 		printf(
 			'<tr class="okoskabet-pre-order-row" style="display:none"><td colspan="2"><div class="okoskabet-order-type">%s%s%s</div></td></tr>',
 			$notice !== '' ? '<div class="okoskabet-pre-order-notice" style="grid-column:1/-1;box-sizing:border-box;padding:10px 12px;border:1px solid currentColor;font-weight:normal;font-size:0.9em;line-height:1.35;text-transform:none;">' . nl2br(esc_html($notice)) . '</div>' : '',
-			sprintf($button, $pre_order ? '' : ' alt', '', $pre_order ? 'false' : 'true', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::normal_order_label())),
+			$normal_btn,
 			sprintf($button, $pre_order ? ' alt' : '', '1', $pre_order ? 'true' : 'false', esc_html(\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_label()))
 		);
 	}
@@ -1483,13 +1488,47 @@ function oko_is_pre_order_checkout(): bool
  */
 function oko_pre_order_checkout_requested(): bool
 {
+	// A basket that can only be pre-ordered is one, whatever the page says.
+	// The way back is not offered for such a basket, so honouring a stale
+	// "no" from a link or an old form would strand the customer in a checkout
+	// with no date and no button.
+	if (oko_cart_is_pre_order_only()) {
+		return true;
+	}
+
+	// What the customer arranged for themselves, when moving items between the
+	// two deliveries left only one. It is read before anything is decided, so
+	// an explicit choice below can overrule it — and when it does, the
+	// arrangement is dropped rather than left to fight the next page.
+	$settled = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Split_Checkout')
+		? \okoskabet_woocommerce_plugin\Integrations\Split_Checkout::settled_mode()
+		: null;
+
 	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
 	if (isset($_POST['billing_okoskabet_pre_order']) || isset($_POST['post_data'])) {
 		$wanted = oko_is_pre_order_checkout();
 	} elseif (isset($_GET['oko_pre_order'])) {
 		$wanted = (string) wp_unslash($_GET['oko_pre_order']) === '1';
+	} elseif ($settled !== null) {
+		$wanted = $settled;
 	} else {
-		$wanted = false;
+		// Nobody has said anything, and the basket has no ordinary day its
+		// whole contents share — but it does share one as a pre-order. Then
+		// that is what it is, and the ordinary button is still there for the
+		// customer who would rather split it and have part of it now.
+		// Asked once per request, through one instance: working it out means
+		// asking Økoskabet for each product's days, and this function is called
+		// many times while a checkout renders.
+		static $basket_wants = null;
+		if ($basket_wants === null) {
+			$basket_wants = class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Split_Checkout')
+				&& ( new \okoskabet_woocommerce_plugin\Integrations\Split_Checkout() )->basket_wants_pre_order();
+		}
+		$wanted = $basket_wants;
+	}
+
+	if ($settled !== null && $settled !== $wanted) {
+		\okoskabet_woocommerce_plugin\Integrations\Split_Checkout::forget_settled_mode();
 	}
 	// phpcs:enable WordPress.Security.NonceVerification
 
@@ -1520,6 +1559,27 @@ function oko_cart_can_pre_order(): bool
 }
 
 /**
+ * Whether the basket holds nothing but goods pinned to a date further ahead
+ * than the ordinary delivery days — so an ordinary order is not on offer.
+ */
+function oko_cart_is_pre_order_only(): bool
+{
+	if (! function_exists('WC') || ! WC()->cart || ! class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
+		return false;
+	}
+
+	$product_ids = array();
+	foreach (WC()->cart->get_cart() as $item) {
+		$pid = (int) ($item['product_id'] ?? 0);
+		if ($pid > 0) {
+			$product_ids[] = $pid;
+		}
+	}
+
+	return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_is_pre_order_only($product_ids);
+}
+
+/**
  * The checkout URL for an ordinary order, and for a pre-order.
  *
  * A pre-order is a choice about the page the customer is on, so it travels in
@@ -1529,7 +1589,10 @@ function oko_checkout_url_for_mode(bool $pre_order): string
 {
 	$url = function_exists('wc_get_checkout_url') ? wc_get_checkout_url() : home_url('/');
 
-	return $pre_order ? add_query_arg('oko_pre_order', '1', $url) : remove_query_arg('oko_pre_order', $url);
+	// Both modes name themselves. "No parameter" cannot mean an ordinary order
+	// any more: a basket that can only be pre-ordered starts as a pre-order,
+	// and the way back has to outrank that.
+	return add_query_arg('oko_pre_order', $pre_order ? '1' : '0', $url);
 }
 
 /**

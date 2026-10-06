@@ -259,18 +259,40 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 			)
 		);
 
-		$cmb->add_field(
-			array(
-				'name'    => __('Capture events', O_TEXTDOMAIN),
-				'desc'    => __('Choose which events from Økoskabet should capture the payment.', O_TEXTDOMAIN),
-				'id'      => '_capture_events',
-				'type'    => 'multicheck',
-				'options'    => $oko_status_event_options,
-				'default_cb' => function () {
-					return oko_event_default(array('label_printed'));
-				},
-			)
-		);
+		// Only where the shop's gateway can actually take the money on one of
+		// these events. Nexi and its kin charge the card when the order is
+		// COMPLETED, so for them this list would promise something that never
+		// happens — the completion events below are what fetches the money.
+		$oko_gateway = (string) (o_get_settings()['_payment_gateway'] ?? 'auto');
+		if (\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop(
+			$oko_gateway,
+			\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::enabled_gateway_ids()
+		)) {
+			$cmb->add_field(
+				array(
+					'name'    => __('Capture events', O_TEXTDOMAIN),
+					'desc'    => __('Choose which events from Økoskabet should capture the payment.', O_TEXTDOMAIN),
+					'id'      => '_capture_events',
+					'type'    => 'multicheck',
+					// The steps the merchant's own account reports, so a step
+					// Økoskabet adds later reaches these choices without a
+					// plugin release.
+					'options'    => $oko_status_event_options,
+					'default_cb' => function () {
+						return oko_event_default(array('label_printed'));
+					},
+				)
+			);
+		} else {
+			$cmb->add_field(
+				array(
+					'name' => __('Capture events', O_TEXTDOMAIN),
+					'desc' => __('Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged.', O_TEXTDOMAIN),
+					'id'   => '_capture_events_not_available',
+					'type' => 'title',
+				)
+			);
+		}
 
 		$cmb->add_field(
 			array(

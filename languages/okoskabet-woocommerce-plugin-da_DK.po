@@ -1194,8 +1194,8 @@ msgstr "Knap til forudbestilling"
 msgid "Back to normal order"
 msgstr "Knap tilbage til normal bestilling"
 
-msgid "A day marked as a pre-order is not offered in the normal checkout. The customer presses the pre-order button under Shipping and then sees only the pre-order days."
-msgstr "En dag markeret som forudbestilling vises ikke ved normal bestilling. Kunden trykker på forudbestillingsknappen under Forsendelse og ser så kun forudbestillingsdagene."
+msgid "A date further ahead than your normal number of delivery days is treated as a pre-order: it is not offered in the normal checkout, and the customer reaches it with the pre-order button under Shipping. A date within the normal days is simply the only day offered."
+msgstr "En dato, der ligger længere ude end jeres normale antal leveringsdage, er en forudbestilling: den vises ikke i den normale kasse, og kunden når den med forudbestillingsknappen under Forsendelse. Ligger datoen inden for de normale dage, er den blot den eneste dag, der tilbydes."
 
 msgid "Postcodes without delivery days"
 msgstr "Postnumre uden leveringsdage"
@@ -1446,3 +1446,69 @@ msgstr "Opdelt levering er gemt."
 
 msgid "Save split delivery"
 msgstr "Gem opdelt levering"
+
+msgid "These items can only be pre-ordered"
+msgstr "Varerne kan kun forudbestilles"
+
+msgid "They are delivered on a fixed day further ahead than the ordinary delivery days. Press \"%s\" above to see the date."
+msgstr "De leveres på en fast dag, der ligger længere ude end de almindelige leveringsdage. Tryk på \"%s\" ovenfor for at se datoen."
+
+msgid "Headline: the basket needs more than one day"
+msgstr "Overskrift: kurven skal bruge mere end én dag"
+
+msgid "The headline above the two buttons when the items in the basket cannot be delivered on the same day. Leave empty for \"Varerne i din kurv kan ikke leveres på samme dag\"."
+msgstr "Overskriften over de to knapper, når varerne i kurven ikke kan leveres på samme dag. Lad feltet stå tomt for \"Varerne i din kurv kan ikke leveres på samme dag\"."
+
+msgid "Text under that headline"
+msgstr "Tekst under overskriften"
+
+msgid "What the customer is being offered, in your own words. Leave empty for the built-in wording."
+msgstr "Hvad kunden bliver tilbudt, skrevet med jeres egne ord. Lad feltet stå tomt for den indbyggede tekst."
+
+msgid "Headline: only part of the basket can be pre-ordered"
+msgstr "Overskrift: kun en del af kurven kan forudbestilles"
+
+msgid "The headline when the basket crosses a pre-order and an ordinary delivery. Leave empty for \"Kun en del af din kurv kan forudbestilles\"."
+msgstr "Overskriften, når kurven både rummer en forudbestilling og en almindelig levering. Lad feltet stå tomt for \"Kun en del af din kurv kan forudbestilles\"."
+
+msgid "The same, for the pre-order case. Leave empty for the built-in wording."
+msgstr "Det samme, men for forudbestillinger. Lad feltet stå tomt for den indbyggede tekst."
+
+msgid "Keep only this one"
+msgstr "Behold kun denne"
+
+msgid "Button: keep only this delivery"
+msgstr "Knap: behold kun denne levering"
+
+msgid "What the small button beside each delivery says. It keeps that delivery and takes the other items out of the basket. Leave empty for \"Behold kun denne\"."
+msgstr "Hvad den lille knap ved siden af hver levering siger. Den beholder den levering og tager de øvrige varer ud af kurven. Lad feltet stå tomt for \"Behold kun denne\"."
+
+msgid "Cannot be pre-ordered: categories"
+msgstr "Kan ikke forudbestilles: kategorier"
+
+msgid "Cannot be pre-ordered: tags"
+msgstr "Kan ikke forudbestilles: tags"
+
+msgid "Goods you will not hold for a later date — fresh produce and the like. They are never offered a pre-order day, whichever rule opens one. A basket holding them is offered the split instead: the rest as a pre-order, these on an ordinary delivery."
+msgstr "Varer, I ikke vil gemme til en senere dato — frisk frugt og grønt og den slags. De får aldrig en forudbestillingsdag, uanset hvilken regel der åbner en. En kurv med dem i får i stedet tilbudt opdelingen: resten som forudbestilling, disse med en almindelig levering."
+
+msgid "Move %1$s to %2$s"
+msgstr "Flyt %1$s til %2$s"
+
+msgid "Could not move that item. Please try again."
+msgstr "Varen kunne ikke flyttes. Prøv igen."
+
+msgid "That item cannot go in that delivery."
+msgstr "Den vare kan ikke komme med i den levering."
+
+msgid "Nothing to move"
+msgstr "Der er ikke noget at flytte"
+
+msgid "Applies to every product"
+msgstr "Gælder alle varer"
+
+msgid "The window covers the whole catalogue. What cannot wait is named once, under the pre-order settings, rather than category by category here."
+msgstr "Vinduet gælder hele sortimentet. Det, der ikke kan vente, nævnes ét sted under forudbestillingsindstillingerne i stedet for kategori for kategori her."
+
+msgid "Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged."
+msgstr "Jeres betalingsløsning hæver pengene, når ordren markeres som gennemført, og ikke før. Vælg nedenfor hvilket event der skal gennemføre ordren — det er samtidig det øjeblik, kunden bliver trukket."

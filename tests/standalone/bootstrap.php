@@ -63,6 +63,10 @@ function oko_test_reset(): void {
 	// grouping want the rules to be the only thing narrowing the days; tests
 	// about the dates themselves set a sparse, realistic calendar.
 	$GLOBALS['oko_test_delivery_days'] = oko_test_days_ahead( 28 );
+	// As many normal days ahead as there are deliveries, so a date a test names
+	// is an ordinary delivery day unless the test says otherwise. Tests about
+	// pre-orders set their own window with oko_test_set_merchant_days().
+	oko_test_set_merchant_days( 28 );
 	oko_test_set_pre_order( false );
 	\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::purge_rules_cache();
 	oko_test_set_cart( array() );
@@ -214,6 +218,23 @@ function o_get_settings() {
 	return $GLOBALS['oko_test_settings'];
 }
 
+/**
+ * The merchant record. The exceptions only ever read the normal number of days
+ * ahead from it — the window the checkout asks Økoskabet for, and the line
+ * between an ordinary delivery day and a pre-order.
+ */
+function o_get_merchant( ?string $id = null ) {
+	return array(
+		'id'                     => 'default',
+		'maximum_days_in_future' => max( 1, (int) ( $GLOBALS['oko_test_settings']['_maximum_days_in_future'] ?? 3 ) ),
+	);
+}
+
+/** Set the shop's normal number of delivery days ahead. */
+function oko_test_set_merchant_days( int $days ): void {
+	$GLOBALS['oko_test_settings']['_maximum_days_in_future'] = $days;
+}
+
 /** A cart that answers the handful of questions the code under test asks it. */
 class Oko_Test_Cart {
 
@@ -351,6 +372,9 @@ function oko_test_set_cart( array $items ): void {
 require_once dirname( __DIR__, 2 ) . '/engine/Base.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Delivery_Exceptions.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Split_Checkout.php';
+// Only the gateway table is exercised here; the capture calls themselves need
+// a live gateway and belong to the wpunit suite.
+require_once dirname( __DIR__, 2 ) . '/integrations/Payment_Capture.php';
 
 /**
  * The days the shop drives on, as Økoskabet would answer for this address.
@@ -404,6 +428,16 @@ class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations
 
 		return ( new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions() )
 			->filter_dates_for_cart( $days, $product_ids, $pre_order );
+	}
+
+	/**
+	 * Move a line the way the AJAX endpoint does, without the HTTP request:
+	 * the endpoint itself only checks the nonce and answers in JSON.
+	 */
+	public function ajax_move_split_item_for_test( string $key, string $target ): void {
+		$moves         = (array) $GLOBALS['oko_test_wc']->session->get( 'oko_split_moves', array() );
+		$moves[ $key ] = $target;
+		$GLOBALS['oko_test_wc']->session->set( 'oko_split_moves', $moves );
 	}
 
 	/** The banner's own wording for a group, which is otherwise internal. */
