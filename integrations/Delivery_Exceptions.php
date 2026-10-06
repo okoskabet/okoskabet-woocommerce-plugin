@@ -1214,7 +1214,7 @@ class Delivery_Exceptions extends Base {
 			// however wide a display window the section is allowed. A from/until
 			// pre-order window is left alone: it opens days without closing the
 			// normal ones, so its range may well cover next week too.
-			$far    = self::far_only_on_ranges( $applicable_rules, $config );
+			$far    = self::far_only_on_ranges( $applicable_rules, $config, $dates, $product_ids );
 			$result = array_values( array_filter( $result, function ( string $date ) use ( $far ): bool {
 				return ! self::date_in_ranges( $date, $far );
 			} ) );
@@ -1855,8 +1855,10 @@ class Delivery_Exceptions extends Base {
 	private static function merchant_for_products( array $product_ids ): array {
 		if ( ! empty( $product_ids ) && class_exists( Merchant_Router::class ) ) {
 			$resolved = Merchant_Router::resolve_for_products( $product_ids );
-			if ( is_array( $resolved ) && ! empty( $resolved ) ) {
-				return $resolved;
+			// The router answers with a routing decision; the merchant record
+			// is one field of it.
+			if ( is_array( $resolved['merchant'] ?? null ) && ! empty( $resolved['merchant'] ) ) {
+				return $resolved['merchant'];
 			}
 		}
 
