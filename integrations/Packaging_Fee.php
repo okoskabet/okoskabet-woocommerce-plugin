@@ -568,9 +568,13 @@ class Packaging_Fee extends Base {
 			}
 		}
 
+		// Rounded to WooCommerce's internal precision, not the display
+		// decimals: the ex-VAT part of a typed incl-VAT price rarely has an
+		// exact display value, and rounding it before VAT is added back put
+		// one amount in five a unit off (17 kr typed, 18 kr charged).
 		$cart->add_fee(
 			$rule['label'],
-			round( $amount, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 ),
+			round( $amount, function_exists( 'wc_get_rounding_precision' ) ? wc_get_rounding_precision() : 6 ),
 			$config['taxable'],
 			$config['tax_class']
 		);

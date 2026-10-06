@@ -133,6 +133,38 @@ class PackagingFeeCartTest extends \Codeception\TestCase\WPTestCase {
 
 	/**
 	 * @test
+	 * @dataProvider amounts_incl_vat
+	 * Exactly what was typed, to the øre, in a shop with two price decimals
+	 * and in one with none. Rounding the ex-VAT part to the display decimals
+	 * before WooCommerce adds VAT back on threw one in five amounts off by a
+	 * unit: 17 kr typed, 18 kr charged.
+	 */
+	public function a_fee_entered_incl_vat_is_charged_to_the_minor_unit( int $decimals, string $typed ) {
+		update_option( 'woocommerce_price_num_decimals', $decimals );
+		$this->add_product();
+		$this->save_fee( array( $this->rule( array( 'amount' => $typed ) ) ) );
+
+		$this->fees();
+
+		$this->assertSame(
+			number_format( (float) $typed, $decimals, '.', '' ),
+			number_format( (float) WC()->cart->get_total( 'edit' ), $decimals, '.', '' )
+		);
+	}
+
+	public function amounts_incl_vat(): array {
+		$cases = array();
+		foreach ( array( '0.02', '0.03', '17.07', '17.08', '24.97', '24.98', '28.00', '29.95', '199.97', '199.98' ) as $a ) {
+			$cases[ "2 decimals, $a" ] = array( 2, $a );
+		}
+		foreach ( array( '2', '3', '17', '18', '28', '197', '198' ) as $a ) {
+			$cases[ "0 decimals, $a" ] = array( 0, $a );
+		}
+		return $cases;
+	}
+
+	/**
+	 * @test
 	 * "Amounts are excl. VAT" means exactly that: the amount goes in as typed
 	 * and VAT is added on top.
 	 */
