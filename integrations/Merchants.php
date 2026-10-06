@@ -531,6 +531,18 @@ class Merchants extends Base {
 				$existing[ $merchant_key ] = ! empty( $option[ $opt_key ] );
 				continue;
 			}
+			// The same goes for the two event lists: a multicheck with every
+			// box unticked is absent too, and that is the shop saying "no
+			// event", not "leave it as it was". Only when the list was on the
+			// form, though — a list the form left out says nothing at all.
+			if (
+				( $merchant_key === 'capture_events' || $merchant_key === 'webhook_events' )
+				&& $cmb instanceof \CMB2
+				&& $cmb->get_field( $opt_key )
+			) {
+				$existing[ $merchant_key ] = (array) ( $option[ $opt_key ] ?? array() );
+				continue;
+			}
 			if ( ! array_key_exists( $opt_key, $option ) ) {
 				continue;
 			}
