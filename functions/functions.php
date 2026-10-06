@@ -2567,12 +2567,7 @@ function oko_product_properties(\WC_Product $product): array
 			// key is built from it — renaming such an attribute really is a
 			// different field, which is the one case where the key may move.
 			$name   = (string) $attribute->get_name();
-			// Through Danish accent folding whatever language the site is in.
-			// `sanitize_title` folds accents by locale, so "Fødeland" keys as
-			// `fodeland` under English and `foedeland` under Danish, and the
-			// shop's choice at Økoskabet would fall away the day the site
-			// changed language.
-			$key    = 'attribute:' . sanitize_title(remove_accents($name, 'da_DK'));
+			$key    = oko_local_attribute_key($name);
 			$label  = $name;
 			$values = (array) $attribute->get_options();
 		}
@@ -2624,6 +2619,22 @@ function oko_product_properties(\WC_Product $product): array
 	}
 
 	return $properties;
+}
+
+/**
+ * The key for an attribute written straight on the product.
+ *
+ * Through Danish accent folding whatever language the site is in.
+ * `sanitize_title` folds accents by locale, so "Fødeland" keys as `fodeland`
+ * under English and `foedeland` under Danish, and the shop's choice at
+ * Økoskabet would fall away the day the site changed language.
+ *
+ * @param string $name The attribute's name as the shop typed it.
+ * @return string
+ */
+function oko_local_attribute_key(string $name): string
+{
+	return 'attribute:' . sanitize_title(remove_accents($name, 'da_DK'));
 }
 
 /**
@@ -2702,20 +2713,35 @@ function oko_variation_properties(\WC_Product_Variation $variation): array
 
 	$properties = oko_product_properties($parent);
 
+	// WooCommerce keys a variation's choice by the parent attribute's name run
+	// through `sanitize_title` in the site's language, so on an English site
+	// "Fødeland" is `fodeland` here while its field is `attribute:foedeland`.
+	// The parent's own attribute is what gets from one to the other.
+	$attributes = array();
+	foreach ($parent->get_attributes() as $attribute) {
+		if ($attribute instanceof \WC_Product_Attribute) {
+			$attributes[sanitize_title((string) $attribute->get_name())] = $attribute;
+		}
+	}
+
 	foreach ($variation->get_attributes() as $name => $value) {
-		$value = (string) $value;
-		if ($value === '') {
+		$value     = (string) $value;
+		$attribute = $attributes[(string) $name] ?? null;
+		if ($value === '' || $attribute === null) {
 			continue;
 		}
 
-		$name = (string) $name;
-		if (taxonomy_exists($name)) {
-			$term  = get_term_by('slug', $value, $name);
-			$value = $term ? (string) $term->name : $value;
+		if ($attribute->is_taxonomy()) {
+			$taxonomy = (string) $attribute->get_taxonomy();
+			$key      = 'attribute:' . $taxonomy;
+			$term     = get_term_by('slug', $value, $taxonomy);
+			$value    = $term ? (string) $term->name : $value;
+		} else {
+			$key = oko_local_attribute_key((string) $attribute->get_name());
 		}
 
 		foreach ($properties as $i => $property) {
-			if ($property['key'] === 'attribute:' . $name) {
+			if ($property['key'] === $key) {
 				$properties[$i]['values'] = array(oko_plain_text($value));
 			}
 		}

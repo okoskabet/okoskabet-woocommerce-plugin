@@ -165,6 +165,50 @@ class ProductPropertiesTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertSame( array( 'Spanien' ), $found['values'], 'the variation is the one that was bought' );
 	}
 
+	/**
+	 * WooCommerce keys a variation's choice by the attribute name folded in the
+	 * site's language: "Fødeland" is `fodeland` on an English site. The field's
+	 * own key is folded the Danish way whatever the language, `foedeland`. On
+	 * any site but a Danish one the two must still be found to be the same
+	 * field, or the slip prints every country the parent could have been.
+	 */
+	public function test_a_variation_answers_with_its_own_choice_on_an_english_site() {
+		add_filter( 'locale', function () {
+			return 'en_US';
+		} );
+
+		$parent = new \WC_Product_Variable();
+		$parent->set_name( 'Jordbær' );
+		$attributes = array();
+		foreach ( array( 'Fødeland', 'Årgang' ) as $name ) {
+			$attribute = new \WC_Product_Attribute();
+			$attribute->set_name( $name );
+			$attribute->set_options( array( 'Danmark', 'Spanien' ) );
+			$attribute->set_visible( true );
+			$attribute->set_variation( true );
+			$attributes[] = $attribute;
+		}
+		$parent->set_attributes( $attributes );
+		$parent->save();
+
+		// What WooCommerce's own variation form saves.
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $parent->get_id() );
+		$variation->set_attributes( array(
+			sanitize_title( 'Fødeland' ) => 'Spanien',
+			sanitize_title( 'Årgang' )   => 'Spanien',
+		) );
+		$variation->save();
+
+		$properties = oko_product_properties( wc_get_product( $variation->get_id() ) );
+
+		foreach ( array( 'attribute:foedeland', 'attribute:aargang' ) as $key ) {
+			$found = $this->find( $properties, $key );
+			$this->assertNotNull( $found, "$key keeps its Danish key on an English site" );
+			$this->assertSame( array( 'Spanien' ), $found['values'], "$key is the one that was bought" );
+		}
+	}
+
 	public function test_tags_are_not_offered_twice() {
 		$product = new \WC_Product_Simple();
 		$product->set_name( 'Is' );
