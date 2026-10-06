@@ -65,14 +65,16 @@ class MerchantsTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertSame( 1, $normalised['maximum_days_in_future'] );
 		// Unknown gateway → 'auto'.
 		$this->assertSame( 'auto', $normalised['payment_gateway'] );
-		// The old names mean what they always meant: the step where the customer
-		// has the goods. Free text is reduced to a slug rather than thrown away,
-		// because the choices come from Økoskabet and may outgrow this release.
+		// Saved as ticked: normalising must not rename. The old names are
+		// rewritten once, by the rename_status_events_v1 migration; renaming on
+		// every read would turn a freshly ticked `in_shed` into `fulfilled`.
+		// Free text is reduced to a slug rather than thrown away, because the
+		// choices come from Økoskabet and may outgrow this release.
 		$this->assertSame(
-			array( 'label_printed', 'nogetandet', 'fulfilled' ),
+			array( 'label_printed', 'nogetandet', 'label_created' ),
 			array_values( $normalised['capture_events'] )
 		);
-		$this->assertSame( array( 'fulfilled' ), array_values( $normalised['webhook_events'] ) );
+		$this->assertSame( array( 'order_delivered' ), array_values( $normalised['webhook_events'] ) );
 		// Non-positive / non-numeric category IDs filtered out.
 		$this->assertSame( array( 10, 20 ), $normalised['product_categories'] );
 	}
