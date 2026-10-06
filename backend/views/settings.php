@@ -232,6 +232,13 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 	);
 
 	if ( ! $oko_multi_merchant_active ) {
+		// The steps a shipment passes, as this shop's own Økoskabet account
+		// reports them, plus the label print — which is not a step but the
+		// moment the boxes come into being. Read from the account so a step
+		// added later can be chosen without a plugin release.
+		$oko_status_event_options = array( 'label_printed' => __('Label printed', O_TEXTDOMAIN) )
+			+ oko_merchant_statuses( 'default' );
+
 		$cmb->add_field(
 			array(
 				'name'    => __('Payment Gateway', O_TEXTDOMAIN),
@@ -256,12 +263,10 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				'desc'    => __('Choose which events from Økoskabet should capture the payment.', O_TEXTDOMAIN),
 				'id'      => '_capture_events',
 				'type'    => 'multicheck',
-				'options' => array(
-					'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
-					'in_shed'         => __('In Shed', O_TEXTDOMAIN),
-					'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
-				),
-				'default' => array('label_printed'),
+				'options'    => $oko_status_event_options,
+				'default_cb' => function () {
+					return oko_event_default(array('label_printed'));
+				},
 			)
 		);
 
@@ -271,12 +276,10 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				'desc'             => __('Choose which events from Økoskabet should mark the order as completed.', O_TEXTDOMAIN),
 				'id'               => '_webhook_events',
 				'type'             => 'multicheck',
-				'options'          => array(
-					'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
-					'in_shed'         => __('In Shed', O_TEXTDOMAIN),
-					'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
-				),
-				'default'          => array('order_delivered'),
+				'options'          => $oko_status_event_options,
+				'default_cb'       => function () {
+					return oko_event_default(array('fulfilled'));
+				},
 			)
 		);
 	}

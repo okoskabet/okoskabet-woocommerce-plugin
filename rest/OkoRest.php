@@ -942,28 +942,31 @@ class OkoRest extends Base
 		$raw_event          = isset($params['event']) ? sanitize_text_field($params['event']) : '';
 		$shipment_reference = isset($params['shipment_reference']) ? sanitize_text_field($params['shipment_reference']) : '';
 
+		// A status is its own event, under the name Økoskabet reports it by.
+		// It used to be three names translated by hand here, which meant a step
+		// nobody had written a branch for could never reach a shop — and one of
+		// the three, `delivered`, is a status Økoskabet has never sent, so the
+		// choice built on it could not fire at all.
 		$internal_event = null;
 		if ($raw_event === 'reservation_updated') {
 			$parcels_previous = isset($params['changes']['parcels']['previous']) ? $params['changes']['parcels']['previous'] : null;
 			$parcels_value    = isset($params['changes']['parcels']['value']) ? $params['changes']['parcels']['value'] : null;
 			if (is_array($parcels_previous) && is_array($parcels_value)
 				&& count($parcels_previous) === 0 && count($parcels_value) > 0) {
+				// Not a status: the moment the boxes come into being.
 				$internal_event = 'label_printed';
 			} elseif (!empty($params['changes']['status']['value'])) {
-				$new_status = sanitize_text_field($params['changes']['status']['value']);
-				if ($new_status === 'fulfilled') {
-					$internal_event = 'in_shed';
-				} elseif ($new_status === 'delivered') {
-					$internal_event = 'order_delivered';
-				}
+				$internal_event = sanitize_text_field($params['changes']['status']['value']);
 			}
 		}
 
-		// Backwards-compat: still remap legacy label_created at runtime.
-		$webhook_events_raw = (array) ($merchant['webhook_events'] ?? array());
-		$capture_events_raw = (array) ($merchant['capture_events'] ?? array());
-		$webhook_events = array_map(function ($e) { return $e === 'label_created' ? 'in_shed' : $e; }, $webhook_events_raw);
-		$capture_events = array_map(function ($e) { return $e === 'label_created' ? 'in_shed' : $e; }, $capture_events_raw);
+		// As the shop saved them. The old names are rewritten once, by the
+		// migration, and translating again here would undo a shop's own
+		// choice: a freshly ticked "I skabet" is the real `in_shed` step, and
+		// rewriting it to `fulfilled` would mean that step could never be
+		// chosen and never fire.
+		$webhook_events = (array) ($merchant['webhook_events'] ?? array());
+		$capture_events = (array) ($merchant['capture_events'] ?? array());
 
 		if ($internal_event === null) {
 			if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -1059,7 +1062,25 @@ class OkoRest extends Base
 
 		// --- Step 7: Mark order as completed if this event triggers completion ---
 		if ($triggers_complete) {
-			if ($order->get_status() !== 'completed') {
+			// A delivery says nothing about an order the shop has already
+			// settled. Cancelled, refunded and failed orders are done with,
+			// and an order nobody has paid for is not one to call finished:
+			// completing it tells the customer their order is on its way and,
+			// on a gateway that charges at completion, asks for the money
+			// without anything behind it. The parcel can still arrive late in
+			// a courier's feed long after a shop cancelled the order, so this
+			// is an ordinary Tuesday rather than an edge case.
+			$settled = array('cancelled', 'refunded', 'failed', 'trash');
+			if (in_array($order->get_status(), $settled, true) || ! $order->is_paid()) {
+				if (defined('WP_DEBUG') && WP_DEBUG) {
+					error_log(sprintf(
+						'Økoskabet webhook: not completing order %s — status "%s", paid: %s',
+						$shipment_reference,
+						$order->get_status(),
+						$order->is_paid() ? 'yes' : 'no'
+					));
+				}
+			} elseif ($order->get_status() !== 'completed') {
 				$order->update_status('completed', sprintf(
 					/* translators: %s = internal event name */
 					__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),

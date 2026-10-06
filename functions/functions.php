@@ -115,9 +115,119 @@ function o_check_configuration(string $value, ?string $merchant_id = null): bool
  * string produce a cache that can never be cleared — which is exactly the
  * bug this replaced.
  */
+function o_configuration_transient_key(string $merchant_id): string
+{
+	return O_TEXTDOMAIN . '_configuration_' . sanitize_key($merchant_id);
+}
+
+/** Kept under its old name: shops upgrade mid-request, and the old key is still in the table. */
 function o_shipping_methods_transient_key(string $merchant_id): string
 {
 	return O_TEXTDOMAIN . '_shipping_methods_' . sanitize_key($merchant_id);
+}
+
+/**
+ * What this merchant's Økoskabet account says about itself.
+ *
+ * One answer, cached for five minutes per merchant and memoised for the
+ * request, because several things ask: which shipping methods exist, which
+ * steps a shipment passes. Asking once means one timeout rather than one per
+ * question when Økoskabet is unreachable.
+ *
+ * An empty array is the answer when the account has no key, when the call
+ * fails, or when the body is not what we expect. Every caller has to cope with
+ * that anyway — a shop whose checkout is being loaded while Økoskabet is down
+ * still has to render.
+ *
+ * @param string $merchant_id
+ * @return array<string,mixed>
+ */
+function oko_merchant_configuration(string $merchant_id): array
+{
+	static $asked = array();
+
+	if (array_key_exists($merchant_id, $asked)) {
+		return $asked[$merchant_id];
+	}
+
+	$transient_key = o_configuration_transient_key($merchant_id);
+	$cached        = get_transient($transient_key);
+
+	if (is_array($cached)) {
+		$asked[$merchant_id] = $cached;
+		return $cached;
+	}
+
+	$merchant = o_get_merchant($merchant_id);
+	if (empty($merchant['api_key'])) {
+		$asked[$merchant_id] = array();
+		return array();
+	}
+
+	$response = wp_remote_get(o_merchant_api_url($merchant) . '/api/v1/configuration', array(
+		'timeout' => 10,
+		'headers' => array(
+			'Authorization' => $merchant['api_key'],
+		),
+	));
+
+	if (is_wp_error($response)
+		|| wp_remote_retrieve_response_code($response) !== 200
+		|| empty(wp_remote_retrieve_body($response))) {
+		$asked[$merchant_id] = array();
+		return array();
+	}
+
+	$configuration = json_decode(wp_remote_retrieve_body($response), true);
+	if (! is_array($configuration)) {
+		$configuration = array();
+	}
+
+	set_transient($transient_key, $configuration, 5 * MINUTE_IN_SECONDS);
+	$asked[$merchant_id] = $configuration;
+
+	return $configuration;
+}
+
+/**
+ * The steps a shipment of this merchant's passes, as code => name.
+ *
+ * Read from the account rather than kept as a list here, so a step Økoskabet
+ * adds later reaches the shop's own choices without a plugin release. The
+ * fallback is for an account whose Økoskabet does not publish the list yet:
+ * the steps that existed when this was written, so the settings screen is
+ * never empty.
+ *
+ * @param string $merchant_id
+ * @return array<string,string>
+ */
+function oko_merchant_statuses(string $merchant_id): array
+{
+	$published = oko_merchant_configuration($merchant_id)['statuses'] ?? array();
+
+	$statuses = array();
+	foreach ((array) $published as $status) {
+		$code = isset($status['code']) ? (string) $status['code'] : '';
+		if ($code === '') {
+			continue;
+		}
+		$statuses[$code] = isset($status['label']) && (string) $status['label'] !== ''
+			? (string) $status['label']
+			: $code;
+	}
+
+	if (! empty($statuses)) {
+		return $statuses;
+	}
+
+	return array(
+		'registered'         => __('Registered', O_TEXTDOMAIN),
+		'ready_for_dispatch' => __('Ready for dispatch', O_TEXTDOMAIN),
+		'received'           => __('Received', O_TEXTDOMAIN),
+		'in_shed'            => __('In shed', O_TEXTDOMAIN),
+		'fulfilled'          => __('Fulfilled', O_TEXTDOMAIN),
+		'removed'            => __('Removed', O_TEXTDOMAIN),
+	);
 }
 
 /**
@@ -126,61 +236,15 @@ function o_shipping_methods_transient_key(string $merchant_id): string
  */
 function o_merchant_supports_method(string $merchant_id, string $method_code): bool
 {
-	// Answered once per request per merchant. Registration asks this for every
-	// Økoskabet method, so without the static a page load repeats the same
-	// lookup — and, when the API is unreachable, the same 10-second timeout —
-	// once per method.
-	static $asked = array();
+	$configuration = oko_merchant_configuration($merchant_id);
 
-	$transient_key = o_shipping_methods_transient_key($merchant_id);
-
-	if (array_key_exists($merchant_id, $asked)) {
-		$shipping_methods = $asked[$merchant_id];
-		return is_array($shipping_methods) && ! empty($shipping_methods[$method_code]);
+	foreach ((array) ($configuration['shipping_methods'] ?? array()) as $method) {
+		if (isset($method['method_code']) && $method['method_code'] === $method_code) {
+			return true;
+		}
 	}
 
-	$shipping_methods = get_transient($transient_key);
-
-	if ($shipping_methods === false) {
-		$merchant = o_get_merchant($merchant_id);
-		if (empty($merchant['api_key'])) {
-			$asked[$merchant_id] = false;
-			return false;
-		}
-
-		$response = wp_remote_get(o_merchant_api_url($merchant) . '/api/v1/configuration', array(
-			'timeout' => 10,
-			'headers' => array(
-				'Authorization' => $merchant['api_key'],
-			),
-		));
-
-		if (is_wp_error($response)) {
-			$asked[$merchant_id] = false;
-			return false;
-		}
-
-		$http_code = wp_remote_retrieve_response_code($response);
-		$body      = wp_remote_retrieve_body($response);
-
-		if ($http_code !== 200 || empty($body)) {
-			$asked[$merchant_id] = false;
-			return false;
-		}
-
-		$oko_configuration = json_decode($body, true);
-		$shipping_methods  = array();
-		if (! empty($oko_configuration['shipping_methods'])) {
-			foreach ($oko_configuration['shipping_methods'] as $method) {
-				$shipping_methods[$method['method_code']] = $method;
-			}
-		}
-		set_transient($transient_key, $shipping_methods, 5 * MINUTE_IN_SECONDS);
-	}
-
-	$asked[$merchant_id] = $shipping_methods;
-
-	return ! empty($shipping_methods[$method_code]);
+	return false;
 }
 
 
@@ -2541,4 +2605,79 @@ function oko_add_delivery_date_to_order_totals($total_rows, $order): array
 	}
 
 	return isset($rebuilt['okoskabet_delivery_date']) ? $rebuilt : $rebuilt + array('okoskabet_delivery_date' => $row);
+}
+
+/**
+ * What a shop's saved choices mean, now that the names are Økoskabet's own.
+ *
+ * Three names were kept here by hand, and two of them said something other
+ * than what they did:
+ *
+ * - `in_shed` fired when a shipment reached `fulfilled`, which is the box
+ *   handed over, not the box standing in the shed.
+ * - `order_delivered` waited for a status called `delivered`, which Økoskabet
+ *   has never sent. A shop that chose it — and it was the default — was never
+ *   charged and never had an order completed automatically.
+ * - `label_created` was renamed to `in_shed` years ago and meant the same as
+ *   the first.
+ *
+ * All three meant "when the customer has it", and only `fulfilled` ever says
+ * that. So that is what they become, and the choice a shop made keeps doing
+ * what the shop believed it was doing. `label_printed` is untouched: it was
+ * right all along.
+ *
+ * Saved choices are rewritten once on upgrade, so this runs on rows written
+ * before that — a merchant added while the old settings were still on screen,
+ * for instance.
+ *
+ * @param array<int,string> $events
+ * @return array<int,string>
+ */
+function oko_status_events_as_chosen(array $events): array
+{
+	$renamed = array(
+		'label_created'   => 'fulfilled',
+		'in_shed'         => 'fulfilled',
+		'order_delivered' => 'fulfilled',
+	);
+
+	$out = array();
+	foreach ($events as $event) {
+		$event = (string) $event;
+		$out[] = $renamed[$event] ?? $event;
+	}
+
+	return array_values(array_unique($out));
+}
+
+/** Set once the shop has saved the plugin settings at least once. */
+const OKO_SETTINGS_SAVED_OPTION = 'okoskabet_settings_saved_once';
+
+add_action('cmb2_save_options-page_fields_' . O_TEXTDOMAIN . '_options', 'oko_remember_settings_were_saved', 5);
+
+/**
+ * Remember that the shop has been through the settings form.
+ *
+ * CMB2 shows a field's default whenever nothing is stored, and a multicheck
+ * with every box unticked stores nothing. Without this, a shop that turns
+ * completion off has it ticked again on the next page load, and there is no
+ * way to say "no event completes my orders". Knowing the form has been saved
+ * is what separates "never configured" from "configured as empty".
+ *
+ * @return void
+ */
+function oko_remember_settings_were_saved(): void
+{
+	update_option(OKO_SETTINGS_SAVED_OPTION, 1, false);
+}
+
+/**
+ * The default for one of the two event lists, for a shop that has never saved.
+ *
+ * @param array<string,mixed> $suggested What a fresh install should start with.
+ * @return array<int,string>
+ */
+function oko_event_default(array $suggested): array
+{
+	return get_option(OKO_SETTINGS_SAVED_OPTION) ? array() : $suggested;
 }

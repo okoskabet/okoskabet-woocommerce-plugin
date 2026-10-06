@@ -87,8 +87,15 @@ modules:
             phpBinary: php
             language: ''
             configFile: 'wp-config-test.php'
-            plugins: ['okoskabet-woocommerce-plugin/okoskabet-woocommerce-plugin.php']
-            activatePlugins: ['okoskabet-woocommerce-plugin/okoskabet-woocommerce-plugin.php']
+            # WooCommerce first: this plugin is built on it, and without it the
+            # suite dies on `Class "WC_Cart" not found` before a single test of
+            # ours runs.
+            plugins:
+                - woocommerce/woocommerce.php
+                - okoskabet-woocommerce-plugin/okoskabet-woocommerce-plugin.php
+            activatePlugins:
+                - woocommerce/woocommerce.php
+                - okoskabet-woocommerce-plugin/okoskabet-woocommerce-plugin.php
         WPWebDriver:
             url: '%WP_URL%'
             browser: chrome
