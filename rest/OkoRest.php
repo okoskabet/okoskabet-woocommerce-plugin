@@ -830,6 +830,11 @@ class OkoRest extends Base
 				'name'  => (string) $product->get_name(),
 				'image' => $image_id > 0 ? (string) \wp_get_attachment_url($image_id) : '',
 				'tags'  => array_values(array_map('strval', (array) \wp_get_post_terms($id, 'product_tag', array('fields' => 'names')))),
+				// Everything else the shop files this product under. A packing
+				// slip has to name the producer and the country of origin, and
+				// no two shops keep those in the same field — so the shop picks
+				// which of these is which, at Økoskabet.
+				'properties' => \oko_product_properties($product),
 			);
 		}
 
