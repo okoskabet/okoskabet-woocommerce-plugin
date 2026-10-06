@@ -225,6 +225,7 @@
 	(function () {
 		var STR = window._okoskabet_overlay_strings || {};
 		var lastExplanation = null;
+		var lastPreOrderHint = null;
 		var origFetch = window.fetch;
 
 		window.fetch = function (input, init) {
@@ -240,6 +241,17 @@
 								if (!r) { return; }
 								// home_delivery has results.exceptions_explanation directly,
 								// sheds has it at the top level too.
+								// A basket whose only days are pre-order days: the
+								// button above the message is the way out. Only a
+								// response bringing dates of its own clears the wording
+								// again — the sheds call and the home-delivery call
+								// answer in whatever order they like.
+								if (r.pre_order_hint) {
+									lastPreOrderHint = r.pre_order_hint;
+									setTimeout(applyFallback, 50);
+								} else if (r.delivery_dates && r.delivery_dates.length) {
+									lastPreOrderHint = null;
+								}
 								var exp = r.exceptions_explanation
 									|| (data.results && data.results.exceptions_explanation);
 								if (exp && exp.has_exceptions) {
@@ -316,7 +328,7 @@
 					+ "border-left:4px solid #c44;padding:12px 14px;"
 					+ "margin:8px 0 16px;border-radius:3px;";
 				div.innerHTML = buildExplanationHtml(lastExplanation);
-				span.parentNode.replaceChild(div, span);
+				swapIn(div, span);
 			}
 		}
 
@@ -328,35 +340,105 @@
 				.replace(/"/g, "&quot;");
 		}
 
-		// Generic fallback for when the customer sees the empty-dates
-		// placeholder but no Delivery_Exceptions explanation is active —
-		// typically because the merchant's date window is too narrow or
-		// the API genuinely returned nothing. Replace the bare placeholder
-		// with a "please contact the shop" message rather than leaving it
-		// as an inscrutable "no dates available." line.
+		// What replaces the bare "no dates available" placeholder when no
+		// Delivery_Exceptions explanation is active. Two cases: the basket can
+		// be pre-ordered, and the server sent the wording that points at the
+		// button sitting right above (pre_order_hint); or the dates really are
+		// gone — a date window too narrow, or nothing back from the API — and
+		// the customer is asked to contact the shop.
+		function renderPanel(div, hint) {
+			var heading = (hint && hint.heading)
+				|| STR.noDatesHeading
+				|| "No delivery dates available right now";
+			var body = (hint && hint.body)
+				|| STR.noDatesBody
+				|| "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
+			div.className = hint ? "oko-pre-order-hint" : "oko-no-dates-fallback";
+			div.dataset.okoFallback = "1";
+			div.dataset.okoHint = hint ? "1" : "0";
+			// A way onwards is not an error, so the panel is calm, not red.
+			div.style.cssText = hint
+				? "background:#f4f8f4;border:1px solid #cfe0cf;"
+					+ "border-left:4px solid #4a7;padding:12px 14px;"
+					+ "margin:8px 0 16px;border-radius:3px;"
+				: "background:#fff5f5;border:1px solid #f0c0c0;"
+					+ "border-left:4px solid #c44;padding:12px 14px;"
+					+ "margin:8px 0 16px;border-radius:3px;";
+			div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
+				+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
+		}
+
 		function applyFallback() {
 			if (lastExplanation) { return; }
-			var heading = STR.noDatesHeading || "No delivery dates available right now";
-			var body = STR.noDatesBody || "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
+			var hint = lastPreOrderHint;
+
+			// The dates response and the placeholder do not arrive in a fixed
+			// order: the panel is often already on screen, saying "contact the
+			// shop", when the pre-order wording turns up. Rewrite it rather
+			// than leave the customer with the wrong advice.
+			if (hint) {
+				var shown = document.querySelectorAll("[data-oko-fallback=\"1\"]");
+				for (var j = 0; j < shown.length; j++) {
+					if (shown[j].dataset.okoHint !== "1") {
+						renderPanel(shown[j], hint);
+					}
+				}
+			}
+
 			var spans = findPlaceholders();
 			for (var i = 0; i < spans.length; i++) {
 				var span = spans[i];
 				if (span.dataset.okoFallback === "1") { continue; }
+				// Every shipping method renders its own placeholder, and the
+				// ones the customer has not chosen sit collapsed in the list.
+				// Saying the same thing twice, once in a box the size of a
+				// line, reads as a bug.
+				if (!inChosenMethod(span) || alreadySaid()) { continue; }
 				var div = document.createElement("div");
-				div.className = "oko-no-dates-fallback";
-				div.dataset.okoFallback = "1";
-				div.style.cssText = "background:#fff5f5;border:1px solid #f0c0c0;"
-					+ "border-left:4px solid #c44;padding:12px 14px;"
-					+ "margin:8px 0 16px;border-radius:3px;";
-				div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
-					+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
-				span.parentNode.replaceChild(div, span);
+				renderPanel(div, hint);
+				swapIn(div, span);
 			}
 		}
 
+		// The delivery app can be mounted more than once inside a single method
+		// — beside the chosen radio and in the theme's own mount point — and
+		// each copy renders its own placeholder, some of them in lists of their
+		// own. The message is about the basket, so the page gets one.
+		function alreadySaid() {
+			return !!document.querySelector(".oko-pre-order-hint, .oko-no-dates-fallback");
+		}
+
+		// Is this placeholder inside the shipping method the customer picked?
+		// A placeholder outside the method list (a theme that lays the
+		// checkout out differently) counts as chosen: better one message in an
+		// odd place than none at all.
+		function inChosenMethod(node) {
+			var li = node.closest && node.closest("li");
+			if (!li || !li.closest(".woocommerce-shipping-methods")) { return true; }
+			var radio = li.querySelector("input[name^=\"shipping_method\"]");
+			return !radio || radio.checked;
+		}
+
+		// Hide the placeholder behind the panel rather than consume it: Svelte
+		// does not render it again, so a panel taken down after a replaceChild
+		// left a blank space where the dates should be.
+		function swapIn(div, span) {
+			span.dataset.okoFallback = "1";
+			span.dataset.okoExplained = "1";
+			span.style.display = "none";
+			span.parentNode.insertBefore(div, span);
+			div._okoSpan = span;
+		}
+
 		function removeExplanation() {
-			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback");
+			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback, .oko-pre-order-hint");
 			for (var i = 0; i < nodes.length; i++) {
+				var span = nodes[i]._okoSpan;
+				if (span) {
+					span.style.display = "";
+					delete span.dataset.okoFallback;
+					delete span.dataset.okoExplained;
+				}
 				nodes[i].parentNode.removeChild(nodes[i]);
 			}
 		}
@@ -420,6 +502,96 @@
 		var SELECT_ID         = "okoskabet_location_select";
 		var NOTE_ID           = "okoskabet_location_note";
 		var WRAPPER_ID        = "okoskabet_location_wrapper";
+		var STYLE_ID          = "okoskabet-location-style";
+
+		// The delivery-location row lives inside WooCommerce's order-review
+		// table, which every theme styles for what that table normally holds:
+		// prices. Centred, bold, right-aligned — reasonable for an amount, and
+		// it turns a form field into something that reads as broken. The row
+		// has to look like a form field in any theme, so the rules below fight
+		// that styling off rather than hoping the theme is kind.
+		//
+		// One stylesheet in the document head, written once per page load. It
+		// deliberately does not live on the elements: the row is destroyed and
+		// rebuilt on every `updated_checkout`, and inline styles scattered
+		// through buildUI() are how the select ended up unstyled while the note
+		// input next to it was not.
+		function injectStyles() {
+			if (document.getElementById(STYLE_ID)) { return; }
+			var style = document.createElement("style");
+			style.id = STYLE_ID;
+			style.textContent = [
+				/* The label sits on its own row so the field below can have the
+				   table's full width. It stays a <th>, so the theme styles it
+				   exactly like "Levering" and "Total" above it, and the two
+				   rows read as one labelled field. */
+				".okoskabet-location-label-row > th {",
+				"  text-align: left !important;",
+				"  width: auto;",
+				"  padding-bottom: 4px;",
+				"  border-bottom: 0;",
+				"}",
+
+				/* The field's own row: ordinary left-aligned body text, not the
+				   centred bold the table gives an amount. */
+				".okoskabet-location-field-row > td {",
+				"  width: auto;",
+				"  padding-top: 0;",
+				"  text-align: left !important;",
+				"  font-weight: normal !important;",
+				"}",
+
+				/* The instruction above the controls. */
+				".okoskabet-location-instruction {",
+				"  display: block;",
+				"  margin: 0 0 8px;",
+				"  font-size: 0.9em;",
+				"  font-weight: normal;",
+				"  line-height: 1.35;",
+				"  text-align: left;",
+				"}",
+
+				/* Dropdown and note: the same field, twice. */
+				".okoskabet-location-select,",
+				".okoskabet-location-note {",
+				"  display: block;",
+				"  box-sizing: border-box;",
+				"  width: 100%;",
+				"  max-width: 100%;",
+				"  margin: 0;",
+				"  padding: 8px 10px;",
+				"  border: 1px solid #ccc;",
+				"  border-radius: 4px;",
+				"  background-color: #fff;",
+				"  color: inherit;",
+				"  font: inherit;",
+				"  line-height: 1.4;",
+				"  text-align: left;",
+				"}",
+
+				/* Themes that hide the native arrow put their own background
+				   image behind it. Ours is the native control, so the image
+				   would sit on top of a second arrow. */
+				".okoskabet-location-select {",
+				"  height: auto;",
+				"  background-image: none;",
+				"  -webkit-appearance: menulist;",
+				"  -moz-appearance: menulist;",
+				"  appearance: menulist;",
+				"}",
+
+				".okoskabet-location-note-wrapper { margin-top: 10px; }",
+
+				/* Under about 16px, iOS Safari zooms the whole page in when a
+				   field takes focus and leaves the customer scrolled sideways
+				   through their own checkout. */
+				"@media (max-width: 600px) {",
+				"  .okoskabet-location-select,",
+				"  .okoskabet-location-note { font-size: 16px; }",
+				"}"
+			].join("\n");
+			document.head.appendChild(style);
+		}
 		var HOME_METHOD       = "hey_okoskabet_shipping_home";
 		var ANDET_VALUE       = "__OTHER__";
 		var optionsCache      = null;
@@ -435,8 +607,13 @@
 		}
 
 		function removeUI() {
-			var el = document.getElementById(WRAPPER_ID);
-			if (el) { el.parentNode.removeChild(el); }
+			// The label and the field are a row each, so removing the one the
+			// id is on would leave the other behind — and every
+			// `updated_checkout` would add another orphaned label.
+			var rows = document.querySelectorAll(".okoskabet-location-row");
+			for (var i = 0; i < rows.length; i++) {
+				if (rows[i].parentNode) { rows[i].parentNode.removeChild(rows[i]); }
+			}
 		}
 
 		function syncHiddenFields() {
@@ -473,20 +650,36 @@
 		function buildUI(options) {
 			removeUI();
 			if (!isHomeDelivery()) { return; }
+			injectStyles();
 			var locationField = document.getElementById(FIELD_LOCATION_ID);
 
-			// Shaped for wherever it is going: a table row inside the review
-			// table, a plain block anywhere else.
-			var anchor = okoAnchor();
-			var mode = anchor ? anchor.mode : "table";
+			// Two rows, not one. The review table's columns are sized for a
+			// label and an amount, and a dropdown of delivery instructions does
+			// not fit in the width of "49,00 kr" — on a phone it barely fits a
+			// word. Giving the label a row of its own lets the field below span
+			// the table, which is the only way it reads as a form field rather
+			// than a mangled price.
+			//
+			// Each row is shaped for wherever it is going: a table row inside
+			// the review table, a plain block anywhere else. A checkout a page
+			// builder drew has no table for a <tr> to live in, and the parser
+			// throws one away before the script can find it.
+			var anchor  = okoAnchor();
+			var mode    = anchor ? anchor.mode : "table";
+			var inTable = mode === "table";
+
+			var labelRow = okoRow(mode);
+			labelRow.className = "okoskabet-location-row okoskabet-location-label-row";
+			var cellLabel = okoLabelCell(mode);
+			if (inTable) { cellLabel.colSpan = 2; }
+			cellLabel.textContent = LABEL_DROPDOWN;
+			labelRow.appendChild(cellLabel);
 
 			var wrapper = okoRow(mode);
 			wrapper.id = WRAPPER_ID;
-			wrapper.className = "okoskabet-location-row";
-			var cellLabel = okoLabelCell(mode);
-			cellLabel.textContent = LABEL_DROPDOWN;
+			wrapper.className = "okoskabet-location-row okoskabet-location-field-row";
 			var cellContent = okoContentCell(mode);
-			wrapper.appendChild(cellLabel);
+			if (inTable) { cellContent.colSpan = 2; }
 			wrapper.appendChild(cellContent);
 
 			var hasOptions  = !!(options && options.length > 0);
@@ -495,13 +688,12 @@
 			// The free-text note field — hidden by default; shown when "Andet"
 			// is chosen or when there is no dropdown at all.
 			var noteWrapper = document.createElement("div");
-			noteWrapper.style.cssText = "margin-top:8px;";
+			noteWrapper.className = "okoskabet-location-note-wrapper";
 			var noteInput = document.createElement("input");
 			noteInput.type = "text";
 			noteInput.id = NOTE_ID;
 			noteInput.name = NOTE_ID;
-			noteInput.style.cssText = "width:100%;padding:6px;"
-				+ "border:1px solid #ccc;border-radius:4px;";
+			noteInput.className = "okoskabet-location-note";
 			var nfe = document.getElementById(FIELD_NOTE_ID);
 			if (nfe && nfe.value) { noteInput.value = nfe.value; }
 			noteInput.addEventListener("input", syncHiddenFields);
@@ -511,7 +703,7 @@
 			// the customer reads it before making a selection. Hidden if
 			// admin leaves it empty.
 			var instructionEl = document.createElement("div");
-			instructionEl.style.cssText = "margin-bottom:8px;font-size:0.9em;line-height:1.3;";
+			instructionEl.className = "okoskabet-location-instruction";
 			instructionEl.textContent = LABEL_NOTE;
 			if (!LABEL_NOTE) { instructionEl.style.display = "none"; }
 
@@ -528,8 +720,7 @@
 				var sel = document.createElement("select");
 				sel.id = SELECT_ID;
 				sel.name = SELECT_ID;
-				sel.style.cssText = "width:100%;padding:6px;"
-					+ "border:1px solid #ccc;border-radius:4px;";
+				sel.className = "okoskabet-location-select";
 				options.forEach(function (opt) {
 					var el = document.createElement("option");
 					var v = opt.label_en || opt.label_da;
@@ -574,7 +765,12 @@
 			// Next to the shipping choice, wherever that turned out to be.
 			// okoAnchor() tries the review-order table first, so on a classic
 			// checkout this lands exactly where it always did.
-			okoPlace(anchor, wrapper);
+			okoPlace(anchor, labelRow);
+
+			// The field always follows its own label, wherever that landed.
+			if (labelRow.parentNode) {
+				labelRow.parentNode.insertBefore(wrapper, labelRow.nextSibling);
+			}
 			// Only once the row is in the page: refreshNoteVisibility() looks
 			// the select up by id, and before this it found nothing — so a
 			// restored "Andet" came back with its note box hidden.

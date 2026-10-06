@@ -276,6 +276,8 @@ class DeliveryExceptionsTest extends \Codeception\TestCase\WPTestCase {
 	public function test_upgrade_notice_shows_then_hides_after_dismissal(): void {
 		wp_set_current_user( $this->factory()->user->create( array( 'role' => 'administrator' ) ) );
 		delete_option( Delivery_Exceptions::UPGRADE_NOTICE_OPTION );
+		// Only a shop with delivery rules is asked to review them (is_in_use()).
+		update_option( Delivery_Exceptions::OPTION_KEY, array( 'weekdays_enabled' => true ) );
 
 		ob_start();
 		$this->sut->maybe_render_upgrade_notice();
@@ -420,5 +422,92 @@ class DeliveryExceptionsTest extends \Codeception\TestCase\WPTestCase {
 		$result = $this->sut->filter_dates_for_cart( $dates, array( $product ) );
 
 		$this->assertSame( array(), $result, 'legacy cutoff_tags config still filters after migration' );
+	}
+
+	// ---------------------------------------------------------------------
+	// #5 — "Gælder alle andre varer end de valgte"
+	//
+	// The flip is exercised against every exception family, and every
+	// empty-selection case, in tests/standalone/. What is worth proving here is
+	// that it still holds with real terms, real posts and the term cache in the
+	// way — the standalone harness answers wp_get_post_terms() from an array,
+	// and a matcher can be right there and wrong here.
+	// ---------------------------------------------------------------------
+
+	public function test_flipped_weekday_rule_restricts_everything_but_the_selection(): void {
+		$frost = $this->make_term( 'product_cat', 'frost' );
+
+		update_option( Delivery_Exceptions::OPTION_KEY, array(
+			'weekdays_enabled' => true,
+			'weekdays' => array(
+				3 => array( 'enabled' => true, 'flip' => true, 'categories' => array( $frost ), 'tags' => array() ),
+			),
+		) );
+
+		$in_frost  = $this->make_product( 'product_cat', $frost );
+		$elsewhere = $this->factory()->post->create();
+
+		$dates = array( $this->next_weekday( 3 ), $this->next_weekday( 4 ) );
+		sort( $dates );
+
+		$this->assertSame(
+			$dates,
+			$this->sut->filter_dates_for_cart( $dates, array( $in_frost ) ),
+			'the chosen category is the one the rule leaves alone'
+		);
+
+		$this->assertSame(
+			array( $this->next_weekday( 3 ) ),
+			$this->sut->filter_dates_for_cart( $dates, array( $elsewhere ) ),
+			'everything else is held to the weekday'
+		);
+	}
+
+	public function test_flipped_rule_bites_when_the_cart_mixes_both_sides(): void {
+		$frost  = $this->make_term( 'product_cat', 'frost' );
+		// Inside the ordinary days (the merchant window is 3 here): a day
+		// further out is a pre-order and is not in the normal list at all.
+		$the_day = $this->date_offset( 2 );
+
+		// Deliberately a single-day rule rather than a weekday one. Weekday
+		// availability is worked out per product anyway, so it would pass
+		// whichever way this rule was matched; the single-day and from/until
+		// families are the ones that ask "does this rule touch the cart at
+		// all", and pooling the cart's categories to answer it inverts into a
+		// different question — the frost would buy the other product out of a
+		// rule aimed squarely at it.
+		update_option( Delivery_Exceptions::OPTION_KEY, array(
+			'only_on_enabled' => true,
+			'only_on' => array(
+				array( 'date' => $the_day, 'enabled' => true, 'flip' => true, 'categories' => array( $frost ), 'tags' => array() ),
+			),
+		) );
+
+		$in_frost  = $this->make_product( 'product_cat', $frost );
+		$elsewhere = $this->factory()->post->create();
+
+		$dates = array( $this->date_offset( 1 ), $the_day, $this->date_offset( 3 ) );
+
+		$this->assertSame(
+			array( $the_day ),
+			$this->sut->filter_dates_for_cart( $dates, array( $in_frost, $elsewhere ) )
+		);
+	}
+
+	public function test_flipped_rule_with_an_empty_selection_restricts_nothing(): void {
+		update_option( Delivery_Exceptions::OPTION_KEY, array(
+			'weekdays_enabled' => true,
+			'weekdays' => array(
+				3 => array( 'enabled' => true, 'flip' => true, 'categories' => array(), 'tags' => array() ),
+			),
+		) );
+
+		$product = $this->factory()->post->create();
+		$dates   = array( $this->next_weekday( 3 ), $this->next_weekday( 4 ) );
+		sort( $dates );
+
+		// A rule that names nothing is unfinished, not a statement that every
+		// product in the shop is Wednesday-only.
+		$this->assertSame( $dates, $this->sut->filter_dates_for_cart( $dates, array( $product ) ) );
 	}
 }
