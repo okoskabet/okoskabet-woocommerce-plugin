@@ -98,8 +98,12 @@ class Upgrades extends Base {
 			return;
 		}
 
-		$kept      = array();
-		$converted = array();
+		// A row only ever bit with its section on, and a row saved without
+		// its own flag was on (merge_with_defaults reads it so).
+		$section_on = ! empty( $stored['only_on_enabled'] );
+		$kept       = array();
+		$converted  = array();
+		$live       = false;
 
 		foreach ( $stored['only_on'] as $row ) {
 			if ( ! is_array( $row ) || empty( $row['extend'] ) ) {
@@ -112,11 +116,14 @@ class Upgrades extends Base {
 				continue;
 			}
 
+			$enabled = $section_on && (bool) ( $row['enabled'] ?? true );
+			$live    = $live || $enabled;
+
 			$converted[] = array(
 				'label'      => (string) ( $row['label'] ?? '' ),
 				'from'       => $date,
 				'until'      => $date,
-				'enabled'    => ! empty( $row['enabled'] ),
+				'enabled'    => $enabled,
 				'extend'     => true,
 				'flip'       => ! empty( $row['flip'] ),
 				'all'        => ! empty( $row['all'] ),
@@ -129,15 +136,22 @@ class Upgrades extends Base {
 			return;
 		}
 
-		$stored['only_on']    = array_values( $kept );
-		$stored['from_until'] = array_merge(
-			array_values( (array) ( $stored['from_until'] ?? array() ) ),
-			$converted
-		);
+		$existing = array_values( (array) ( $stored['from_until'] ?? array() ) );
 
-		if ( ! empty( $converted ) ) {
+		// A live row needs the from/until section on. If it was off, the rows
+		// already in it did nothing, and switching the section on must not
+		// wake them.
+		if ( $live && empty( $stored['from_until_enabled'] ) ) {
+			foreach ( $existing as $i => $row ) {
+				if ( is_array( $row ) ) {
+					$existing[ $i ]['enabled'] = false;
+				}
+			}
 			$stored['from_until_enabled'] = true;
 		}
+
+		$stored['only_on']    = array_values( $kept );
+		$stored['from_until'] = array_merge( $existing, $converted );
 
 		update_option( $option_key, $stored );
 	}
