@@ -1107,7 +1107,16 @@ class Split_Checkout extends Base {
 
 		// Inline JS — uses event delegation on `document` so the listeners
 		// survive WooCommerce's checkout re-renders.
-		$ajax_url = admin_url( 'admin-ajax.php' );
+		// The banner's fetch() carries the action, the nonce and the date, and
+		// nothing else. A pre-order is not a field on the cart: it is something
+		// the customer asked for on this page, which `oko_pre_order_checkout_requested()`
+		// reads from the posted checkout form or from `oko_pre_order` in the URL.
+		// An AJAX call has neither, so both handlers used to work the banner out
+		// as an ordinary order: starting a split answered "No split needed", and
+		// reducing one left the basket alone and re-rendered the same banner, over
+		// and over. Carrying the mode in the URL is what the handlers already know
+		// how to read.
+		$ajax_url = admin_url( 'admin-ajax.php' . ( $this->is_pre_order_mode() ? '?oko_pre_order=1' : '' ) );
 		$nonce    = wp_create_nonce( $this->nonce_action() );
 		?>
 		<script>

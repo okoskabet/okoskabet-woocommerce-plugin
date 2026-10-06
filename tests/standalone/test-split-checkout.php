@@ -74,8 +74,14 @@ it( 'splits a basket whose items share no delivery day', function () {
 
 	$groups = oko_split()->compute_split_groups();
 	assert_same( 2, count( $groups ), 'two deliveries' );
-	assert_same( array( 'Mælk' ), oko_split_names( $groups[0] ) );
-	assert_same( array( 'Brød' ), oko_split_names( $groups[1] ) );
+
+	// Which group comes first is the next test's business. The groups are
+	// ordered by the day they will be delivered, so on a Tuesday bread leads
+	// and on a Friday milk does. All this test asks is that the two were
+	// pulled apart.
+	$names = array( oko_split_names( $groups[0] ), oko_split_names( $groups[1] ) );
+	sort( $names );
+	assert_same( array( array( 'Brød' ), array( 'Mælk' ) ), $names );
 } );
 
 it( 'puts the groups in the order they will happen', function () {
@@ -842,6 +848,81 @@ it( 'leaves an already ordered step out of the basket it gives back', function (
 	// A group that is already a placed order must not come back into the cart
 	// and be bought a second time.
 	assert_same( $expected, $in_cart, 'only what was never ordered comes back' );
+} );
+
+it( 'tells the handlers it is a pre-order, because only the banner knows', function () {
+	// The banner's fetch() sends the action, the nonce and the date, and nothing
+	// else. Being in a pre-order is not part of the basket: it is something the
+	// customer asked for on this page, and the handlers read it from the posted
+	// checkout form or from `oko_pre_order` in the URL. An AJAX call has no form,
+	// so unless the banner writes it into the URL it posts to, both handlers work
+	// the request out as an ordinary order.
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	ob_start();
+	oko_split()->maybe_render_banner();
+	$html = (string) ob_get_clean();
+
+	assert_true(
+		strpos( $html, 'oko_pre_order=1' ) !== false,
+		'the banner posts back to a URL that carries the pre-order'
+	);
+} );
+
+it( 'says nothing about pre-orders when the split is an ordinary one', function () {
+	oko_split_weekday_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
+	oko_test_set_pre_order( false );
+
+	ob_start();
+	oko_split()->maybe_render_banner();
+	$html = (string) ob_get_clean();
+
+	assert_false(
+		strpos( $html, 'oko_pre_order' ) !== false,
+		'an ordinary split carries no pre-order'
+	);
+} );
+
+it( 'starts the split when driven from the URL the banner actually rendered', function () {
+	// The test above proves the URL says it. This one proves it is enough: the
+	// handler is called the way the browser calls it, with nothing but what the
+	// banner put in the URL. Driving the handler from a pre-order the test set up
+	// itself is what hid this: the browser never sets that.
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	ob_start();
+	oko_split()->maybe_render_banner();
+	$html = (string) ob_get_clean();
+
+	assert_true(
+		preg_match( '/var AJAX_URL\\s*=\\s*"([^"]+)"/', $html, $found ) === 1,
+		'the banner names the URL it posts to'
+	);
+
+	// Forget everything this page knew, and keep only what travels in that URL.
+	$query = (string) parse_url( str_replace( '\\/', '/', $found[1] ), PHP_URL_QUERY );
+	oko_test_set_pre_order( false );
+	if ( $query !== '' ) {
+		parse_str( $query, $carried );
+		foreach ( (array) $carried as $key => $value ) {
+			$_GET[ $key ] = $value;
+		}
+	}
+
+	try {
+		oko_split()->ajax_start_split();
+		fail( 'the handler should have answered' );
+	} catch ( Oko_Test_Json_Response $answer ) {
+		assert_true( $answer->success, 'the split started from the rendered URL' );
+	}
+
+	$state = WC()->session->get( 'oko_split_state' );
+	assert_same( 2, (int) $state['total_steps'], 'two steps' );
 } );
 
 describe( 'Split checkout: a pre-order is a choice about this visit' );
