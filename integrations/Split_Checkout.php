@@ -2254,7 +2254,19 @@ class Split_Checkout extends Base {
 	 * @param string[] $coupons Coupon codes to put back once the items are in.
 	 */
 	private function fill_cart_with( array $recipes, string $context, array $coupons = array() ): int {
+		// empty_cart() also forgets which delivery the customer picked, so the
+		// rebuilt basket would come back on whichever method WooCommerce lists
+		// first. Splitting is our doing, not theirs, and it should not quietly
+		// move their order to another way of getting it. WooCommerce still has
+		// the last word: a method this basket cannot have is dropped when the
+		// rates are worked out again.
+		$chosen = WC()->session ? WC()->session->get( 'chosen_shipping_methods' ) : null;
+
 		WC()->cart->empty_cart( false );
+
+		if ( is_array( $chosen ) && WC()->session ) {
+			WC()->session->set( 'chosen_shipping_methods', $chosen );
+		}
 
 		$added_count = 0;
 		foreach ( $recipes as $recipe ) {
@@ -2578,11 +2590,14 @@ class Split_Checkout extends Base {
 		$state['current_step'] = $next;
 		$this->set_state( $state );
 
-		// No coupons carried here. Whatever is on the cart now belongs to the
-		// order just placed, and putting it on the next one as well would give
-		// a fixed discount twice. The customer may enter a coupon for this
-		// delivery themselves, and WooCommerce will judge it.
-		$this->load_cart_for_step( $next );
+		// The customer's coupons travel with them, and WooCommerce judges each
+		// one against this delivery. A coupon written for the bread holds where
+		// the bread is, and a code that may only be used once has already been
+		// spent on the first order, so `WC_Discounts::is_coupon_valid` turns it
+		// down here — it counts usages. That is what keeps a once-only code to
+		// a single delivery while a code meant to be used more than once
+		// follows the goods it was written for.
+		$this->load_cart_for_step( $next, (array) ( $state['coupons'] ?? array() ) );
 
 		wp_send_json_success( array( 'redirect' => wc_get_checkout_url() ) );
 	}

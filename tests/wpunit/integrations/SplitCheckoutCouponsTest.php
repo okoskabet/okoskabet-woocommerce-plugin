@@ -138,7 +138,7 @@ class SplitCheckoutCouponsTest extends \Codeception\TestCase\WPTestCase {
 	 * A coupon for one product, when that product goes out on the other day,
 	 * has nothing to discount now.
 	 */
-	public function a_product_coupon_for_an_item_in_the_other_delivery_is_taken_off_with_a_word() {
+	public function a_product_coupon_follows_the_goods_it_was_written_for() {
 		$this->basket_with_coupons( array(
 			$this->coupon( 'broed', array( 'discount_type' => 'fixed_product', 'amount' => 50, 'product_ids' => array( $this->bread ) ) ),
 		) );
@@ -146,11 +146,21 @@ class SplitCheckoutCouponsTest extends \Codeception\TestCase\WPTestCase {
 
 		$this->call( 'ajax_start_split' );
 
+		// Nothing here for it to discount, so it comes off, and the customer is
+		// told why rather than left to wonder where their discount went.
 		$this->assertSame( array(), WC()->cart->get_applied_coupons() );
 		$this->assertSame( 0.0, (float) WC()->cart->get_discount_total() );
 		$notices = $this->notices();
 		$this->assertCount( 1, $notices, wp_json_encode( $notices ) );
 		$this->assertStringContainsString( 'broed', $notices[0]['text'] );
+
+		$this->place_order();
+		$this->call( 'ajax_resume_split' );
+
+		// And here is the bread. A discount belongs where it applies.
+		$this->assertSame( array( 'Brød' ), $this->names_in_cart() );
+		$this->assertSame( array( 'broed' ), WC()->cart->get_applied_coupons() );
+		$this->assertSame( 50.0, (float) WC()->cart->get_discount_total() );
 	}
 
 	/**
@@ -203,23 +213,42 @@ class SplitCheckoutCouponsTest extends \Codeception\TestCase\WPTestCase {
 
 	/**
 	 * @test
-	 * The coupons in the cart when the customer moves on to the next delivery
-	 * belong to the order just placed. Normally WooCommerce has emptied the
-	 * cart by then; when it has not, they still must not ride along. A fixed
-	 * 100 kr off on both halves would be 200 kr off one basket.
+	 * A code the shop put no limit on may be used again, so it is offered to
+	 * the next delivery too. That is the shop's own doing: an unlimited 100 kr
+	 * off is 100 kr off every order anyone places with it, split or not. A code
+	 * meant for one use carries a usage limit, and the test above shows what
+	 * happens to it.
 	 */
-	public function moving_to_the_next_delivery_does_not_carry_the_last_orders_coupons() {
+	public function a_coupon_that_may_be_used_again_follows_to_the_next_delivery() {
 		$this->basket_with_coupons( array( $this->coupon( 'hundrede', array( 'discount_type' => 'fixed_cart', 'amount' => 100 ) ) ) );
 
 		$this->call( 'ajax_start_split' );
 		$this->assertSame( array( 'hundrede' ), WC()->cart->get_applied_coupons(), 'step one has it' );
 
-		// The order went through but the cart was not emptied.
+		$this->place_order();
 		$this->call( 'ajax_resume_split' );
 
 		$this->assertSame( array( 'Brød' ), $this->names_in_cart() );
-		$this->assertSame( array(), WC()->cart->get_applied_coupons() );
-		$this->assertSame( array(), $this->notices(), 'and no word about a coupon that was never offered here' );
+		$this->assertSame( array( 'hundrede' ), WC()->cart->get_applied_coupons(), 'and so does step two' );
+		$this->assertSame( array(), $this->notices(), 'nothing to explain' );
+	}
+
+	/**
+	 * @test
+	 * Splitting is our doing, not the customer's, and it must not quietly move
+	 * their order to another way of getting it. empty_cart() forgets the chosen
+	 * method, so it is put back.
+	 */
+	public function the_customer_keeps_the_delivery_they_chose() {
+		$this->shipping_zone();
+		$this->basket_with_coupons( array() );
+
+		$chosen = WC()->session->get( 'chosen_shipping_methods' );
+		$this->assertNotEmpty( $chosen, 'the customer had picked one' );
+
+		$this->call( 'ajax_start_split' );
+
+		$this->assertSame( $chosen, WC()->session->get( 'chosen_shipping_methods' ) );
 	}
 
 	// ------------------------------------------------------------ cancelling
