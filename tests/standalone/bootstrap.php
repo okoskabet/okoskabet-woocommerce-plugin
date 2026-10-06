@@ -388,7 +388,14 @@ class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations
 	public $asked = array();
 
 	protected function delivery_days_for_product( int $product_id, bool $pre_order = false ): ?array {
-		$this->asked[] = $product_id . '|' . ( $pre_order ? 'pre' : 'normal' );
+		return $this->delivery_days_for_cart( array( $product_id ), $pre_order );
+	}
+
+	protected function delivery_days_for_cart( array $product_ids, bool $pre_order = false ): ?array {
+		$product_ids = array_values( array_unique( array_filter( array_map( 'intval', $product_ids ) ) ) );
+		sort( $product_ids );
+
+		$this->asked[] = implode( ',', $product_ids ) . '|' . ( $pre_order ? 'pre' : 'normal' );
 
 		$days = $GLOBALS['oko_test_delivery_days'];
 		if ( $days === null ) {
@@ -396,7 +403,7 @@ class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations
 		}
 
 		return ( new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions() )
-			->filter_dates_for_cart( $days, array( $product_id ), $pre_order );
+			->filter_dates_for_cart( $days, $product_ids, $pre_order );
 	}
 
 	/** The banner's own wording for a group, which is otherwise internal. */
