@@ -1583,8 +1583,15 @@ function oko_order_line_items(\WC_Order $order): array
 		// ordered quantity alone leaves the packing room packing three when the
 		// customer is only getting two. `get_qty_refunded_for_item` answers in
 		// negatives, hence the addition.
-		$quantity = (int) $item->get_quantity()
-			+ (int) $order->get_qty_refunded_for_item( $item->get_id(), $item->get_type() );
+		//
+		// Products only. A fee has no quantity in WooCommerce: every fee item
+		// answers 1, the fee's refund lines included, so the same sum would add
+		// one for each refund of the packaging fee instead of taking it off.
+		// Refunding a fee is money back, not goods off the order.
+		$quantity = (int) $item->get_quantity();
+		if ($item->get_type() === 'line_item') {
+			$quantity += (int) $order->get_qty_refunded_for_item( $item->get_id(), 'line_item' );
+		}
 
 		// A line for nothing is not something a shop sends, and a refund line
 		// is not something a packer can put in a box.
