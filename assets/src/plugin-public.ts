@@ -558,11 +558,22 @@ function ensureBookingField( selector: string ): JQuery< HTMLElement > {
  */
 
 window.addEventListener( 'DOMContentLoaded', function () {
+	// The checkout prints this config beside its own markup. When WooCommerce
+	// refuses to render the checkout at all — a basket it will not let through,
+	// a coupon that no longer exists — the config is not printed either, and
+	// there is nothing here for us to set up. Throwing instead puts a red line
+	// in the console of a page that is already telling the customer what is
+	// wrong, and it hides whatever else is in there from whoever goes looking.
+	const config = ( window as any )._okoskabet_checkout;
+	if ( ! config ) {
+		return;
+	}
+
 	const {
 		locale: locale,
 		displayOption: displayOption,
 		descriptions: descriptions,
-	} = ( window as any )._okoskabet_checkout;
+	} = config;
 
 	new OkoskabetCheckout( locale, displayOption, descriptions );
 
