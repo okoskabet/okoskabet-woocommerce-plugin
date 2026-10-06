@@ -276,6 +276,8 @@ class DeliveryExceptionsTest extends \Codeception\TestCase\WPTestCase {
 	public function test_upgrade_notice_shows_then_hides_after_dismissal(): void {
 		wp_set_current_user( $this->factory()->user->create( array( 'role' => 'administrator' ) ) );
 		delete_option( Delivery_Exceptions::UPGRADE_NOTICE_OPTION );
+		// Only a shop with delivery rules is asked to review them (is_in_use()).
+		update_option( Delivery_Exceptions::OPTION_KEY, array( 'weekdays_enabled' => true ) );
 
 		ob_start();
 		$this->sut->maybe_render_upgrade_notice();
@@ -463,7 +465,9 @@ class DeliveryExceptionsTest extends \Codeception\TestCase\WPTestCase {
 
 	public function test_flipped_rule_bites_when_the_cart_mixes_both_sides(): void {
 		$frost  = $this->make_term( 'product_cat', 'frost' );
-		$the_day = $this->date_offset( 5 );
+		// Inside the ordinary days (the merchant window is 3 here): a day
+		// further out is a pre-order and is not in the normal list at all.
+		$the_day = $this->date_offset( 2 );
 
 		// Deliberately a single-day rule rather than a weekday one. Weekday
 		// availability is worked out per product anyway, so it would pass
@@ -482,7 +486,7 @@ class DeliveryExceptionsTest extends \Codeception\TestCase\WPTestCase {
 		$in_frost  = $this->make_product( 'product_cat', $frost );
 		$elsewhere = $this->factory()->post->create();
 
-		$dates = array( $this->date_offset( 4 ), $the_day, $this->date_offset( 6 ) );
+		$dates = array( $this->date_offset( 1 ), $the_day, $this->date_offset( 3 ) );
 
 		$this->assertSame(
 			array( $the_day ),
