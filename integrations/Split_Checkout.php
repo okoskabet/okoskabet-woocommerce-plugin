@@ -2054,18 +2054,25 @@ class Split_Checkout extends Base {
 			);
 		}
 
+		// Rebuilding the cart empties it, and WooCommerce's empty_cart() takes
+		// the applied coupons along. Write them down first: step one gets back
+		// the ones that still hold for it, and a cancel before anything is
+		// ordered gives all of them back.
+		$coupons = WC()->cart->get_applied_coupons();
+
 		$state = array(
 			'split_token'      => $this->generate_token(),
 			'total_steps'      => count( $groups ),
 			'current_step'     => 1,
 			'groups'           => $snapshot_groups,
 			'completed_orders' => array(),
+			'coupons'          => $coupons,
 			'created_at'       => time(),
 		);
 		$this->set_state( $state );
 
 		// Reduce the cart to ONLY the items in group 1.
-		$this->load_cart_for_step( 1 );
+		$this->load_cart_for_step( 1, $coupons );
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			error_log( sprintf(
@@ -2155,8 +2162,10 @@ class Split_Checkout extends Base {
 	/**
 	 * Rebuild WC()->cart from a stored group snapshot, and put the checkout
 	 * into the kind of order that step is.
+	 *
+	 * @param string[] $coupons Coupon codes to put back on the rebuilt cart.
 	 */
-	private function load_cart_for_step( int $step ): void {
+	private function load_cart_for_step( int $step, array $coupons = array() ): void {
 		$state = $this->get_state();
 		if ( empty( $state['groups'] ) ) { return; }
 		$idx = $step - 1;
@@ -2165,7 +2174,7 @@ class Split_Checkout extends Base {
 
 		$this->apply_order_mode( (string) ( $group['mode'] ?? self::MODE_NORMAL ) );
 
-		$added_count = $this->fill_cart_with( $group['items'], sprintf( 'split step %d', $step ) );
+		$added_count = $this->fill_cart_with( $group['items'], sprintf( 'split step %d', $step ), $coupons );
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			error_log( sprintf(
@@ -2184,8 +2193,10 @@ class Split_Checkout extends Base {
 	 *
 	 * Returns how many of the recipes made it in: a product that has gone out
 	 * of stock since the snapshot was taken is skipped, not fatal.
+	 *
+	 * @param string[] $coupons Coupon codes to put back once the items are in.
 	 */
-	private function fill_cart_with( array $recipes, string $context ): int {
+	private function fill_cart_with( array $recipes, string $context, array $coupons = array() ): int {
 		WC()->cart->empty_cart( false );
 
 		$added_count = 0;
@@ -2210,6 +2221,11 @@ class Split_Checkout extends Base {
 		}
 		WC()->cart->calculate_totals();
 
+		if ( ! empty( $coupons ) && ! WC()->cart->is_empty() ) {
+			$this->reapply_coupons( $coupons );
+			WC()->cart->calculate_totals();
+		}
+
 		// Force-persist the cart to session so the page reload sees the
 		// changed cart. WC's cart auto-saves on shutdown, but in AJAX we
 		// can't always rely on shutdown firing predictably.
@@ -2222,6 +2238,52 @@ class Split_Checkout extends Base {
 		}
 
 		return $added_count;
+	}
+
+	/**
+	 * Put the customer's coupons back on a rebuilt cart, where they still hold.
+	 *
+	 * Whether a coupon holds is WooCommerce's question — minimum spend, which
+	 * products it covers, usage limits — and WC_Discounts answers it against
+	 * the cart as it is now. Part of a basket may not qualify for what the
+	 * whole did: 400 kr is under a 500 kr minimum, and a coupon for the bread
+	 * has nothing to discount when the bread goes out on the other day.
+	 *
+	 * Asking first, rather than letting apply_coupon() find out, keeps the
+	 * customer to one notice per coupon: apply_coupon() would add its own error
+	 * as well as returning false. A coupon that holds goes back without
+	 * WooCommerce's "Coupon code applied successfully" — the customer applied it
+	 * once already and has not done anything now.
+	 *
+	 * @param string[] $codes
+	 */
+	private function reapply_coupons( array $codes ): void {
+		$quiet = static function ( $message, $code ) {
+			return $code === \WC_Coupon::WC_COUPON_SUCCESS ? '' : $message;
+		};
+
+		foreach ( $codes as $code ) {
+			$code  = (string) $code;
+			$valid = ( new \WC_Discounts( WC()->cart ) )->is_coupon_valid( new \WC_Coupon( $code ) );
+
+			$applied = false;
+			if ( $valid === true ) {
+				add_filter( 'woocommerce_coupon_message', $quiet, PHP_INT_MAX, 2 );
+				$applied = WC()->cart->apply_coupon( $code );
+				remove_filter( 'woocommerce_coupon_message', $quiet, PHP_INT_MAX );
+			}
+
+			if ( ! $applied ) {
+				wc_add_notice(
+					sprintf(
+						/* translators: %s = coupon code */
+						__( 'The coupon "%s" does not apply to what is in your basket now, so it has been taken off.', O_TEXTDOMAIN ),
+						esc_html( $code )
+					),
+					'notice'
+				);
+			}
+		}
 	}
 
 	// ---------------------------------------------------------------------
@@ -2258,6 +2320,17 @@ class Split_Checkout extends Base {
 
 		$restored = 0;
 		if ( function_exists( 'WC' ) && WC()->cart ) {
+			// The coupons on the cart now are the customer's either way. The
+			// ones they started the split with come back too, but only while
+			// nothing has been ordered: once an order is placed it has used
+			// them, and a second go on the rest of the basket would count a
+			// fixed discount twice.
+			$coupons = WC()->cart->get_applied_coupons();
+			if ( empty( $state['completed_orders'] ) ) {
+				$coupons = array_merge( (array) ( $state['coupons'] ?? array() ), $coupons );
+			}
+			$coupons = array_values( array_unique( array_map( 'strval', $coupons ) ) );
+
 			$recipes = array();
 			foreach ( array_slice( $groups, $current - 1 ) as $group ) {
 				foreach ( (array) ( $group['items'] ?? array() ) as $recipe ) {
@@ -2266,7 +2339,7 @@ class Split_Checkout extends Base {
 			}
 
 			$this->apply_order_mode( self::MODE_NORMAL );
-			$restored = $this->fill_cart_with( $recipes, 'cancelled split' );
+			$restored = $this->fill_cart_with( $recipes, 'cancelled split', $coupons );
 		}
 
 		if ( $restored === 0 ) {
@@ -2448,6 +2521,10 @@ class Split_Checkout extends Base {
 		$state['current_step'] = $next;
 		$this->set_state( $state );
 
+		// No coupons carried here. Whatever is on the cart now belongs to the
+		// order just placed, and putting it on the next one as well would give
+		// a fixed discount twice. The customer may enter a coupon for this
+		// delivery themselves, and WooCommerce will judge it.
 		$this->load_cart_for_step( $next );
 
 		wp_send_json_success( array( 'redirect' => wc_get_checkout_url() ) );

@@ -419,6 +419,10 @@ msgstr "Annullér opdelt levering og start forfra"
 msgid "The split delivery is cancelled, and your basket is back as it was."
 msgstr "Den opdelte levering er annulleret, og din kurv er som før."
 
+#. translators: %s = coupon code
+msgid "The coupon \"%s\" does not apply to what is in your basket now, so it has been taken off."
+msgstr "Rabatkoden \"%s\" gælder ikke for det, der er i din kurv nu, så den er fjernet."
+
 # Merchant form — secret-field controls and hints
 msgid "Show/hide API key"
 msgstr "Vis/skjul API-nøgle"
