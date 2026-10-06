@@ -89,7 +89,8 @@ modules:
             configFile: 'wp-config-test.php'
             # WooCommerce first: this plugin is built on it, and without it the
             # suite dies on `Class "WC_Cart" not found` before a single test of
-            # ours runs.
+            # ours runs — or, worse, every test that asks for WooCommerce quietly
+            # skips and the suite still reports green.
             plugins:
                 - woocommerce/woocommerce.php
                 - okoskabet-woocommerce-plugin/okoskabet-woocommerce-plugin.php
