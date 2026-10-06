@@ -212,6 +212,18 @@ class Split_Checkout extends Base {
 	 * @return string[]|null Sorted Y-m-d dates, or null when unanswerable.
 	 */
 	protected function delivery_days_for_product( int $product_id, bool $pre_order = false ): ?array {
+		return $this->delivery_days_for_cart( array( $product_id ), $pre_order );
+	}
+
+	/**
+	 * The days these products can be delivered on together.
+	 *
+	 * Asked of Økoskabet the same way the checkout's own date picker asks it,
+	 * so a basket and the banner that talks about it cannot disagree.
+	 *
+	 * @param int[] $product_ids
+	 */
+	protected function delivery_days_for_cart( array $product_ids, bool $pre_order = false ): ?array {
 		if ( ! function_exists( 'oko_home_delivery_dates' ) ) {
 			return null;
 		}
@@ -221,13 +233,19 @@ class Split_Checkout extends Base {
 			return null;
 		}
 
-		// One question per product per mode per request. The banner, the removal
+		$product_ids = array_values( array_unique( array_filter( array_map( 'intval', $product_ids ) ) ) );
+		if ( empty( $product_ids ) ) {
+			return null;
+		}
+		sort( $product_ids );
+
+		// One question per basket per mode per request. The banner, the removal
 		// options and the submission guard all ask the same thing during a
 		// single checkout render, and every miss is a round trip to Økoskabet.
 		static $cache = array();
-		$key = $postcode . '|' . $product_id . '|' . ( $pre_order ? 'pre' : 'normal' );
+		$key = $postcode . '|' . implode( ',', $product_ids ) . '|' . ( $pre_order ? 'pre' : 'normal' );
 		if ( ! array_key_exists( $key, $cache ) ) {
-			$cache[ $key ] = \oko_home_delivery_dates( $postcode, array( $product_id ), $pre_order );
+			$cache[ $key ] = \oko_home_delivery_dates( $postcode, $product_ids, $pre_order );
 		}
 
 		return $cache[ $key ];
@@ -259,6 +277,26 @@ class Split_Checkout extends Base {
 		}
 
 		return function_exists( 'oko_pre_order_checkout_requested' ) && \oko_pre_order_checkout_requested();
+	}
+
+	/**
+	 * The products in the basket right now.
+	 *
+	 * @return int[]
+	 */
+	private function cart_product_ids(): array {
+		$ids = array();
+
+		if ( function_exists( 'WC' ) && WC()->cart ) {
+			foreach ( WC()->cart->get_cart() as $item ) {
+				$pid = (int) ( $item['product_id'] ?? 0 );
+				if ( $pid > 0 ) {
+					$ids[] = $pid;
+				}
+			}
+		}
+
+		return array_values( array_unique( $ids ) );
 	}
 
 	/** Where the customer is having this delivered, as far as we know yet. */
@@ -315,14 +353,33 @@ class Split_Checkout extends Base {
 		// Whether anything here could be pre-ordered at all. When nothing can,
 		// there is only one kind of delivery to be had, nothing to move between,
 		// and no reason to ask Økoskabet twice per product.
-		$product_ids   = array();
-		foreach ( WC()->cart->get_cart() as $item ) {
-			$pid = (int) ( $item['product_id'] ?? 0 );
-			if ( $pid > 0 ) {
-				$product_ids[] = $pid;
+		$product_ids = $this->cart_product_ids();
+		$two_kinds   = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days( $product_ids );
+
+		// In a pre-order, ask about the basket as a whole before asking about
+		// its lines. The date picker asks exactly this, and a line with no
+		// pre-order rules of its own does not narrow the answer: it has no
+		// window it must be held in, so it can travel on whichever day the rest
+		// is being held for. Asking line by line reads that silence as "cannot
+		// be pre-ordered" and pushes the line into an ordinary delivery, which
+		// splits a basket the checkout was willing to deliver in one go and
+		// charges the customer a second delivery for it.
+		//
+		// A line that must never be held — fresh produce on the shop's
+		// "cannot be pre-ordered" list — still empties this answer, so a basket
+		// holding one is split exactly as before.
+		if ( $pre_order_mode ) {
+			$together = $this->delivery_days_for_cart( $product_ids, true );
+			if ( ! empty( $together ) ) {
+				foreach ( WC()->cart->get_cart() as $key => $item ) {
+					if ( (int) ( $item['product_id'] ?? 0 ) > 0 ) {
+						$out[ $key ] = array( 'mode' => self::MODE_PRE_ORDER, 'dates' => $together );
+					}
+				}
+
+				return $out;
 			}
 		}
-		$two_kinds = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days( $product_ids );
 
 		foreach ( WC()->cart->get_cart() as $key => $item ) {
 			$pid = (int) ( $item['product_id'] ?? 0 );

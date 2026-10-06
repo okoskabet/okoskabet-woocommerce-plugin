@@ -966,9 +966,46 @@ it( 'starts a returning visitor in an ordinary order, whatever the old cookie sa
 	assert_false( oko_pre_order_checkout_requested(), 'a remembered cookie starts nothing' );
 	assert_same( array(), oko_split()->compute_split_groups(), 'and so there is no banner' );
 
-	// The same basket still splits when the customer asks on this page.
+	// Asking on this page is what starts a pre-order, and this basket needs no
+	// splitting for one: the melon has no window it must be held in, so it
+	// travels with the ice.
 	oko_test_set_pre_order( true );
-	assert_same( 2, count( oko_split()->compute_split_groups() ), 'asking on this page still works' );
+	assert_true( oko_pre_order_checkout_requested(), 'asking on this page still works' );
+	assert_same( array(), oko_split()->compute_split_groups(), 'and the basket goes in one delivery' );
+} );
+
+it( 'lets a product with no rules of its own travel with a pre-order', function () {
+	// The basket is asked about as a basket, which is how the date picker in
+	// the checkout asks. Cornflakes have no pre-order window to be held in, so
+	// they do not narrow the answer: the whole basket can be held for a day in
+	// December. Asking line by line read that silence as "cannot be
+	// pre-ordered" and split the basket, so the customer paid for a second
+	// delivery to get something the checkout had already offered in one.
+	$shop = oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_ICE, 'b' => OKO_SPLIT_CORNFLAKES ) );
+	oko_test_set_pre_order( true );
+
+	assert_same( array(), oko_split()->compute_split_groups(), 'one delivery, not two' );
+
+	$groups = oko_split()->compute_delivery_groups();
+	assert_same( 1, count( $groups ), 'and it is a single group' );
+	assert_same( $shop['pre_order_day'], $groups[0]['suggested_date'], 'held for the pre-order day' );
+
+	$names = oko_split_names( $groups[0] );
+	sort( $names );
+	assert_same( array( 'Cornflakes', 'Nougat ispinde' ), $names, 'both travel together' );
+} );
+
+it( 'still splits a basket holding something that must never be held', function () {
+	// Pak Choi is on the shop's "cannot be pre-ordered" list. One such line
+	// empties the basket's answer, and then the lines are asked one by one as
+	// before. The rule that fresh produce is never saved for later is what the
+	// splitting is for, and it has to survive the change above.
+	oko_split_pre_order_shop();
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_ICE, 'b' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	assert_same( 2, count( oko_split()->compute_split_groups() ), 'two deliveries' );
 } );
 
 it( 'ignores a pre-order for a basket that has nothing to pre-order', function () {
