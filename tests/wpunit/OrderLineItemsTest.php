@@ -1,149 +1,189 @@
 <?php
 
+use okoskabet_woocommerce_plugin\Integrations\Merchants;
+
 /**
- * The contents we send Økoskabet with a shipment.
- *
- * The packing room prints a label from these lines, and the shop decides
- * whether the variation belongs on it. That decision is only possible when the
- * product's name and the variation arrive apart — so a variable product must
- * send the parent's name in `name` and the chosen variation in `variant_title`,
- * never the two run together the way WooCommerce writes them on the line.
+ * What the packing room is told an order contains once money has gone back
+ * to the customer. A refunded product line is goods taken off the order; a
+ * refunded fee is money and nothing else. Each test pins one of those, run
+ * through wc_create_refund the way a shop makes a refund.
  */
 class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 
+	/** @var array<int,array{method:string,url:string,body:string}> */
+	private $requests = array();
+
 	public function setUp(): void {
 		parent::setUp();
-		do_action( 'plugins_loaded' );
+		delete_option( Merchants::OPTION_KEY );
+		Merchants::purge_config_cache();
+		Merchants::save_config(
+			array(
+				'default_merchant_id' => 'default',
+				'merchants'           => array(
+					'default' => array( 'id' => 'default', 'label' => 'Default', 'api_key' => 'test-key', 'staging' => true ),
+				),
+			)
+		);
+
+		$this->requests = array();
+		add_filter( 'pre_http_request', array( $this, 'capture' ), 10, 3 );
 	}
 
-	/** A variable product with one attribute and one variation of it. */
-	private function variable_product( string $name, string $attribute, string $value, string $sku ): array {
-		$parent = new \WC_Product_Variable();
-		$parent->set_name( $name );
-
-		$attr = new \WC_Product_Attribute();
-		$attr->set_name( $attribute );
-		$attr->set_options( array( $value ) );
-		$attr->set_visible( true );
-		$attr->set_variation( true );
-		$parent->set_attributes( array( $attr ) );
-		$parent->save();
-
-		$variation = new \WC_Product_Variation();
-		$variation->set_parent_id( $parent->get_id() );
-		$variation->set_attributes( array( sanitize_title( $attribute ) => $value ) );
-		$variation->set_sku( $sku );
-		$variation->save();
-
-		return array( $parent, $variation );
+	public function tearDown(): void {
+		remove_filter( 'pre_http_request', array( $this, 'capture' ), 10 );
+		delete_option( Merchants::OPTION_KEY );
+		Merchants::purge_config_cache();
+		parent::tearDown();
 	}
 
-	private function order_with( array $products ): \WC_Order {
-		$order = new \WC_Order();
-		foreach ( $products as $product ) {
-			$order->add_product( $product, 1 );
-		}
+	public function capture( $preempt, $args, $url ) {
+		$this->requests[] = array( 'method' => (string) ( $args['method'] ?? 'GET' ), 'url' => (string) $url, 'body' => (string) ( $args['body'] ?? '' ) );
+		return array( 'headers' => array(), 'body' => '{"ok":true}', 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+	}
+
+	// ------------------------------------------------------------- helpers
+
+	/**
+	 * An order Økoskabet already has: two apples, the packaging fee and
+	 * delivery to a shed, with the fingerprint of what was sent on it.
+	 */
+	private function sent_order(): WC_Order {
+		$product = new WC_Product_Simple();
+		$product->set_name( 'Æbler' );
+		$product->set_regular_price( '10' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 2 );
+
+		$fee = new WC_Order_Item_Fee();
+		$fee->set_name( 'Emballage' );
+		$fee->set_total( '22.40' );
+		$order->add_item( $fee );
+
+		$shipping = new WC_Order_Item_Shipping();
+		$shipping->set_method_id( 'hey_okoskabet_shipping_shed' );
+		$shipping->set_method_title( 'Skab' );
+		$shipping->set_total( '39' );
+		$order->add_item( $shipping );
+
+		$order->update_meta_data( '_billing_okoskabet_delivery_date', '2026-10-09' );
+		$order->update_meta_data( '_billing_okoskabet_shed_id', '42' );
+		$order->calculate_totals( false );
+		$order->set_status( 'processing' );
 		$order->save();
 
+		$order->update_meta_data( 'billing_okoskabet_done', 'yes' );
+		$order->update_meta_data( OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint( oko_shipment_payload( $order, o_get_merchant() ) ) );
+		$order->save();
+
+		$this->requests = array();
 		return $order;
 	}
 
-	public function test_a_variation_sends_the_parent_name_and_the_variation_apart() {
-		list( , $variation ) = $this->variable_product( 'Økologiske hakkebøffer, 8 stk.', 'Størrelse', '3 pakker', 'HAK-3' );
-
-		$lines = oko_order_line_items( $this->order_with( array( $variation ) ) );
-
-		$this->assertCount( 1, $lines );
-		$this->assertSame( 'Økologiske hakkebøffer, 8 stk.', $lines[0]['name'], 'the goods are the parent product' );
-		$this->assertSame( '3 pakker', $lines[0]['variant_title'], 'and the choice is beside it' );
-		$this->assertSame( 'HAK-3', $lines[0]['sku'], 'the SKU still belongs to the variation' );
+	private function item_of_type( WC_Order $order, string $type ): WC_Order_Item {
+		$items = $order->get_items( $type );
+		return reset( $items );
 	}
 
-	/**
-	 * An attribute a variation leaves as "any" is recorded on the line and
-	 * nowhere else. Reading the variation instead loses it, and the packing
-	 * room is not told which colour to put in the box.
-	 */
-	public function test_an_any_attribute_is_read_off_the_line() {
-		list( $parent, $variation ) = $this->variable_product( 'Æg', 'Farve', 'Rød', 'AEG' );
-
-		$variation->set_attributes( array( 'farve' => '' ) );
-		$variation->save();
-
-		$order = $this->order_with( array( $variation ) );
-		$item  = $order->get_items()[ array_key_first( $order->get_items() ) ];
-		$item->add_meta_data( 'farve', 'Rød', true );
-		$item->save();
-
-		$lines = oko_order_line_items( wc_get_order( $order->get_id() ) );
-
-		$this->assertSame( 'Rød', $lines[0]['variant_title'], 'the choice only exists on the line' );
-	}
-
-	/**
-	 * Shops reuse variations: "Uge 40" becomes "Uge 41". Reading the live
-	 * variation would have the packing room pack the new one.
-	 */
-	public function test_a_variation_edited_after_the_order_sends_what_was_bought() {
-		list( , $variation ) = $this->variable_product( 'Hakkebøffer', 'Størrelse', '3 pakker', 'HAK-3' );
-		$order = $this->order_with( array( $variation ) );
-
-		$variation->set_attributes( array( 'storrelse' => '6 pakker' ) );
-		$variation->save();
-
-		$lines = oko_order_line_items( wc_get_order( $order->get_id() ) );
-
-		$this->assertSame(
-			'3 pakker',
-			$lines[0]['variant_title'],
-			'the customer bought three, whatever the catalogue says now'
+	private function refund( WC_Order $order, WC_Order_Item $item, int $qty, float $total ): void {
+		$refund = wc_create_refund(
+			array(
+				'order_id'       => $order->get_id(),
+				'amount'         => $total,
+				'line_items'     => array( $item->get_id() => array( 'qty' => $qty, 'refund_total' => $total ) ),
+				'refund_payment' => false,
+				'restock_items'  => false,
+			)
 		);
+		$this->assertNotWPError( $refund );
 	}
 
-	public function test_a_simple_product_sends_no_variation_at_all() {
-		$product = new \WC_Product_Simple();
-		$product->set_name( 'Lakridsruller' );
-		$product->set_sku( 'LR2' );
-		$product->save();
-
-		$lines = oko_order_line_items( $this->order_with( array( $product ) ) );
-
-		$this->assertCount( 1, $lines );
-		$this->assertSame( 'Lakridsruller', $lines[0]['name'] );
-		$this->assertNull( $lines[0]['variant_title'], 'nothing was chosen, so nothing is sent' );
+	/** @return array<string,int> line name => quantity sent */
+	private function lines( WC_Order $order ): array {
+		$out = array();
+		foreach ( oko_order_line_items( wc_get_order( $order->get_id() ) ) as $line ) {
+			$out[ $line['name'] ] = $line['quantity'];
+		}
+		return $out;
 	}
 
-	public function test_a_fee_is_not_something_the_packing_room_can_pack() {
-		$product = new \WC_Product_Simple();
-		$product->set_name( 'Lakridsruller' );
-		$product->save();
+	// ------------------------------------------------------------- refunds
 
-		$order = $this->order_with( array( $product ) );
-		$fee   = new \WC_Order_Item_Fee();
-		$fee->set_name( 'Emballage' );
-		$fee->set_amount( '10' );
-		$fee->set_total( '10' );
-		$order->add_item( $fee );
-		$order->save();
+	/**
+	 * @test
+	 * WooCommerce gives a fee a quantity of 1, refund lines included, so
+	 * counting a refunded fee the way a refunded product is counted adds one
+	 * where it should take one off. The packing room was sent the fee twice.
+	 */
+	public function a_refunded_fee_is_still_one_fee() {
+		$order = $this->sent_order();
 
-		$lines = oko_order_line_items( wc_get_order( $order->get_id() ) );
+		$this->refund( $order, $this->item_of_type( $order, 'fee' ), 0, 22.40 );
 
-		$this->assertCount( 1, $lines, 'the packaging fee is not a line to count' );
-		$this->assertSame( 'Lakridsruller', $lines[0]['name'] );
+		$this->assertSame( array( 'Æbler' => 2, 'Emballage' => 1 ), $this->lines( $order ) );
 	}
 
-	public function test_a_line_whose_variation_is_gone_keeps_the_name_it_was_sold_under() {
-		list( , $variation ) = $this->variable_product( 'Frugtkasse', 'Størrelse', 'Stor', 'FK-S' );
-		$order = $this->order_with( array( $variation ) );
+	/**
+	 * @test
+	 * Two partial refunds of the same fee: one fee, not three.
+	 */
+	public function a_fee_refunded_twice_is_still_one_fee() {
+		$order = $this->sent_order();
+		$fee   = $this->item_of_type( $order, 'fee' );
 
-		// The catalogue moves on; the order does not.
-		$sold_as = $order->get_items()[ array_key_first( $order->get_items() ) ]->get_name();
-		$variation->delete( true );
+		$this->refund( $order, $fee, 0, 10.00 );
+		$this->refund( $order, $fee, 0, 5.00 );
 
-		$lines = oko_order_line_items( wc_get_order( $order->get_id() ) );
+		$this->assertSame( array( 'Æbler' => 2, 'Emballage' => 1 ), $this->lines( $order ) );
+	}
 
-		$this->assertCount( 1, $lines );
-		$this->assertSame( $sold_as, $lines[0]['name'], 'the line still says what the customer bought' );
-		$this->assertNull( $lines[0]['variant_title'] );
+	/**
+	 * @test
+	 * Refunding only the fee takes no goods off the order, so there is
+	 * nothing new to tell the packing room.
+	 */
+	public function refunding_the_fee_sends_no_new_lines() {
+		$order = $this->sent_order();
+
+		$this->refund( $order, $this->item_of_type( $order, 'fee' ), 0, 22.40 );
+
+		$puts = array_values( array_filter( $this->requests, function ( $r ) { return $r['method'] === 'PUT'; } ) );
+		$this->assertSame( array(), $puts, 'a fee refund leaves the shipment as it was' );
+	}
+
+	/**
+	 * @test
+	 * A refunded product is how a shop takes goods off an order that has
+	 * been sent: one of two apples refunded, one apple packed and the
+	 * shipment updated to say so.
+	 */
+	public function a_refunded_product_is_taken_off_the_shipment() {
+		$order = $this->sent_order();
+
+		$this->refund( $order, $this->item_of_type( $order, 'line_item' ), 1, 10.00 );
+
+		$this->assertSame( array( 'Æbler' => 1, 'Emballage' => 1 ), $this->lines( $order ) );
+
+		$puts = array_values( array_filter( $this->requests, function ( $r ) { return $r['method'] === 'PUT'; } ) );
+		$this->assertCount( 1, $puts );
+		$sent = array();
+		foreach ( json_decode( $puts[0]['body'], true )['line_items'] as $line ) {
+			$sent[ $line['name'] ] = $line['quantity'];
+		}
+		$this->assertSame( array( 'Æbler' => 1, 'Emballage' => 1 ), $sent );
+	}
+
+	/**
+	 * @test
+	 * Every apple refunded: the line goes, the fee stays.
+	 */
+	public function a_fully_refunded_product_leaves_the_shipment() {
+		$order = $this->sent_order();
+
+		$this->refund( $order, $this->item_of_type( $order, 'line_item' ), 2, 20.00 );
+
+		$this->assertSame( array( 'Emballage' => 1 ), $this->lines( $order ) );
 	}
 }

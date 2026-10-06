@@ -1326,18 +1326,6 @@ add_filter('woocommerce_checkout_get_value', 'oko_checkout_starts_without_last_o
  */
 function oko_is_pre_order_checkout(): bool
 {
-	// The date decides, not the hidden field. The field is the customer's
-	// browser talking, and the pre-order fee hangs off this answer: emptying it
-	// while still asking for a December date paid the ordinary fee. A date past
-	// the ordinary window is a pre-order whatever the form says.
-	$date = oko_posted_delivery_date();
-	if ($date !== '') {
-		return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::date_is_pre_order(
-			$date,
-			oko_cart_product_ids()
-		);
-	}
-
 	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
 	if (isset($_POST['billing_okoskabet_pre_order'])) {
 		return (string) wp_unslash($_POST['billing_okoskabet_pre_order']) === '1';
@@ -1349,6 +1337,32 @@ function oko_is_pre_order_checkout(): bool
 	}
 	// phpcs:enable WordPress.Security.NonceVerification
 	return false;
+}
+
+/**
+ * Whether this checkout is a pre-order as far as money is concerned.
+ *
+ * The form field says which mode the customer is in; this says what they are
+ * actually asking for. They are the same thing until someone edits the page:
+ * emptying the field while still asking for a December date paid the ordinary
+ * packaging fee. So the fee follows the date whenever there is one, and the
+ * field only answers before a date has been picked.
+ *
+ * Kept apart from the mode on purpose. Deciding the mode from the date would
+ * throw the customer out of a pre-order they just asked for, in the moment
+ * between pressing the button and the date picker refreshing.
+ */
+function oko_pre_order_for_pricing(): bool
+{
+	$date = oko_posted_delivery_date();
+	if ($date !== '') {
+		return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::date_is_pre_order(
+			$date,
+			oko_cart_product_ids()
+		);
+	}
+
+	return oko_is_pre_order_checkout();
 }
 
 /**
@@ -1577,8 +1591,15 @@ function oko_order_line_items(\WC_Order $order): array
 		// ordered quantity alone leaves the packing room packing three when the
 		// customer is only getting two. `get_qty_refunded_for_item` answers in
 		// negatives, hence the addition.
-		$quantity = (int) $item->get_quantity()
-			+ (int) $order->get_qty_refunded_for_item( $item->get_id(), $item->get_type() );
+		//
+		// Products only. A fee has no quantity in WooCommerce: every fee item
+		// answers 1, the fee's refund lines included, so the same sum would add
+		// one for each refund of the packaging fee instead of taking it off.
+		// Refunding a fee is money back, not goods off the order.
+		$quantity = (int) $item->get_quantity();
+		if ($item->get_type() === 'line_item') {
+			$quantity += (int) $order->get_qty_refunded_for_item( $item->get_id(), 'line_item' );
+		}
 
 		// A line for nothing is not something a shop sends, and a refund line
 		// is not something a packer can put in a box.

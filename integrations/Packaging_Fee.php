@@ -369,7 +369,10 @@ class Packaging_Fee extends Base {
 	 * the cart page never has the button — so anywhere else the answer is no.
 	 */
 	private static function is_pre_order(): bool {
-		return \function_exists( 'oko_is_pre_order_checkout' ) && \oko_is_pre_order_checkout();
+		// The date, not the form field: a checkout that posts a December date
+		// with the pre-order field emptied is still a pre-order, and the fee
+		// for one is what it owes.
+		return \function_exists( 'oko_pre_order_for_pricing' ) && \oko_pre_order_for_pricing();
 	}
 
 	/**
@@ -565,9 +568,13 @@ class Packaging_Fee extends Base {
 			}
 		}
 
+		// Rounded to WooCommerce's internal precision, not the display
+		// decimals: the ex-VAT part of a typed incl-VAT price rarely has an
+		// exact display value, and rounding it before VAT is added back put
+		// one amount in five a unit off (17 kr typed, 18 kr charged).
 		$cart->add_fee(
 			$rule['label'],
-			round( $amount, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 ),
+			round( $amount, function_exists( 'wc_get_rounding_precision' ) ? wc_get_rounding_precision() : 6 ),
 			$config['taxable'],
 			$config['tax_class']
 		);
