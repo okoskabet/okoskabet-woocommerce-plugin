@@ -1249,3 +1249,39 @@ msgstr "Nyt i denne version. Du behøver ikke gøre noget – alt nyt er slået 
 
 msgid "See the settings"
 msgstr "Se indstillingerne"
+
+# ----------------------------------------------------------------------
+# Address suggestions at checkout
+# ----------------------------------------------------------------------
+
+msgid "Address suggestions at checkout"
+msgstr "Adresseforslag i kassen"
+
+msgid "While the customer types their address, suggest addresses from the Danish address register and fill in street, floor and door, postcode and city. Fewer parcels go to an address that cannot be found. The customer can ignore the suggestions and type as before. Works in the classic checkout."
+msgstr "Mens kunden skriver sin adresse, foreslås adresser fra det danske adresseregister, og vej, etage og dør, postnummer og by bliver udfyldt. Så bliver færre pakker sendt til en adresse, der ikke kan findes. Kunden kan se bort fra forslagene og skrive som før. Virker i den klassiske kasse."
+
+msgid "Address suggestions: the checkout suggests addresses from the address register while the customer types, including floor and door."
+msgstr "Adresseforslag: kassen foreslår adresser fra adresseregistret, mens kunden skriver, også med etage og dør."
+
+msgid "Address suggestions"
+msgstr "Adresseforslag"
+
+msgid "Choose apartment"
+msgstr "Vælg lejlighed"
+
+msgid "No apartment / the whole house"
+msgstr "Ingen lejlighed / hele huset"
+
+#, php-format
+msgid "%d suggestions. Use the up and down arrows to choose."
+msgstr "%d forslag. Brug pil op og pil ned for at vælge."
+
+msgid "1 suggestion. Use the up and down arrows to choose."
+msgstr "1 forslag. Brug pil op og pil ned for at vælge."
+
+#, php-format
+msgid "%d apartments. Use the up and down arrows to choose."
+msgstr "%d lejligheder. Brug pil op og pil ned for at vælge."
+
+msgid "The address has been filled in."
+msgstr "Adressen er udfyldt."

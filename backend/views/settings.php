@@ -193,6 +193,18 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
+	// Off until the shop turns it on, like everything new. The checkout script
+	// and its REST routes both check this, see Address_Autocomplete.
+	$cmb->add_field(
+		array(
+			'name'    => __('Address suggestions at checkout', O_TEXTDOMAIN),
+			'desc'    => __('While the customer types their address, suggest addresses from the Danish address register and fill in street, floor and door, postcode and city. Fewer parcels go to an address that cannot be found. The customer can ignore the suggestions and type as before. Works in the classic checkout.', O_TEXTDOMAIN),
+			'id'      => \okoskabet_woocommerce_plugin\Integrations\Address_Autocomplete::SETTING,
+			'type'    => 'checkbox',
+			'default' => '',
+		)
+	);
+
 
 	if ( ! $oko_multi_merchant_active ) {
 		$cmb->add_field(

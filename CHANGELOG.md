@@ -2,6 +2,28 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## Unreleased
+
+= Address suggestions at checkout =
+
+While a customer types their street address at checkout, the plugin can now
+suggest addresses from the Danish address register. Choosing one fills in the
+street and house number, floor and door, postcode and city, so fewer parcels
+end up at an address Økoskabet cannot find.
+
+When the chosen address is a building with flats, the customer is offered a
+second list — "Vælg lejlighed" — with an option for no flat at all. The floor
+and door go in the second address line, or after a comma on the first line when
+the checkout has no second line. Delivery dates and Økoskabe are updated
+straight away, since they depend on the postcode.
+
+It is off until you turn it on: **Address suggestions at checkout** in the
+plugin settings. The suggestions are fetched through your own shop with your
+API key, which never reaches the customer's browser. A customer who ignores
+them checks out exactly as before, and if the address lookup is unavailable the
+checkout simply shows no suggestions. Works in the classic checkout, not the
+block checkout.
+
 ## 1.4.7 - 2026-08-29
 
 = See what your Økoskabet features cost =

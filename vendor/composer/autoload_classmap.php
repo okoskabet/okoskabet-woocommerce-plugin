@@ -20,6 +20,7 @@ return array(
     'okoskabet_woocommerce_plugin\\Engine\\Initialize' => $baseDir . '/engine/Initialize.php',
     'okoskabet_woocommerce_plugin\\Frontend\\Enqueue' => $baseDir . '/frontend/Enqueue.php',
     'okoskabet_woocommerce_plugin\\Frontend\\Extras\\Body_Class' => $baseDir . '/frontend/Extras/Body_Class.php',
+    'okoskabet_woocommerce_plugin\\Integrations\\Address_Autocomplete' => $baseDir . '/integrations/Address_Autocomplete.php',
     'okoskabet_woocommerce_plugin\\Integrations\\CMB' => $baseDir . '/integrations/CMB.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Cron' => $baseDir . '/integrations/Cron.php',
     'okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions' => $baseDir . '/integrations/Delivery_Exceptions.php',

@@ -78,6 +78,7 @@ class ComposerStaticInit8d18d9b01caf28828fc36e7de364d1f3
         'okoskabet_woocommerce_plugin\\Engine\\Initialize' => __DIR__ . '/../..' . '/engine/Initialize.php',
         'okoskabet_woocommerce_plugin\\Frontend\\Enqueue' => __DIR__ . '/../..' . '/frontend/Enqueue.php',
         'okoskabet_woocommerce_plugin\\Frontend\\Extras\\Body_Class' => __DIR__ . '/../..' . '/frontend/Extras/Body_Class.php',
+        'okoskabet_woocommerce_plugin\\Integrations\\Address_Autocomplete' => __DIR__ . '/../..' . '/integrations/Address_Autocomplete.php',
         'okoskabet_woocommerce_plugin\\Integrations\\CMB' => __DIR__ . '/../..' . '/integrations/CMB.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Cron' => __DIR__ . '/../..' . '/integrations/Cron.php',
         'okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions' => __DIR__ . '/../..' . '/integrations/Delivery_Exceptions.php',
