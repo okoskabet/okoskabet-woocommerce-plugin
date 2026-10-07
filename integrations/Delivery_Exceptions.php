@@ -1755,22 +1755,56 @@ class Delivery_Exceptions extends Base {
 	 * without a from date opens everything up to its until date; one without
 	 * an until date opens nothing, since there would be no end to it.
 	 *
+	 * Every range starts past the normal horizon, whatever the rule says. A
+	 * day the ordinary checkout already offers is an ordinary delivery day,
+	 * and a from/until rule running from today to Christmas would otherwise
+	 * make next Tuesday a pre-order: the date appears in the normal list, the
+	 * customer picks it there, and date_is_pre_order() still answers yes, so
+	 * they are charged the pre-order fee instead of the packaging fee. The
+	 * single-day rules have been clipped this way all along, in
+	 * far_only_on_ranges(); this is the same cut for the other rule type.
+	 *
 	 * @param array $applicable_rules As collect_applicable_rules() returns them.
 	 * @return array<int,array{0:string,1:string}>
 	 */
 	public static function pre_order_ranges( array $applicable_rules, ?array $config = null, array $dates = array(), array $product_ids = array() ): array {
-		$ranges = self::far_only_on_ranges( $applicable_rules, $config, $dates, $product_ids );
+		$ranges  = self::far_only_on_ranges( $applicable_rules, $config, $dates, $product_ids );
+		$horizon = self::normal_horizon_ymd( $config ?? self::get_config(), $dates, $product_ids );
 
 		foreach ( $applicable_rules as $rule ) {
 			if ( empty( $rule['extend'] ) ) {
 				continue;
 			}
-			if ( ( $rule['type'] ?? '' ) === 'from_until' && ! empty( $rule['until'] ) ) {
-				$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) $rule['until'] );
+			if ( ( $rule['type'] ?? '' ) !== 'from_until' || empty( $rule['until'] ) ) {
+				continue;
 			}
+
+			$until = (string) $rule['until'];
+
+			// A window that ends inside the normal days opens nothing: every
+			// day it names is already offered in the ordinary checkout.
+			if ( $until <= $horizon ) {
+				continue;
+			}
+
+			$from = (string) ( $rule['from'] ?? '' );
+			if ( $from === '' || $from <= $horizon ) {
+				$from = self::day_after( $horizon );
+			}
+
+			$ranges[] = array( $from, $until );
 		}
 
 		return $ranges;
+	}
+
+	/** The Y-m-d day following the given one. */
+	private static function day_after( string $date ): string {
+		$day = \DateTimeImmutable::createFromFormat( 'Y-m-d', $date );
+
+		return $day instanceof \DateTimeImmutable
+			? $day->modify( '+1 day' )->format( 'Y-m-d' )
+			: $date;
 	}
 
 	/**

@@ -257,6 +257,45 @@ it( 'opens a from/until window to the whole catalogue when the shop says so', fu
 	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), true ), 'the milk waits for nothing' );
 } );
 
+it( 'keeps the near days of a long pre-order window ordinary, fee and all', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	// A shop that opens pre-ordering from today until Christmas. The far days
+	// are pre-orders. Next week is still next week: the customer meets it in
+	// the ordinary checkout, and what they pay there is the packaging fee.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 0 ), 'until' => oko_test_date( 40 ), 'enabled' => true, 'extend' => true, 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	$near = oko_test_date( 2 );
+	$far  = oko_test_date( 30 );
+
+	assert_true(
+		in_array( $near, oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false ), true ),
+		'day two is an ordinary delivery day'
+	);
+	assert_false(
+		Delivery_Exceptions::date_is_pre_order( $near, array( OKO_ONLY_PRODUCT_BOX ) ),
+		'so it owes the packaging fee, not the pre-order fee'
+	);
+	assert_false(
+		in_array( $near, oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), true ),
+		'and the pre-order list does not repeat it'
+	);
+
+	assert_true(
+		in_array( $far, oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), true ),
+		'the far day is still behind the button'
+	);
+	assert_true(
+		Delivery_Exceptions::date_is_pre_order( $far, array( OKO_ONLY_PRODUCT_BOX ) ),
+		'which is where the pre-order fee belongs'
+	);
+} );
+
 it( 'leaves a window that names nothing inert, as it always was', function () {
 	oko_only_catalogue();
 	oko_test_set_merchant_days( 7 );
