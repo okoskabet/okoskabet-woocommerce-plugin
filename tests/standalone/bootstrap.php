@@ -74,6 +74,10 @@ function oko_test_reset(): void {
 	// state behind, and every test after it runs as though the customer were
 	// mid-split — which is both wrong and very hard to read in the output.
 	$GLOBALS['oko_test_wc']->session = new Oko_Test_Session();
+	// A customer who has got as far as a postcode: the fee is worked out at
+	// checkout, where one has been typed. Tests about a basket with no address
+	// yet clear it themselves.
+	oko_test_set_postcode( '2791' );
 }
 
 /**
@@ -336,9 +340,40 @@ class Oko_Test_WooCommerce {
 	public $session;
 }
 
-$GLOBALS['oko_test_wc']          = new Oko_Test_WooCommerce();
-$GLOBALS['oko_test_wc']->cart    = new Oko_Test_Cart();
-$GLOBALS['oko_test_wc']->session = new Oko_Test_Session();
+/** Just enough customer for the code that reads a postcode off one. */
+class Oko_Test_Customer {
+
+	/** @var string */
+	public $postcode = '';
+
+	public function get_shipping_postcode() { return $this->postcode; }
+	public function get_billing_postcode() { return $this->postcode; }
+}
+
+$GLOBALS['oko_test_wc']           = new Oko_Test_WooCommerce();
+$GLOBALS['oko_test_wc']->cart     = new Oko_Test_Cart();
+$GLOBALS['oko_test_wc']->session  = new Oko_Test_Session();
+$GLOBALS['oko_test_wc']->customer = new Oko_Test_Customer();
+
+/** The postcode the customer has typed, or '' for none yet. */
+function oko_test_set_postcode( string $postcode ): void {
+	$GLOBALS['oko_test_wc']->customer->postcode = $postcode;
+}
+
+/**
+ * Økoskabet's delivery-day endpoint, as the server-side callers reach it.
+ *
+ * The raw days the shop drives on, before any rule narrows them — which is
+ * what the real one returns, and what a horizon counted in delivery days has
+ * to be counted from. `null` is "could not be asked".
+ */
+function oko_home_delivery_dates( string $postcode, array $product_ids, ?bool $pre_order = null ): ?array {
+	if ( $postcode === '' ) {
+		return null;
+	}
+
+	return $GLOBALS['oko_test_delivery_days'];
+}
 
 function WC() {
 	return $GLOBALS['oko_test_wc'];

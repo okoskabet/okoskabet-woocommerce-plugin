@@ -1768,14 +1768,27 @@ class Delivery_Exceptions extends Base {
 	 * @return array<int,array{0:string,1:string}>
 	 */
 	public static function pre_order_ranges( array $applicable_rules, ?array $config = null, array $dates = array(), array $product_ids = array() ): array {
+		$config  = $config ?? self::get_config();
 		$ranges  = self::far_only_on_ranges( $applicable_rules, $config, $dates, $product_ids );
-		$horizon = self::normal_horizon_ymd( $config ?? self::get_config(), $dates, $product_ids );
+		$horizon = self::normal_horizon_ymd( $config, $dates, $product_ids );
+		$known   = self::horizon_is_knowable( $config, $dates );
 
 		foreach ( $applicable_rules as $rule ) {
 			if ( empty( $rule['extend'] ) ) {
 				continue;
 			}
 			if ( ( $rule['type'] ?? '' ) !== 'from_until' || empty( $rule['until'] ) ) {
+				continue;
+			}
+
+			// Counting delivery days with no days to count: the horizon has
+			// fallen back to the account's window, which is not where the
+			// ordinary list ends. Rather than clip against a number we know is
+			// wrong, leave the rule as the shop wrote it. That errs towards
+			// charging the pre-order fee, which is the choice made for a
+			// basket whose pre-order day cannot be looked up either.
+			if ( ! $known ) {
+				$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) $rule['until'] );
 				continue;
 			}
 
@@ -1796,6 +1809,57 @@ class Delivery_Exceptions extends Base {
 		}
 
 		return $ranges;
+	}
+
+	/**
+	 * Whether the normal horizon can be worked out from what we hold.
+	 *
+	 * A window counted in calendar days is today plus a number, and needs
+	 * nothing else. A window counted in delivery days is the Nth day the shop
+	 * actually offers, so without those days there is nothing to count and
+	 * `normal_horizon_ymd()` quietly answers with the account's window instead.
+	 */
+	private static function horizon_is_knowable( array $config, array $dates ): bool {
+		return ( $config['display_mode'] ?? 'window' ) !== 'count'
+			|| ! empty( self::strip_past_dates( $dates ) );
+	}
+
+	/**
+	 * The delivery days the horizon needs, for a caller that has none.
+	 *
+	 * The lists are filtered from days the browser sends up; the fee is worked
+	 * out on the server, where nobody has sent anything. Only a window counted
+	 * in delivery days needs them, so only that asks Økoskabet — and it asks
+	 * once per basket per request, because the fee is recalculated several
+	 * times during a single checkout render.
+	 *
+	 * @param int[] $product_ids
+	 * @return string[]
+	 */
+	private static function days_for_horizon( array $config, array $product_ids ): array {
+		if ( ( $config['display_mode'] ?? 'window' ) !== 'count' ) {
+			return array();
+		}
+		if ( ! function_exists( 'oko_home_delivery_dates' ) || ! function_exists( 'WC' ) || ! WC()->customer ) {
+			return array();
+		}
+
+		$postcode = trim( (string) WC()->customer->get_shipping_postcode() );
+		if ( $postcode === '' ) {
+			$postcode = trim( (string) WC()->customer->get_billing_postcode() );
+		}
+		if ( $postcode === '' ) {
+			return array();
+		}
+
+		sort( $product_ids );
+		$key = $postcode . '|' . implode( ',', $product_ids );
+
+		if ( ! array_key_exists( $key, self::$horizon_days_cache ) ) {
+			self::$horizon_days_cache[ $key ] = (array) ( \oko_home_delivery_dates( $postcode, $product_ids, false ) ?? array() );
+		}
+
+		return self::$horizon_days_cache[ $key ];
 	}
 
 	/** The Y-m-d day following the given one. */
@@ -2079,7 +2143,7 @@ class Delivery_Exceptions extends Base {
 		$ranges = self::pre_order_ranges(
 			$instance->collect_applicable_rules( $product_ids, $config ),
 			$config,
-			array(),
+			self::days_for_horizon( $config, $product_ids ),
 			$product_ids
 		);
 
@@ -2195,6 +2259,17 @@ class Delivery_Exceptions extends Base {
 	private static $config_cache = null;
 
 	/**
+	 * Delivery days per basket, memoised for the request.
+	 *
+	 * Only a window counted in delivery days asks for these, and the fee is
+	 * worked out several times during one checkout render, so without this a
+	 * single render would be several round trips to Økoskabet.
+	 *
+	 * @var array<string,string[]>
+	 */
+	private static $horizon_days_cache = array();
+
+	/**
 	 * Clear the per-request applicable-rules cache. Primarily for tests, where
 	 * the static cache would otherwise persist across cases in one process.
 	 */
@@ -2202,6 +2277,7 @@ class Delivery_Exceptions extends Base {
 		self::$rules_cache         = array();
 		self::$product_terms_cache = array();
 		self::$config_cache        = null;
+		self::$horizon_days_cache  = array();
 	}
 
 	/**

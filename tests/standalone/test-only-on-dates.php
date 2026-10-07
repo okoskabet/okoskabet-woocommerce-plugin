@@ -296,6 +296,75 @@ it( 'keeps the near days of a long pre-order window ordinary, fee and all', func
 	);
 } );
 
+it( 'counts the normal days off the days the shop drives, not off the account window', function () {
+	oko_only_catalogue();
+	// The checkout shows the first two delivery days. The account window is 14
+	// days — the number the fee fell back on when nobody handed it a list of
+	// days, which made day +3 to +14 ordinary for the fee and pre-order for
+	// the list the customer was looking at.
+	oko_test_set_merchant_days( 14 );
+	oko_test_set_delivery_days( array(
+		oko_test_date( 1 ),
+		oko_test_date( 2 ),
+		oko_test_date( 3 ),
+		oko_test_date( 5 ),
+		oko_test_date( 14 ),
+		oko_test_date( 20 ),
+	) );
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'count',
+		'display_value'      => 2,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 0 ), 'until' => oko_test_date( 40 ), 'enabled' => true, 'extend' => true, 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	foreach ( array( 1, 2 ) as $offset ) {
+		assert_false(
+			Delivery_Exceptions::date_is_pre_order( oko_test_date( $offset ), array( OKO_ONLY_PRODUCT_BOX ) ),
+			"day +$offset is one of the two the checkout shows, so it owes the packaging fee"
+		);
+	}
+
+	foreach ( array( 3, 5, 14, 20 ) as $offset ) {
+		assert_true(
+			Delivery_Exceptions::date_is_pre_order( oko_test_date( $offset ), array( OKO_ONLY_PRODUCT_BOX ) ),
+			"day +$offset is only behind the pre-order button, so it owes the pre-order fee"
+		);
+	}
+} );
+
+it( 'charges the pre-order fee rather than lose it when the days cannot be counted', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 14 );
+	oko_test_set_delivery_days( array( oko_test_date( 1 ), oko_test_date( 3 ), oko_test_date( 20 ) ) );
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'count',
+		'display_value'      => 2,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 0 ), 'until' => oko_test_date( 40 ), 'enabled' => true, 'extend' => true, 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	// No address yet, so Økoskabet cannot be asked which days it drives, and a
+	// window counted in delivery days has nothing to count. The rule is then
+	// left as the shop wrote it: the shop keeps the charge, and the cost is
+	// that a near day inside the window is charged as a pre-order too. Losing
+	// the fee silently is the worse of the two.
+	oko_test_set_postcode( '' );
+
+	assert_true(
+		Delivery_Exceptions::date_is_pre_order( oko_test_date( 20 ), array( OKO_ONLY_PRODUCT_BOX ) ),
+		'the far day still owes the pre-order fee'
+	);
+	assert_true(
+		Delivery_Exceptions::date_is_pre_order( oko_test_date( 1 ), array( OKO_ONLY_PRODUCT_BOX ) ),
+		'and so does a near one, because nothing here can tell them apart'
+	);
+} );
+
 it( 'leaves a window that names nothing inert, as it always was', function () {
 	oko_only_catalogue();
 	oko_test_set_merchant_days( 7 );
