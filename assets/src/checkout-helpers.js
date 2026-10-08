@@ -233,6 +233,96 @@
 		var SELECT_ID         = "okoskabet_location_select";
 		var NOTE_ID           = "okoskabet_location_note";
 		var WRAPPER_ID        = "okoskabet_location_wrapper";
+		var STYLE_ID          = "okoskabet-location-style";
+
+		// The delivery-location row lives inside WooCommerce's order-review
+		// table, which every theme styles for what that table normally holds:
+		// prices. Centred, bold, right-aligned — reasonable for an amount, and
+		// it turns a form field into something that reads as broken. The row
+		// has to look like a form field in any theme, so the rules below fight
+		// that styling off rather than hoping the theme is kind.
+		//
+		// One stylesheet in the document head, written once per page load. It
+		// deliberately does not live on the elements: the row is destroyed and
+		// rebuilt on every `updated_checkout`, and inline styles scattered
+		// through buildUI() are how the select ended up unstyled while the note
+		// input next to it was not.
+		function injectStyles() {
+			if (document.getElementById(STYLE_ID)) { return; }
+			var style = document.createElement("style");
+			style.id = STYLE_ID;
+			style.textContent = [
+				/* The label sits on its own row so the field below can have the
+				   table's full width. It stays a <th>, so the theme styles it
+				   exactly like "Levering" and "Total" above it, and the two
+				   rows read as one labelled field. */
+				".okoskabet-location-label-row > th {",
+				"  text-align: left !important;",
+				"  width: auto;",
+				"  padding-bottom: 4px;",
+				"  border-bottom: 0;",
+				"}",
+
+				/* The field's own row: ordinary left-aligned body text, not the
+				   centred bold the table gives an amount. */
+				".okoskabet-location-field-row > td {",
+				"  width: auto;",
+				"  padding-top: 0;",
+				"  text-align: left !important;",
+				"  font-weight: normal !important;",
+				"}",
+
+				/* The instruction above the controls. */
+				".okoskabet-location-instruction {",
+				"  display: block;",
+				"  margin: 0 0 8px;",
+				"  font-size: 0.9em;",
+				"  font-weight: normal;",
+				"  line-height: 1.35;",
+				"  text-align: left;",
+				"}",
+
+				/* Dropdown and note: the same field, twice. */
+				".okoskabet-location-select,",
+				".okoskabet-location-note {",
+				"  display: block;",
+				"  box-sizing: border-box;",
+				"  width: 100%;",
+				"  max-width: 100%;",
+				"  margin: 0;",
+				"  padding: 8px 10px;",
+				"  border: 1px solid #ccc;",
+				"  border-radius: 4px;",
+				"  background-color: #fff;",
+				"  color: inherit;",
+				"  font: inherit;",
+				"  line-height: 1.4;",
+				"  text-align: left;",
+				"}",
+
+				/* Themes that hide the native arrow put their own background
+				   image behind it. Ours is the native control, so the image
+				   would sit on top of a second arrow. */
+				".okoskabet-location-select {",
+				"  height: auto;",
+				"  background-image: none;",
+				"  -webkit-appearance: menulist;",
+				"  -moz-appearance: menulist;",
+				"  appearance: menulist;",
+				"}",
+
+				".okoskabet-location-note-wrapper { margin-top: 10px; }",
+
+				/* Under about 16px, iOS Safari zooms the whole page in when a
+				   field takes focus and leaves the customer scrolled sideways
+				   through their own checkout. */
+				"@media (max-width: 600px) {",
+				"  .okoskabet-location-select,",
+				"  .okoskabet-location-note { font-size: 16px; }",
+				"}"
+			].join("\n");
+			document.head.appendChild(style);
+		}
 		var HOME_METHOD       = "hey_okoskabet_shipping_home";
 		var ANDET_VALUE       = "__OTHER__";
 		var optionsCache      = null;
@@ -248,8 +338,13 @@
 		}
 
 		function removeUI() {
-			var el = document.getElementById(WRAPPER_ID);
-			if (el) { el.parentNode.removeChild(el); }
+			// The label and the field are a row each, so removing the one the
+			// id is on would leave the other behind — and every
+			// `updated_checkout` would add another orphaned label.
+			var rows = document.querySelectorAll(".okoskabet-location-row");
+			for (var i = 0; i < rows.length; i++) {
+				if (rows[i].parentNode) { rows[i].parentNode.removeChild(rows[i]); }
+			}
 		}
 
 		function syncHiddenFields() {
@@ -286,16 +381,27 @@
 		function buildUI(options) {
 			removeUI();
 			if (!isHomeDelivery()) { return; }
+			injectStyles();
 			var locationField = document.getElementById(FIELD_LOCATION_ID);
 
-			// Render as a table row inside the order review table.
+			// Two rows inside the order review table, not one. The table's
+			// columns are sized for a label and an amount, and a dropdown of
+			// delivery instructions does not fit in the width of "49,00 kr" —
+			// on a phone it barely fits a word. Giving the label a row of its
+			// own lets the field below span the table, which is the only way it
+			// reads as a form field rather than a mangled price.
+			var labelRow = document.createElement("tr");
+			labelRow.className = "okoskabet-location-row okoskabet-location-label-row";
+			var cellLabel = document.createElement("th");
+			cellLabel.colSpan = 2;
+			cellLabel.textContent = LABEL_DROPDOWN;
+			labelRow.appendChild(cellLabel);
+
 			var wrapper = document.createElement("tr");
 			wrapper.id = WRAPPER_ID;
-			wrapper.className = "okoskabet-location-row";
-			var cellLabel = document.createElement("th");
-			cellLabel.textContent = LABEL_DROPDOWN;
+			wrapper.className = "okoskabet-location-row okoskabet-location-field-row";
 			var cellContent = document.createElement("td");
-			wrapper.appendChild(cellLabel);
+			cellContent.colSpan = 2;
 			wrapper.appendChild(cellContent);
 
 			var hasOptions  = !!(options && options.length > 0);
@@ -304,13 +410,12 @@
 			// The free-text note field — hidden by default; shown when "Andet"
 			// is chosen or when there is no dropdown at all.
 			var noteWrapper = document.createElement("div");
-			noteWrapper.style.cssText = "margin-top:8px;";
+			noteWrapper.className = "okoskabet-location-note-wrapper";
 			var noteInput = document.createElement("input");
 			noteInput.type = "text";
 			noteInput.id = NOTE_ID;
 			noteInput.name = NOTE_ID;
-			noteInput.style.cssText = "width:100%;padding:6px;"
-				+ "border:1px solid #ccc;border-radius:4px;";
+			noteInput.className = "okoskabet-location-note";
 			var nfe = document.getElementById(FIELD_NOTE_ID);
 			if (nfe && nfe.value) { noteInput.value = nfe.value; }
 			noteInput.addEventListener("input", syncHiddenFields);
@@ -320,7 +425,7 @@
 			// the customer reads it before making a selection. Hidden if
 			// admin leaves it empty.
 			var instructionEl = document.createElement("div");
-			instructionEl.style.cssText = "margin-bottom:8px;font-size:0.9em;line-height:1.3;";
+			instructionEl.className = "okoskabet-location-instruction";
 			instructionEl.textContent = LABEL_NOTE;
 			if (!LABEL_NOTE) { instructionEl.style.display = "none"; }
 
@@ -337,8 +442,7 @@
 				var sel = document.createElement("select");
 				sel.id = SELECT_ID;
 				sel.name = SELECT_ID;
-				sel.style.cssText = "width:100%;padding:6px;"
-					+ "border:1px solid #ccc;border-radius:4px;";
+				sel.className = "okoskabet-location-select";
 				options.forEach(function (opt) {
 					var el = document.createElement("option");
 					var v = opt.label_en || opt.label_da;
@@ -386,17 +490,21 @@
 			var totalRow = document.querySelector("tr.order-total");
 			if (shippingRow && shippingRow.parentNode) {
 				if (shippingRow.nextSibling) {
-					shippingRow.parentNode.insertBefore(wrapper, shippingRow.nextSibling);
+					shippingRow.parentNode.insertBefore(labelRow, shippingRow.nextSibling);
 				} else {
-					shippingRow.parentNode.appendChild(wrapper);
+					shippingRow.parentNode.appendChild(labelRow);
 				}
 			} else if (totalRow && totalRow.parentNode) {
-				totalRow.parentNode.insertBefore(wrapper, totalRow);
+				totalRow.parentNode.insertBefore(labelRow, totalRow);
 			} else {
 				// Fallback — append wherever
 				// woocommerce_review_order_after_shipping puts us.
 				var fallback = document.getElementById("order_review");
-				if (fallback) { fallback.appendChild(wrapper); }
+				if (fallback) { fallback.appendChild(labelRow); }
+			}
+			// The field always follows its own label, wherever that landed.
+			if (labelRow.parentNode) {
+				labelRow.parentNode.insertBefore(wrapper, labelRow.nextSibling);
 			}
 			// Only once the row is in the page: refreshNoteVisibility() looks
 			// the select up by id, and before this it found nothing — so a
