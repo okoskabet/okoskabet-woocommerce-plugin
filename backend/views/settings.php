@@ -45,7 +45,7 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		$cmb->add_field(
 			array(
 				'name'            => __('API Key', O_TEXTDOMAIN),
-				'desc'            => __('Økoskabet API Key.', O_TEXTDOMAIN),
+				'desc'            => __('The merchant\'s API key from Økoskabet\'s back office, under "API & Webhooks" (NOT the WooCommerce "Access token"). Used for all API calls.', O_TEXTDOMAIN),
 				'id'              => '_api_key',
 				'type'            => 'text',
 				'attributes'      => array('type' => 'password'),
@@ -172,6 +172,27 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 			'type'    => 'checkbox',
 		)
 	);
+
+	$cmb->add_field(
+		array(
+			'name'       => __('Shipping in a row of its own', O_TEXTDOMAIN),
+			'desc'       => __('Shipping methods shown in their own row under Shipping at checkout, e.g. an add-on to an earlier order.', O_TEXTDOMAIN),
+			'id'         => '_separate_shipping_methods',
+			'type'       => 'multicheck',
+			'options_cb' => 'oko_all_shipping_method_choices',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'            => __('Heading of that row', O_TEXTDOMAIN),
+			'id'              => '_separate_shipping_label',
+			'type'            => 'text',
+			'sanitization_cb' => 'sanitize_text_field',
+			'attributes'      => array('placeholder' => __('Other options', O_TEXTDOMAIN)),
+		)
+	);
+
 
 	if ( ! $oko_multi_merchant_active ) {
 		$cmb->add_field(

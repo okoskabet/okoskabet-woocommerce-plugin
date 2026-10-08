@@ -5,6 +5,10 @@ type ShippingMethod = 'shed-delivery' | 'home-delivery';
 
 type DisplayMode = 'inline' | 'modal';
 
+// A home delivery's delivery-date setting: the customer always picks a date,
+// or picks one only where Økoskabet delivers and orders without one elsewhere.
+type DateMode = 'required' | 'when_available';
+
 interface Shed {
   id: string;
   name: string;
