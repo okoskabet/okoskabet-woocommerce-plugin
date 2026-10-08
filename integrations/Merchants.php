@@ -1023,25 +1023,55 @@ class Merchants extends Base {
 							</select>
 						</td>
 					</tr>
+					<?php
+					// Read off the merchant's own account rather than written
+					// out here: a step Økoskabet adds later has to reach
+					// these choices without a plugin release, and a step the
+					// shop is never told about is one it can never pick.
+					// Printing the label is not a step a shipment passes —
+					// it is the moment the boxes come into being — so it is
+					// the one entry that stays ours.
+					$capture_options = array( 'label_printed' => __( 'Label printed', O_TEXTDOMAIN ) )
+						+ \oko_merchant_statuses( (string) ( $merchant['id'] ?? '' ) );
+					// Hidden for a gateway that only charges on completion: see
+					// Payment_Capture::capture_events_are_useful().
+					$capture_useful = \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop(
+						(string) ( $merchant['payment_gateway'] ?? 'auto' ),
+						\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::enabled_gateway_ids()
+					);
+					?>
+					<?php if ( ! $capture_useful ) : ?>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Capture events', O_TEXTDOMAIN ); ?></th>
+						<td>
+							<p class="description">
+								<?php esc_html_e( 'Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged.', O_TEXTDOMAIN ); ?>
+							</p>
+							<?php
+							// Carried through the save, hidden. Whether the
+							// fields are shown is worked out from the gateways
+							// switched on at the moment the page renders, and a
+							// shop whose card gateway is off for an hour would
+							// otherwise lose its capture events for good by
+							// saving an unrelated field.
+							foreach ( (array) $merchant['capture_events'] as $kept ) :
+								?>
+								<input type="hidden" name="merchant[capture_events][]" value="<?php echo esc_attr( (string) $kept ); ?>" />
+							<?php endforeach; ?>
+						</td>
+					</tr>
+					<?php else : ?>
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Capture events', O_TEXTDOMAIN ); ?></th>
 						<td>
 							<?php
-							// Read off the merchant's own account rather than written
-							// out here: a step Økoskabet adds later has to reach
-							// these choices without a plugin release, and a step the
-							// shop is never told about is one it can never pick.
-							// Printing the label is not a step a shipment passes —
-							// it is the moment the boxes come into being — so it is
-							// the one entry that stays ours.
-							$capture_options = array( 'label_printed' => __( 'Label printed', O_TEXTDOMAIN ) )
-								+ \oko_merchant_statuses( (string) ( $merchant['id'] ?? '' ) );
 							foreach ( $capture_options as $key => $label ) :
 								?>
 								<label style="display:block;"><input type="checkbox" name="merchant[capture_events][]" value="<?php echo esc_attr( $key ); ?>" <?php checked( in_array( $key, $merchant['capture_events'], true ) ); ?> /> <?php echo esc_html( $label ); ?></label>
 							<?php endforeach; ?>
 						</td>
 					</tr>
+					<?php endif; ?>
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Completion events', O_TEXTDOMAIN ); ?></th>
 						<td>

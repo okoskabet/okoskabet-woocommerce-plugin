@@ -426,6 +426,15 @@ class OkoRest extends Base
 			if (!empty($explanation['has_exceptions'])) {
 				$output_content['exceptions_explanation'] = $explanation;
 			}
+			// Nothing left to pick, but the basket can be pre-ordered: say so,
+			// rather than leaving the customer with "contact the shop".
+			$hint = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_hint_for_cart(
+				$product_ids,
+				self::is_pre_order_request($request)
+			);
+			if (!empty($hint)) {
+				$output_content['pre_order_hint'] = $hint;
+			}
 		}
 
 		return new \WP_REST_Response(array(
@@ -506,6 +515,15 @@ class OkoRest extends Base
 			$explanation = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::explanation_for_cart($product_ids);
 			if (!empty($explanation['has_exceptions'])) {
 				$output_content['exceptions_explanation'] = $explanation;
+			}
+			// Nothing left to pick, but the basket can be pre-ordered: say so,
+			// rather than leaving the customer with "contact the shop".
+			$hint = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_hint_for_cart(
+				$product_ids,
+				self::is_pre_order_request($request)
+			);
+			if (!empty($hint)) {
+				$output_content['pre_order_hint'] = $hint;
 			}
 		}
 
@@ -607,6 +625,15 @@ class OkoRest extends Base
 			$explanation = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::explanation_for_cart($product_ids);
 			if (!empty($explanation['has_exceptions'])) {
 				$output_content['exceptions_explanation'] = $explanation;
+			}
+			// Nothing left to pick, but the basket can be pre-ordered: say so,
+			// rather than leaving the customer with "contact the shop".
+			$hint = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_hint_for_cart(
+				$product_ids,
+				self::is_pre_order_request($request)
+			);
+			if (!empty($hint)) {
+				$output_content['pre_order_hint'] = $hint;
 			}
 		}
 

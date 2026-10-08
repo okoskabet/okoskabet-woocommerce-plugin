@@ -31,6 +31,101 @@ class Payment_Capture extends Base {
 	}
 
 	/**
+	 * The gateways that take the money when the order moves to "processing" —
+	 * which is the only lever this plugin has. Capture is not a WooCommerce
+	 * idea; every gateway hangs its own capture off an order status, and these
+	 * hang it off the one we can reach from a webhook.
+	 */
+	const CAPTURES_ON_PROCESSING = array(
+		'quickpay_gateway',
+		'wc_quickpay',
+		'quickpay',
+		'stripe',
+		'stripe_cc',
+		'pensopay',
+		'fallback',
+	);
+
+	/**
+	 * And the gateways that only take it once the order is COMPLETED.
+	 *
+	 * Nexi/Nets Easy authorises the payment and puts the order straight into
+	 * "processing" — which WooCommerce counts as paid — and charges the card
+	 * when the order is completed. Asking such a gateway to capture earlier is
+	 * asking for something it does not offer: for those shops the money is
+	 * taken by the completion events, not by these.
+	 */
+	const CAPTURES_ON_COMPLETION = array(
+		'nets_easy',
+		'dibs_easy',
+		'nexi_checkout',
+	);
+
+	/**
+	 * Whether the capture events mean anything for this gateway.
+	 *
+	 * False when the gateway only charges on completion: the setting would
+	 * promise the shop something that cannot happen, and a setting that does
+	 * nothing is worse than no setting at all. 'auto' is unknown until an order
+	 * arrives, so it counts as useful and is explained rather than hidden.
+	 */
+	public static function capture_events_are_useful( string $gateway ): bool {
+		return ! in_array( $gateway, self::CAPTURES_ON_COMPLETION, true );
+	}
+
+	/**
+	 * Methods that never capture anything, because no card was ever charged.
+	 * A shop paid by bank transfer has nothing for these events to do.
+	 */
+	const OFFLINE_METHODS = array( 'bacs', 'cheque', 'cod' );
+
+	/**
+	 * The same question for a shop that has left the gateway on "Automatic".
+	 *
+	 * Then the answer is in the till rather than the setting: if every card
+	 * gateway the shop has switched on only charges on completion, the capture
+	 * events have nothing to act on and are hidden. Offline methods are passed
+	 * over — they capture nothing either way — and a gateway we have never
+	 * heard of counts as useful, since the fallback may well work for it.
+	 *
+	 * @param string[] $enabled_gateway_ids As WooCommerce has them switched on.
+	 */
+	public static function capture_events_are_useful_for_shop( string $gateway, array $enabled_gateway_ids ): bool {
+		if ( $gateway !== 'auto' && $gateway !== '' ) {
+			return self::capture_events_are_useful( $gateway );
+		}
+
+		$card_gateways = array_values( array_diff( $enabled_gateway_ids, self::OFFLINE_METHODS ) );
+		if ( empty( $card_gateways ) ) {
+			return false;
+		}
+
+		foreach ( $card_gateways as $id ) {
+			if ( self::capture_events_are_useful( (string) $id ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** The ids of the payment methods this shop has switched on. */
+	public static function enabled_gateway_ids(): array {
+		if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+			return array();
+		}
+
+		$ids = array();
+		foreach ( WC()->payment_gateways()->payment_gateways() as $gateway ) {
+			if ( isset( $gateway->enabled ) && $gateway->enabled === 'yes' ) {
+				$ids[] = (string) $gateway->id;
+			}
+		}
+
+		return $ids;
+	}
+
+	/**
 	 * Attempt to capture payment for a WooCommerce order.
 	 * Detects the gateway used and calls the appropriate capture method.
 	 *

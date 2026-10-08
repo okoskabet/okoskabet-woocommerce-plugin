@@ -57,6 +57,19 @@ class Split_Checkout extends Base {
 	/** WC session key holding the active split state. */
 	const SESSION_KEY = 'oko_split_state';
 
+	/** Where the customer's moves between deliveries live, until they order. */
+	const MOVES_KEY = 'oko_split_moves';
+
+	/**
+	 * And what those moves decided the order is, when they left one delivery.
+	 *
+	 * Written where the groups are already known, and read by the checkout on
+	 * every later page. It cannot be worked out on the way in: the grouping
+	 * asks what kind of order this is, so asking the grouping would be asking
+	 * the question with the answer.
+	 */
+	const MOVES_MODE_KEY = 'oko_split_moves_mode';
+
 	/** Hidden checkbox field name on checkout form. */
 	const ACK_FIELD = 'oko_split_acknowledged';
 
@@ -94,6 +107,11 @@ class Split_Checkout extends Base {
 		'_split_button_split_label',
 		'_split_button_split_label_many',
 		'_split_button_reduce_label',
+		'_split_button_keep_label',
+		'_split_banner_heading',
+		'_split_banner_body',
+		'_split_banner_heading_pre_order',
+		'_split_banner_body_pre_order',
 	);
 
 	public function initialize() {
@@ -130,6 +148,8 @@ class Split_Checkout extends Base {
 		add_action( 'wp_ajax_nopriv_oko_resume_split', array( $this, 'ajax_resume_split' ) );
 		add_action( 'wp_ajax_oko_cancel_split',        array( $this, 'ajax_cancel_split' ) );
 		add_action( 'wp_ajax_nopriv_oko_cancel_split', array( $this, 'ajax_cancel_split' ) );
+		add_action( 'wp_ajax_oko_move_split_item',        array( $this, 'ajax_move_split_item' ) );
+		add_action( 'wp_ajax_nopriv_oko_move_split_item', array( $this, 'ajax_move_split_item' ) );
 		add_action( 'wp_ajax_oko_reduce_split',        array( $this, 'ajax_reduce_split' ) );
 		add_action( 'wp_ajax_nopriv_oko_reduce_split', array( $this, 'ajax_reduce_split' ) );
 
@@ -247,6 +267,15 @@ class Split_Checkout extends Base {
 			}
 		}
 
+		// An action fired from the banner says which checkout it came from. Its
+		// nonce is checked before anything is read, and without it the request
+		// would be answered as an ordinary order — which is not the basket the
+		// customer was looking at, so their choice would match nothing.
+		// phpcs:ignore WordPress.Security.NonceVerification -- checked by the handler before this is read.
+		if ( isset( $_POST['oko_pre_order'] ) ) {
+			return (string) wp_unslash( $_POST['oko_pre_order'] ) === '1'; // phpcs:ignore
+		}
+
 		return function_exists( 'oko_pre_order_checkout_requested' ) && \oko_pre_order_checkout_requested();
 	}
 
@@ -321,6 +350,12 @@ class Split_Checkout extends Base {
 		$pre_order_mode = $this->is_pre_order_mode();
 		$out            = array();
 
+		// Whether anything here could be pre-ordered at all. When nothing can,
+		// there is only one kind of delivery to be had, nothing to move between,
+		// and no reason to ask Økoskabet twice per product.
+		$product_ids = $this->cart_product_ids();
+		$two_kinds   = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days( $product_ids );
+
 		// In a pre-order, ask about the basket as a whole before asking about
 		// its lines. The date picker asks exactly this, and a line with no
 		// pre-order rules of its own does not narrow the answer: it has no
@@ -334,7 +369,7 @@ class Split_Checkout extends Base {
 		// "cannot be pre-ordered" list — still empties this answer, so a basket
 		// holding one is split exactly as before.
 		if ( $pre_order_mode ) {
-			$together = $this->delivery_days_for_cart( $this->cart_product_ids(), true );
+			$together = $this->delivery_days_for_cart( $product_ids, true );
 			if ( ! empty( $together ) ) {
 				foreach ( WC()->cart->get_cart() as $key => $item ) {
 					if ( (int) ( $item['product_id'] ?? 0 ) > 0 ) {
@@ -369,7 +404,351 @@ class Split_Checkout extends Base {
 			if ( $days === null ) {
 				return array();
 			}
+
+			// The mirror of the case above: an ordinary checkout holding
+			// something that can only be pre-ordered. Without this the line has
+			// no day at all, the basket cannot be split, and the only way on is
+			// to take the goods out — while the very same basket splits cleanly
+			// once the customer has pressed the pre-order button. The offer
+			// should not depend on which side of that button they stand.
+			if ( empty( $days ) && ! $pre_order_mode ) {
+				$pre_days = $this->delivery_days_for_product( $pid, true );
+				if ( $pre_days === null ) {
+					return array();
+				}
+				if ( ! empty( $pre_days ) ) {
+					$out[ $key ] = array( 'mode' => self::MODE_PRE_ORDER, 'dates' => $pre_days );
+					continue;
+				}
+			}
+
 			$out[ $key ] = array( 'mode' => self::MODE_NORMAL, 'dates' => $days );
+		}
+
+		// The days each line would have as the OTHER kind of delivery. Oats can
+		// travel now and can also wait for December; carrots cannot wait at all.
+		// This is what says which items the customer may move between the two.
+		if ( $two_kinds ) {
+			foreach ( $out as $key => $line ) {
+				$pid = (int) ( WC()->cart->get_cart()[ $key ]['product_id'] ?? 0 );
+				if ( $pid <= 0 ) {
+					continue;
+				}
+				$alt_mode = $line['mode'] === self::MODE_PRE_ORDER ? self::MODE_NORMAL : self::MODE_PRE_ORDER;
+				$alt      = $this->delivery_days_for_product( $pid, $alt_mode === self::MODE_PRE_ORDER );
+				if ( ! empty( $alt ) ) {
+					$out[ $key ]['alt_mode']  = $alt_mode;
+					$out[ $key ]['alt_dates'] = $alt;
+				}
+			}
+		}
+
+		return $out;
+	}
+
+	/** The days this line could go out on as the given kind of delivery. */
+	private static function line_dates_for_mode( array $line, string $mode ): array {
+		if ( ( $line['mode'] ?? '' ) === $mode ) {
+			return (array) ( $line['dates'] ?? array() );
+		}
+		if ( ( $line['alt_mode'] ?? '' ) === $mode ) {
+			return (array) ( $line['alt_dates'] ?? array() );
+		}
+
+		return array();
+	}
+
+	/** What the customer has moved where: cart key => "mode|date". */
+	private function moves(): array {
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return array();
+		}
+
+		return (array) WC()->session->get( self::MOVES_KEY, array() );
+	}
+
+	private function set_moves( array $moves ): void {
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->set( self::MOVES_KEY, $moves );
+		}
+	}
+
+	public function clear_moves(): void {
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->__unset( self::MOVES_KEY );
+			WC()->session->__unset( self::MOVES_MODE_KEY );
+		}
+	}
+
+	/**
+	 * What the customer's arrangement decided: true for a pre-order, false for
+	 * an ordinary order, null when they have arranged nothing that settles it.
+	 *
+	 * Reads only the session, so the checkout can ask it while working out what
+	 * kind of order it is.
+	 */
+	public static function settled_mode(): ?bool {
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return null;
+		}
+
+		$stored = WC()->session->get( self::MOVES_MODE_KEY, null );
+
+		// Only for the basket it was made for. An arrangement outlives the
+		// basket in the session, and without this a customer who sent their
+		// cornflakes to December and then came back with something else would
+		// meet an ordinary checkout opening as a pre-order, fee and all.
+		if ( ! is_array( $stored ) || ( $stored['cart'] ?? '' ) !== self::cart_signature() ) {
+			return null;
+		}
+
+		$mode = (string) ( $stored['mode'] ?? '' );
+
+		return $mode === '' ? null : ( $mode === self::MODE_PRE_ORDER );
+	}
+
+	/** The basket's lines, as a fingerprint an arrangement can be checked against. */
+	private static function cart_signature(): string {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return '';
+		}
+
+		$keys = array_map( 'strval', array_keys( WC()->cart->get_cart() ) );
+		sort( $keys );
+
+		return md5( implode( ',', $keys ) );
+	}
+
+	/** Forget the arrangement, but keep nothing about it half-remembered. */
+	public static function forget_settled_mode(): void {
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->__unset( self::MOVES_KEY );
+			WC()->session->__unset( self::MOVES_MODE_KEY );
+		}
+	}
+
+	/**
+	 * Whether this basket is a pre-order before anyone has said anything.
+	 *
+	 * Sausages that can travel now and ice tied to 10 December have no ordinary
+	 * day between them — but they do share 10 December as a pre-order. That is
+	 * not a basket that cannot be delivered; it is a basket that has to wait,
+	 * and the checkout should open as the pre-order it is, with the ordinary
+	 * button still there for a customer who would rather split it.
+	 *
+	 * False when an ordinary order works, and false when neither kind has a day
+	 * the whole basket shares — that one belongs to the split banner.
+	 *
+	 * Answered from the products' own days, never from the current mode: this
+	 * is read while the checkout is working out what mode it is in.
+	 */
+	public function basket_wants_pre_order(): bool {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart || WC()->cart->is_empty() ) {
+			return false;
+		}
+		if ( ! \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::is_in_use() ) {
+			return false;
+		}
+
+		$product_ids = array();
+		foreach ( WC()->cart->get_cart() as $item ) {
+			$pid = (int) ( $item['product_id'] ?? 0 );
+			if ( $pid > 0 ) {
+				$product_ids[] = $pid;
+			}
+		}
+		// Nothing to wait for: an ordinary order is the only kind there is.
+		if ( ! \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days( $product_ids ) ) {
+			return false;
+		}
+
+		// The basket travels together today, so there is nothing to decide.
+		if ( ! empty( $this->shared_days( $product_ids, false ) ) ) {
+			return false;
+		}
+
+		return ! empty( $this->shared_days( $product_ids, true ) );
+	}
+
+	/**
+	 * The days every one of these products could go out on, as one kind of
+	 * order. Empty when they share none — or when Økoskabet could not be asked,
+	 * which is not the same thing but leads to the same careful answer.
+	 *
+	 * @param int[] $product_ids
+	 * @return string[]
+	 */
+	private function shared_days( array $product_ids, bool $pre_order ): array {
+		$shared = null;
+		foreach ( array_unique( $product_ids ) as $pid ) {
+			$days = $this->delivery_days_for_product( (int) $pid, $pre_order );
+			if ( $days === null ) {
+				return array();
+			}
+			$shared = $shared === null ? $days : array_values( array_intersect( $shared, $days ) );
+			if ( empty( $shared ) ) {
+				return array();
+			}
+		}
+
+		return (array) $shared;
+	}
+
+	/**
+	 * Whether the arrangement has settled what kind of order this is: true for
+	 * a pre-order, false for an ordinary one, null while the basket still needs
+	 * more than one delivery and the question is open.
+	 *
+	 * Moving the last ordinary item in with a pre-order answers it — and the
+	 * checkout has to follow, or the customer is left on a page with no date.
+	 */
+	public function mode_settled_by_moves(): ?bool {
+		$groups = $this->compute_delivery_groups();
+		if ( count( $groups ) !== 1 ) {
+			return null;
+		}
+
+		return ( $groups[0]['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER;
+	}
+
+	/**
+	 * The checkout, as a pre-order, as an ordinary order, or with nothing said.
+	 * Not oko_checkout_url_for_mode(): that lives in the plugin's front-end
+	 * functions, which an admin-ajax request need not have loaded.
+	 */
+	private static function checkout_url( ?bool $pre_order ): string {
+		$url = function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/' );
+		$url = remove_query_arg( 'oko_pre_order', $url );
+
+		return $pre_order === null ? $url : add_query_arg( 'oko_pre_order', $pre_order ? '1' : '0', $url );
+	}
+
+	/** A group's name in a move: the kind of delivery and the day it is on. */
+	private static function group_id( array $group ): string {
+		return (string) ( $group['mode'] ?? '' ) . '|' . (string) ( $group['date'] ?? $group['suggested_date'] ?? '' );
+	}
+
+	/**
+	 * Move the lines the customer asked to move, and work out what each group
+	 * can be delivered on afterwards. A move that no longer fits — the basket
+	 * changed, or the day it pointed at is gone — is quietly dropped rather
+	 * than obeyed: the groups on screen have to be ones that can be booked.
+	 *
+	 * @param array<int, array> $groups Raw groups: keys, date, dates, mode.
+	 * @param array<string, array> $lines From lines_with_modes().
+	 * @return array<int, array>
+	 */
+	private function apply_moves( array $groups, array $lines ): array {
+		$moves = $this->moves();
+		if ( empty( $moves ) ) {
+			return $groups;
+		}
+
+		foreach ( $moves as $key => $target ) {
+			if ( ! isset( $lines[ $key ] ) || ! is_string( $target ) ) {
+				continue;
+			}
+			$moved = self::with_line_moved( $groups, $lines, (string) $key, $target );
+			if ( $moved !== null ) {
+				$groups = $moved;
+			}
+		}
+
+		return $groups;
+	}
+
+	/**
+	 * One move applied to a copy of the groups, or null when it cannot be: the
+	 * target is gone, the line cannot travel on that day, or what is left of
+	 * the group the line came from would have no day at all.
+	 *
+	 * @return array<int, array>|null
+	 */
+	private static function with_line_moved( array $groups, array $lines, string $key, string $target ): ?array {
+		$to = null;
+		foreach ( $groups as $i => $group ) {
+			if ( self::group_id( $group ) === $target ) {
+				$to = $i;
+				break;
+			}
+		}
+		if ( $to === null ) {
+			return null;
+		}
+
+		$mode = (string) $groups[ $to ]['mode'];
+		$days = self::line_dates_for_mode( $lines[ $key ], $mode );
+		if ( empty( $days ) ) {
+			return null;
+		}
+
+		foreach ( $groups as $i => $group ) {
+			$groups[ $i ]['keys'] = array_values( array_diff( (array) $group['keys'], array( $key ) ) );
+		}
+		$groups[ $to ]['keys'][] = $key;
+
+		// Every group has to keep a day the whole of it shares, or the move has
+		// made an offer nobody can accept.
+		foreach ( $groups as $i => $group ) {
+			if ( empty( $group['keys'] ) ) {
+				unset( $groups[ $i ] );
+				continue;
+			}
+			$shared = null;
+			foreach ( $group['keys'] as $member ) {
+				$member_days = self::line_dates_for_mode( $lines[ $member ], (string) $group['mode'] );
+				$shared      = $shared === null
+					? $member_days
+					: array_values( array_intersect( $shared, $member_days ) );
+			}
+			if ( empty( $shared ) ) {
+				return null;
+			}
+			sort( $shared );
+			$groups[ $i ]['dates'] = $shared;
+			$groups[ $i ]['date']  = $shared[0];
+		}
+
+		return array_values( $groups );
+	}
+
+	/**
+	 * For each cart line, the groups it could be moved to — by group id, as the
+	 * buttons in the banner name them. A line that can only travel one way, or
+	 * a basket with nothing to move it to, gets nothing.
+	 *
+	 * @param array<int, array> $groups Decorated groups, in display order.
+	 * @return array<string, array<int, array{id:string, index:int}>>
+	 */
+	public function movable_targets( array $groups ): array {
+		$lines = $this->lines_with_modes();
+		$out   = array();
+		if ( count( $groups ) < 2 ) {
+			return $out;
+		}
+
+		foreach ( $groups as $index => $group ) {
+			foreach ( (array) $group['keys'] as $key ) {
+				if ( ! isset( $lines[ $key ] ) ) {
+					continue;
+				}
+				foreach ( $groups as $other_index => $other ) {
+					if ( $other_index === $index || ( $other['mode'] ?? '' ) === '' ) {
+						continue;
+					}
+					$days = self::line_dates_for_mode( $lines[ $key ], (string) $other['mode'] );
+					if ( ! in_array( (string) $other['suggested_date'], $days, true ) ) {
+						continue;
+					}
+					$out[ $key ][] = array(
+						'id'    => (string) ( $other['mode'] ) . '|' . (string) $other['suggested_date'],
+						'index' => (int) $other_index + 1,
+						// The delivery as the customer reads it above — "Levering 1",
+						// "Forudbestilling 2" — so the button names what they see.
+						'label' => $this->group_heading( $other, (int) $other_index + 1 ),
+					);
+				}
+			}
 		}
 
 		return $out;
@@ -444,6 +823,13 @@ class Split_Checkout extends Base {
 		}
 
 		// Chronological, so the customer reads them in the order they happen.
+		usort( $groups, function ( $a, $b ) {
+			return strcmp( (string) $a['date'], (string) $b['date'] );
+		} );
+
+		$groups = $this->apply_moves( $groups, $lines );
+
+		// Moving can empty a group, and then the order of the rest is stale.
 		usort( $groups, function ( $a, $b ) {
 			return strcmp( (string) $a['date'], (string) $b['date'] );
 		} );
@@ -646,29 +1032,46 @@ class Split_Checkout extends Base {
 			return array();
 		}
 
-		$wanted_mode = $this->is_pre_order_mode() ? self::MODE_PRE_ORDER : self::MODE_NORMAL;
-
-		$candidate_dates = array();
+		// One candidate per delivery the basket would otherwise need, each with
+		// the kind of order it is — both kinds, always. A basket split into a
+		// melon now and a roast in December must be able to give up either
+		// side, or whoever came for the roast is cornered, and whoever came for
+		// the melon cannot have it on its own.
+		//
+		// Which of them the customer is SHOWN still depends on where they are:
+		// the list under "take items out" keeps to the kind of order they asked
+		// for, so it never quietly takes a pre-order away from them, while the
+		// button beside each delivery may offer either — there it is the
+		// delivery itself they are pointing at.
+		$candidates = array();
 		foreach ( $this->compute_delivery_groups() as $group ) {
 			$date = (string) ( $group['suggested_date'] ?? '' );
-			// A day belonging to the other kind of order needs no filtering out
-			// here: a line only counts as kept below if it travels as the kind
-			// the customer chose, so such a day keeps nothing and falls out as
-			// an empty offer. Two guards for one rule is how the two drift.
-			if ( $date !== '' ) {
-				$candidate_dates[ $date ] = true;
+			$mode = (string) ( $group['mode'] ?? self::MODE_NORMAL );
+			if ( $date === '' ) {
+				continue;
 			}
+			// The keys the group actually shows, so a line the customer moved
+			// into this delivery counts as part of it. Matching only on the
+			// line's own mode and dates would throw out what they just moved
+			// in: they press "keep only this" on the delivery they built, and
+			// the thing they built it out of is removed.
+			$candidates[ $date ] = array(
+				'mode' => $mode,
+				'keys' => (array) ( $group['keys'] ?? array() ),
+			);
 		}
 
 		$options = array();
-		foreach ( array_keys( $candidate_dates ) as $date ) {
+		foreach ( $candidates as $date => $candidate ) {
+			$mode   = (string) $candidate['mode'];
 			$keep   = array();
 			$remove = array();
 			foreach ( $lines as $key => $line ) {
-				// A line only counts as kept if it can travel on this day AS
-				// this kind of order. In a pre-order, a line that has ordinary
-				// days but no pre-order day is precisely what has to go.
-				if ( $line['mode'] === $wanted_mode && in_array( $date, $line['dates'], true ) ) {
+				// Either the customer put it in this delivery, or it can travel
+				// on this day AS this kind of order. In a pre-order, a line that
+				// has ordinary days but no pre-order day is what has to go.
+				if ( in_array( $key, $candidate['keys'], true )
+					|| ( $line['mode'] === $mode && in_array( $date, $line['dates'], true ) ) ) {
 					$keep[] = $key;
 				} else {
 					$remove[] = $key;
@@ -686,16 +1089,19 @@ class Split_Checkout extends Base {
 			// can promise a day only where there is exactly one to promise.
 			$shared = null;
 			foreach ( $keep as $key ) {
+				// The days this line has in the delivery's own kind of order,
+				// which is not the same list as the one it was sorted under.
+				$days   = self::line_dates_for_mode( $lines[ $key ], $mode );
 				$shared = $shared === null
-					? $lines[ $key ]['dates']
-					: array_values( array_intersect( $shared, $lines[ $key ]['dates'] ) );
+					? $days
+					: array_values( array_intersect( $shared, $days ) );
 			}
 
 			$options[] = array(
 				'date'           => (string) $date,
 				'date_label'     => \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::format_date_human( (string) $date ),
 				'possible_dates' => array_values( (array) $shared ),
-				'mode'           => $wanted_mode,
+				'mode'           => $mode,
 				'remove_keys'    => $remove,
 				'remove_names'   => $this->names_for_keys( $remove ),
 				'keep_names'     => $this->names_for_keys( $keep ),
@@ -827,6 +1233,50 @@ class Split_Checkout extends Base {
 	}
 
 	/** What the "take things out of the basket" button says. */
+	/**
+	 * What the button beside each delivery says — the one that keeps that
+	 * delivery and takes the rest out of the basket.
+	 */
+	public static function keep_button_label(): string {
+		$label = trim( (string) ( self::settings()['_split_button_keep_label'] ?? '' ) );
+
+		return $label !== '' ? $label : __( 'Keep only this one', O_TEXTDOMAIN );
+	}
+
+	/**
+	 * The banner's headline and its explanation, as the shop wrote them or as
+	 * they read out of the box. Two baskets need two stories: one that cannot
+	 * travel on a single day, and one where only part of it can be pre-ordered.
+	 *
+	 * @param bool $mixes_modes Whether the basket crosses pre-order and ordinary.
+	 */
+	public static function banner_heading( bool $mixes_modes ): string {
+		$key   = $mixes_modes ? '_split_banner_heading_pre_order' : '_split_banner_heading';
+		$shop  = trim( (string) ( self::settings()[ $key ] ?? '' ) );
+		if ( $shop !== '' ) {
+			return $shop;
+		}
+
+		return $mixes_modes
+			? __( 'Only part of your basket can be pre-ordered', O_TEXTDOMAIN )
+			// The whole of it, in one line, and true without naming a single
+			// day — which is what the list below no longer does.
+			: __( 'Your items cannot all be delivered on the same day', O_TEXTDOMAIN );
+	}
+
+	/** The paragraph under that headline. See banner_heading(). */
+	public static function banner_body( bool $mixes_modes ): string {
+		$key  = $mixes_modes ? '_split_banner_body_pre_order' : '_split_banner_body';
+		$shop = trim( (string) ( self::settings()[ $key ] ?? '' ) );
+		if ( $shop !== '' ) {
+			return $shop;
+		}
+
+		return $mixes_modes
+			? __( 'You can split the order into a pre-order for the items that can be held, and an ordinary delivery for the rest — each with its own date and its own fee. Or take the items that cannot be pre-ordered out of the basket. Choose below.', O_TEXTDOMAIN )
+			: __( 'You can split the order so each part is delivered on its own day, or take a few items out of the basket so everything else arrives together. Choose below.', O_TEXTDOMAIN );
+	}
+
 	public static function reduce_button_label(): string {
 		$label = trim( (string) ( self::settings()['_split_button_reduce_label'] ?? '' ) );
 
@@ -868,6 +1318,33 @@ class Split_Checkout extends Base {
 				__( 'What that button says when the basket needs three or more delivery days, where "i to" would not be true. Write %d where the number belongs. Leave empty for "Opdel levering i 3 leveringer".', O_TEXTDOMAIN ),
 				'Opdel levering i %d leveringer',
 			),
+			'_split_button_keep_label'       => array(
+				__( 'Button: keep only this delivery', O_TEXTDOMAIN ),
+				__( 'What the small button beside each delivery says. It keeps that delivery and takes the other items out of the basket. Leave empty for "Behold kun denne".', O_TEXTDOMAIN ),
+				'Behold kun denne',
+			),
+			'_split_banner_heading'          => array(
+				__( 'Headline: the basket needs more than one day', O_TEXTDOMAIN ),
+				__( 'The headline above the two buttons when the items in the basket cannot be delivered on the same day. Leave empty for "Varerne i din kurv kan ikke leveres på samme dag".', O_TEXTDOMAIN ),
+				'Varerne i din kurv kan ikke leveres på samme dag',
+			),
+			'_split_banner_body'             => array(
+				__( 'Text under that headline', O_TEXTDOMAIN ),
+				__( 'What the customer is being offered, in your own words. Leave empty for the built-in wording.', O_TEXTDOMAIN ),
+				'Du kan dele ordren op, så hver del leveres på sin egen dag, eller tage et par varer ud af kurven, så alt det andet kommer samlet. Vælg nedenfor.',
+				true,
+			),
+			'_split_banner_heading_pre_order' => array(
+				__( 'Headline: only part of the basket can be pre-ordered', O_TEXTDOMAIN ),
+				__( 'The headline when the basket crosses a pre-order and an ordinary delivery. Leave empty for "Kun en del af din kurv kan forudbestilles".', O_TEXTDOMAIN ),
+				'Kun en del af din kurv kan forudbestilles',
+			),
+			'_split_banner_body_pre_order'   => array(
+				__( 'Text under that headline', O_TEXTDOMAIN ),
+				__( 'The same, for the pre-order case. Leave empty for the built-in wording.', O_TEXTDOMAIN ),
+				'Du kan dele ordren op i en forudbestilling på de varer, der kan gemmes, og en almindelig levering på resten — hver med sin egen dato og sit eget gebyr. Eller du kan tage de varer ud af kurven, der ikke kan forudbestilles. Vælg nedenfor.',
+				true,
+			),
 			'_split_button_reduce_label'     => array(
 				__( 'Button: take items out of the basket', O_TEXTDOMAIN ),
 				__( 'What the second button says. It shows the customer which items to give up for the rest of the basket to be delivered on one day, with the date, and removes them when they choose. Leave empty for "Tøm fra kurven".', O_TEXTDOMAIN ),
@@ -898,11 +1375,16 @@ class Split_Checkout extends Base {
 							</label>
 						</td>
 					</tr>
-					<?php foreach ( $texts as $key => list( $label, $help, $placeholder ) ) : ?>
+					<?php foreach ( $texts as $key => $field ) : ?>
+						<?php list( $label, $help, $placeholder ) = $field; ?>
 						<tr>
 							<th scope="row"><label for="<?php echo esc_attr( 'oko' . $key ); ?>"><?php echo esc_html( $label ); ?></label></th>
 							<td>
-								<input type="text" class="regular-text" id="<?php echo esc_attr( 'oko' . $key ); ?>" name="<?php echo esc_attr( $key ); ?>" value="<?php echo esc_attr( $value( $key ) ); ?>" placeholder="<?php echo esc_attr( $placeholder ); ?>" />
+								<?php if ( ! empty( $field[3] ) ) : ?>
+									<textarea class="large-text" rows="3" id="<?php echo esc_attr( 'oko' . $key ); ?>" name="<?php echo esc_attr( $key ); ?>" placeholder="<?php echo esc_attr( $placeholder ); ?>"><?php echo esc_textarea( $value( $key ) ); ?></textarea>
+								<?php else : ?>
+									<input type="text" class="regular-text" id="<?php echo esc_attr( 'oko' . $key ); ?>" name="<?php echo esc_attr( $key ); ?>" value="<?php echo esc_attr( $value( $key ) ); ?>" placeholder="<?php echo esc_attr( $placeholder ); ?>" />
+								<?php endif; ?>
 								<p class="description"><?php echo esc_html( $help ); ?></p>
 							</td>
 						</tr>
@@ -952,10 +1434,16 @@ class Split_Checkout extends Base {
 		$option     = (array) get_option( $option_key, array() );
 
 		foreach ( self::SETTING_KEYS as $key ) {
-			$raw   = $posted[ $key ] ?? '';
-			$value = $key === '_split_checkout_enabled'
-				? ( $raw === 'on' ? 'on' : '' )
-				: sanitize_text_field( is_string( $raw ) ? $raw : '' );
+			$raw = $posted[ $key ] ?? '';
+			if ( $key === '_split_checkout_enabled' ) {
+				$value = $raw === 'on' ? 'on' : '';
+			} elseif ( substr( $key, -5 ) === '_body' || substr( $key, -15 ) === '_body_pre_order' ) {
+				// The explanations run to a couple of sentences and may hold
+				// line breaks, which sanitize_text_field() would eat.
+				$value = sanitize_textarea_field( is_string( $raw ) ? $raw : '' );
+			} else {
+				$value = sanitize_text_field( is_string( $raw ) ? $raw : '' );
+			}
 
 			if ( $value === '' ) {
 				unset( $option[ $key ] );
@@ -982,7 +1470,13 @@ class Split_Checkout extends Base {
 		WC()->session->set( self::SESSION_KEY, $state );
 	}
 
+	/**
+	 * Both the split in progress and the arrangement that led to it. Once an
+	 * order is placed or the split is abandoned, yesterday's moves would only
+	 * rearrange the next basket behind the customer's back.
+	 */
 	private function clear_state(): void {
+		$this->clear_moves();
 		if ( ! function_exists( 'WC' ) || ! WC()->session ) { return; }
 		WC()->session->__unset( self::SESSION_KEY );
 	}
@@ -1077,6 +1571,19 @@ class Split_Checkout extends Base {
 			.oko-split-banner .oko-split-remove-option input[type=radio] {
 				margin-top: 4px; transform: scale(1.2); flex: 0 0 auto;
 			}
+			.oko-split-banner .oko-split-move {
+				margin-left: 6px; padding: 1px 8px; font-size: 0.8em;
+				line-height: 1.6; border: 1px solid #b59; border-radius: 3px;
+				background: #fff; color: #859; cursor: pointer; white-space: nowrap;
+			}
+			.oko-split-banner .oko-split-move:hover { background: #fbf5f9; }
+			.oko-split-banner .oko-split-keep {
+				margin-left: 8px; padding: 2px 10px; font-size: 0.85em;
+				line-height: 1.6; border: 1px solid #c44; border-radius: 3px;
+				background: #fff; color: #c44; cursor: pointer;
+				white-space: nowrap; vertical-align: baseline;
+			}
+			.oko-split-banner .oko-split-keep:hover { background: #fdf0f0; }
 			.oko-split-banner .oko-split-error {
 				color: #c44; font-weight: 600; margin: 0;
 				min-height: 1.2em;
@@ -1096,31 +1603,58 @@ class Split_Checkout extends Base {
 		// answer is that only part of it can be.
 		$mixes_modes = $this->groups_mix_modes( $groups );
 
-		echo '<h3>'
-			. esc_html(
-				$mixes_modes
-					? __( 'Only part of your basket can be pre-ordered', O_TEXTDOMAIN )
-					// The whole of it, in one line, and true without naming a
-					// single day — which is what the list below no longer does.
-					: __( 'Your items cannot all be delivered on the same day', O_TEXTDOMAIN )
-			)
-			. '</h3>';
+		echo '<h3>' . esc_html( self::banner_heading( $mixes_modes ) ) . '</h3>';
 
 		echo '<p style="margin:0 0 16px;">'
-			. esc_html(
-				$mixes_modes
-					? __( 'You can split the order into a pre-order for the items that can be held, and an ordinary delivery for the rest — each with its own date and its own fee. Or take the items that cannot be pre-ordered out of the basket. Choose below.', O_TEXTDOMAIN )
-					: __( 'You can split the order so each part is delivered on its own day, or take a few items out of the basket so everything else arrives together. Choose below.', O_TEXTDOMAIN )
-			)
+			. nl2br( esc_html( self::banner_body( $mixes_modes ) ) )
 			. '</p>';
+
+		// Beside each delivery, the way to have just that one. The same offers
+		// as the list further down, but read where the customer is already
+		// looking — at the two deliveries, deciding which one they came for.
+		$by_date = array();
+		foreach ( $options as $option ) {
+			$by_date[ (string) $option['date'] ] = $option;
+		}
+
+		$movable = $this->movable_targets( $groups );
 
 		echo '<ol>';
 		foreach ( $groups as $idx => $group ) {
+			$date = (string) ( $group['suggested_date'] ?? '' );
 			echo '<li><strong>'
 				. esc_html( $this->group_heading( $group, $idx + 1 ) )
 				. '</strong> — '
-				. esc_html( implode( ', ', $group['product_names'] ) )
-				. '</li>';
+				. esc_html( implode( ', ', $group['product_names'] ) );
+
+			// What can travel either way, the customer decides. A line is only
+			// offered a delivery it could actually go out with.
+			foreach ( (array) $group['keys'] as $key ) {
+				foreach ( (array) ( $movable[ $key ] ?? array() ) as $option ) {
+					printf(
+						' <button type="button" class="oko-split-move" data-oko-move="%s" data-oko-target="%s">%s</button>',
+						esc_attr( $key ),
+						esc_attr( $option['id'] ),
+						esc_html( sprintf(
+							/* translators: 1 = product name, 2 = the delivery it would move to, as its heading reads */
+							__( 'Move %1$s to %2$s', O_TEXTDOMAIN ),
+							$this->names_for_keys( array( $key ) )[0] ?? '',
+							(string) ( $option['label'] ?? '' )
+						) )
+					);
+				}
+			}
+
+			if ( isset( $by_date[ $date ] ) && count( $groups ) > 1 ) {
+				printf(
+					' <button type="button" class="oko-split-keep" data-oko-keep="%s" title="%s">%s</button>',
+					esc_attr( $date ),
+					esc_attr( $by_date[ $date ]['text'] ),
+					esc_html( self::keep_button_label() )
+				);
+			}
+
+			echo '</li>';
 		}
 		echo '</ol>';
 
@@ -1194,6 +1728,8 @@ class Split_Checkout extends Base {
 			var TXT_ERR_START  = <?php echo wp_json_encode( __( 'Could not start split checkout. Please try again.', O_TEXTDOMAIN ) ); ?>;
 			var TXT_ERR_REDUCE = <?php echo wp_json_encode( __( 'Could not remove the items. Please try again.', O_TEXTDOMAIN ) ); ?>;
 			var TXT_ERR_PICK   = <?php echo wp_json_encode( __( 'Choose one of the options first.', O_TEXTDOMAIN ) ); ?>;
+			var TXT_ERR_MOVE   = <?php echo wp_json_encode( __( 'Could not move that item. Please try again.', O_TEXTDOMAIN ) ); ?>;
+			var PRE_ORDER      = <?php echo wp_json_encode( $this->is_pre_order_mode() ? '1' : '0' ); ?>;
 
 			function errorBox() { return document.getElementById('oko-split-error'); }
 
@@ -1226,6 +1762,10 @@ class Split_Checkout extends Base {
 
 				var fd = new FormData();
 				fd.append('_wpnonce', NONCE);
+				// Which checkout the customer is looking at. Without it the
+				// request is answered as an ordinary order, and the option they
+				// pressed — worked out for a pre-order — matches nothing.
+				fd.append('oko_pre_order', PRE_ORDER);
 				Object.keys(fields).forEach(function (name) {
 					fd.append(name, fields[name]);
 				});
@@ -1243,6 +1783,10 @@ class Split_Checkout extends Base {
 					return r.json();
 				}).then(function (data) {
 					if (data && data.success) {
+						// A move that leaves one delivery also decides whether
+						// this is a pre-order; the answer travels in the URL.
+						var to = data.data && data.data.redirect;
+						if (to) { window.location.href = to; return; }
 						window.location.reload();
 						return;
 					}
@@ -1256,7 +1800,37 @@ class Split_Checkout extends Base {
 
 			document.addEventListener('click', function (e) {
 				var target = e.target;
-				if (!target || !target.id) { return; }
+				if (!target) { return; }
+
+				// Ahead of the id check below: there is one of these per
+				// delivery, so they are found by class rather than by id.
+				var move = target.closest && target.closest('.oko-split-move');
+				if (move) {
+					e.preventDefault();
+					post(
+						{
+							action: 'oko_move_split_item',
+							key: move.getAttribute('data-oko-move'),
+							target: move.getAttribute('data-oko-target')
+						},
+						move,
+						TXT_ERR_MOVE
+					);
+					return;
+				}
+
+				var keep = target.closest && target.closest('.oko-split-keep');
+				if (keep) {
+					e.preventDefault();
+					post(
+						{ action: 'oko_reduce_split', date: keep.getAttribute('data-oko-keep') },
+						keep,
+						TXT_ERR_REDUCE
+					);
+					return;
+				}
+
+				if (!target.id) { return; }
 
 				if (target.id === 'oko-split-continue') {
 					e.preventDefault();
@@ -1319,7 +1893,16 @@ class Split_Checkout extends Base {
 			. esc_html__( 'Choose what you would rather do without this time. We take those items out of the basket, and everything else is delivered on the same day.', O_TEXTDOMAIN )
 			. '</p>';
 
+		$wanted_mode = $this->is_pre_order_mode() ? self::MODE_PRE_ORDER : self::MODE_NORMAL;
+
 		foreach ( $options as $option ) {
+			// "Remove the roast and the rest can be delivered on Wednesday" is
+			// true, and inside a pre-order it would take away the very thing
+			// the customer pressed the button for. The way out of a pre-order
+			// is the button, or the delivery's own "keep only this".
+			if ( ( $option['mode'] ?? self::MODE_NORMAL ) !== $wanted_mode ) {
+				continue;
+			}
 			echo '<label class="oko-split-remove-option">';
 			printf(
 				'<input type="radio" name="oko_split_remove_option" value="%s" />',
@@ -1850,6 +2433,75 @@ class Split_Checkout extends Base {
 	 * changed the basket in another tab — empty items the customer never agreed
 	 * to give up.
 	 */
+	/**
+	 * Move one line to another delivery. Nothing is ordered here: the customer
+	 * is arranging the two baskets before they start, so the answer is simply
+	 * the page again, with the groups as they now stand.
+	 */
+	public function ajax_move_split_item(): void {
+		$this->ensure_wc_session();
+		check_ajax_referer( $this->nonce_action(), '_wpnonce' );
+
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			wp_send_json_error( array( 'message' => __( 'WooCommerce cart not available', O_TEXTDOMAIN ) ) );
+		}
+		if ( $this->is_split_active() ) {
+			wp_send_json_error( array( 'message' => __( 'A split is already in progress', O_TEXTDOMAIN ) ) );
+		}
+
+		$key    = isset( $_POST['key'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['key'] ) ) : '';
+		$target = isset( $_POST['target'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['target'] ) ) : '';
+		if ( $key === '' || $target === '' ) {
+			wp_send_json_error( array( 'message' => __( 'Nothing to move', O_TEXTDOMAIN ) ) );
+		}
+
+		// Only a move the groups on screen actually offer. Anything else is a
+		// stale page or a hand-written request, and obeying it would build a
+		// delivery that cannot be booked.
+		$offered = $this->movable_targets( $this->compute_delivery_groups() );
+		$allowed = false;
+		foreach ( (array) ( $offered[ $key ] ?? array() ) as $option ) {
+			if ( $option['id'] === $target ) {
+				$allowed = true;
+				break;
+			}
+		}
+		if ( ! $allowed ) {
+			wp_send_json_error( array( 'message' => __( 'That item cannot go in that delivery.', O_TEXTDOMAIN ) ) );
+		}
+
+		$moves         = $this->moves();
+		$moves[ $key ] = $target;
+		$this->set_moves( $moves );
+
+		// A move can settle the whole question: with everything in one delivery
+		// there is nothing left to split, and the kind of order that delivery
+		// is has to be the kind of order the checkout is. Otherwise the
+		// customer lands back on a page with no date and no banner to explain
+		// it — an ordinary checkout holding a basket they just sent to December.
+		$settled = $this->mode_settled_by_moves();
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->set(
+				self::MOVES_MODE_KEY,
+				array(
+					'mode' => $settled === null ? '' : ( $settled ? self::MODE_PRE_ORDER : self::MODE_NORMAL ),
+					'cart' => self::cart_signature(),
+				)
+			);
+		}
+
+		// Always somewhere, never back to the same address. The page the
+		// customer came from may say oko_pre_order=0 from an earlier choice,
+		// and reloading it would be them saying no to the very arrangement
+		// they just made — which drops it again. So the move names the page:
+		// the kind of order it settled on, or a plain checkout while the
+		// question is still open.
+		wp_send_json_success( array(
+			'moved'    => true,
+			'redirect' => self::checkout_url( $settled ),
+		) );
+	}
+
 	public function ajax_reduce_split(): void {
 		// Bootstrap session BEFORE nonce check — see ajax_start_split().
 		$this->ensure_wc_session();
@@ -1908,7 +2560,15 @@ class Split_Checkout extends Base {
 			'notice'
 		);
 
-		wp_send_json_success( array( 'redirect' => wc_get_checkout_url() ) );
+		// What is left is the delivery the customer chose to keep, so the
+		// checkout has to be the kind of order that delivery was. Keeping the
+		// December one and landing in an ordinary checkout would show them a
+		// basket with no day again.
+		$this->clear_moves();
+
+		wp_send_json_success( array(
+			'redirect' => self::checkout_url( ( $chosen['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER ),
+		) );
 	}
 
 	public function ajax_resume_split(): void {
@@ -1993,7 +2653,12 @@ class Split_Checkout extends Base {
 	 * state so the thank-you banner knows what's been completed.
 	 */
 	public function on_order_processed( int $order_id ): void {
-		if ( ! $this->is_split_active() ) { return; }
+		if ( ! $this->is_split_active() ) {
+			// Nothing was split, so nothing is half-done — but an arrangement
+			// the customer made before ordering must not outlive the order.
+			$this->clear_moves();
+			return;
+		}
 		$state = $this->get_state();
 		$state['completed_orders'][] = $order_id;
 		$this->set_state( $state );

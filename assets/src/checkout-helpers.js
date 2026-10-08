@@ -38,6 +38,7 @@
 	(function () {
 		var STR = window._okoskabet_overlay_strings || {};
 		var lastExplanation = null;
+		var lastPreOrderHint = null;
 		var origFetch = window.fetch;
 
 		window.fetch = function (input, init) {
@@ -53,6 +54,17 @@
 								if (!r) { return; }
 								// home_delivery has results.exceptions_explanation directly,
 								// sheds has it at the top level too.
+								// A basket whose only days are pre-order days: the
+								// button above the message is the way out. Only a
+								// response bringing dates of its own clears the wording
+								// again — the sheds call and the home-delivery call
+								// answer in whatever order they like.
+								if (r.pre_order_hint) {
+									lastPreOrderHint = r.pre_order_hint;
+									setTimeout(applyFallback, 50);
+								} else if (r.delivery_dates && r.delivery_dates.length) {
+									lastPreOrderHint = null;
+								}
 								var exp = r.exceptions_explanation
 									|| (data.results && data.results.exceptions_explanation);
 								if (exp && exp.has_exceptions) {
@@ -129,7 +141,7 @@
 					+ "border-left:4px solid #c44;padding:12px 14px;"
 					+ "margin:8px 0 16px;border-radius:3px;";
 				div.innerHTML = buildExplanationHtml(lastExplanation);
-				span.parentNode.replaceChild(div, span);
+				swapIn(div, span);
 			}
 		}
 
@@ -141,35 +153,105 @@
 				.replace(/"/g, "&quot;");
 		}
 
-		// Generic fallback for when the customer sees the empty-dates
-		// placeholder but no Delivery_Exceptions explanation is active —
-		// typically because the merchant's date window is too narrow or
-		// the API genuinely returned nothing. Replace the bare placeholder
-		// with a "please contact the shop" message rather than leaving it
-		// as an inscrutable "no dates available." line.
+		// What replaces the bare "no dates available" placeholder when no
+		// Delivery_Exceptions explanation is active. Two cases: the basket can
+		// be pre-ordered, and the server sent the wording that points at the
+		// button sitting right above (pre_order_hint); or the dates really are
+		// gone — a date window too narrow, or nothing back from the API — and
+		// the customer is asked to contact the shop.
+		function renderPanel(div, hint) {
+			var heading = (hint && hint.heading)
+				|| STR.noDatesHeading
+				|| "No delivery dates available right now";
+			var body = (hint && hint.body)
+				|| STR.noDatesBody
+				|| "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
+			div.className = hint ? "oko-pre-order-hint" : "oko-no-dates-fallback";
+			div.dataset.okoFallback = "1";
+			div.dataset.okoHint = hint ? "1" : "0";
+			// A way onwards is not an error, so the panel is calm, not red.
+			div.style.cssText = hint
+				? "background:#f4f8f4;border:1px solid #cfe0cf;"
+					+ "border-left:4px solid #4a7;padding:12px 14px;"
+					+ "margin:8px 0 16px;border-radius:3px;"
+				: "background:#fff5f5;border:1px solid #f0c0c0;"
+					+ "border-left:4px solid #c44;padding:12px 14px;"
+					+ "margin:8px 0 16px;border-radius:3px;";
+			div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
+				+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
+		}
+
 		function applyFallback() {
 			if (lastExplanation) { return; }
-			var heading = STR.noDatesHeading || "No delivery dates available right now";
-			var body = STR.noDatesBody || "We can't find a delivery date for the products in your cart. Please contact the shop for help.";
+			var hint = lastPreOrderHint;
+
+			// The dates response and the placeholder do not arrive in a fixed
+			// order: the panel is often already on screen, saying "contact the
+			// shop", when the pre-order wording turns up. Rewrite it rather
+			// than leave the customer with the wrong advice.
+			if (hint) {
+				var shown = document.querySelectorAll("[data-oko-fallback=\"1\"]");
+				for (var j = 0; j < shown.length; j++) {
+					if (shown[j].dataset.okoHint !== "1") {
+						renderPanel(shown[j], hint);
+					}
+				}
+			}
+
 			var spans = findPlaceholders();
 			for (var i = 0; i < spans.length; i++) {
 				var span = spans[i];
 				if (span.dataset.okoFallback === "1") { continue; }
+				// Every shipping method renders its own placeholder, and the
+				// ones the customer has not chosen sit collapsed in the list.
+				// Saying the same thing twice, once in a box the size of a
+				// line, reads as a bug.
+				if (!inChosenMethod(span) || alreadySaid()) { continue; }
 				var div = document.createElement("div");
-				div.className = "oko-no-dates-fallback";
-				div.dataset.okoFallback = "1";
-				div.style.cssText = "background:#fff5f5;border:1px solid #f0c0c0;"
-					+ "border-left:4px solid #c44;padding:12px 14px;"
-					+ "margin:8px 0 16px;border-radius:3px;";
-				div.innerHTML = "<strong>" + escapeHtml(heading) + "</strong>"
-					+ "<p style=\"margin:6px 0 0;\">" + escapeHtml(body) + "</p>";
-				span.parentNode.replaceChild(div, span);
+				renderPanel(div, hint);
+				swapIn(div, span);
 			}
 		}
 
+		// The delivery app can be mounted more than once inside a single method
+		// — beside the chosen radio and in the theme's own mount point — and
+		// each copy renders its own placeholder, some of them in lists of their
+		// own. The message is about the basket, so the page gets one.
+		function alreadySaid() {
+			return !!document.querySelector(".oko-pre-order-hint, .oko-no-dates-fallback");
+		}
+
+		// Is this placeholder inside the shipping method the customer picked?
+		// A placeholder outside the method list (a theme that lays the
+		// checkout out differently) counts as chosen: better one message in an
+		// odd place than none at all.
+		function inChosenMethod(node) {
+			var li = node.closest && node.closest("li");
+			if (!li || !li.closest(".woocommerce-shipping-methods")) { return true; }
+			var radio = li.querySelector("input[name^=\"shipping_method\"]");
+			return !radio || radio.checked;
+		}
+
+		// Hide the placeholder behind the panel rather than consume it: Svelte
+		// does not render it again, so a panel taken down after a replaceChild
+		// left a blank space where the dates should be.
+		function swapIn(div, span) {
+			span.dataset.okoFallback = "1";
+			span.dataset.okoExplained = "1";
+			span.style.display = "none";
+			span.parentNode.insertBefore(div, span);
+			div._okoSpan = span;
+		}
+
 		function removeExplanation() {
-			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback");
+			var nodes = document.querySelectorAll(".oko-no-dates-explained, .oko-no-dates-fallback, .oko-pre-order-hint");
 			for (var i = 0; i < nodes.length; i++) {
+				var span = nodes[i]._okoSpan;
+				if (span) {
+					span.style.display = "";
+					delete span.dataset.okoFallback;
+					delete span.dataset.okoExplained;
+				}
 				nodes[i].parentNode.removeChild(nodes[i]);
 			}
 		}

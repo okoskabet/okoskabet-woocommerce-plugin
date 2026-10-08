@@ -63,6 +63,10 @@ function oko_test_reset(): void {
 	// grouping want the rules to be the only thing narrowing the days; tests
 	// about the dates themselves set a sparse, realistic calendar.
 	$GLOBALS['oko_test_delivery_days'] = oko_test_days_ahead( 28 );
+	// As many normal days ahead as there are deliveries, so a date a test names
+	// is an ordinary delivery day unless the test says otherwise. Tests about
+	// pre-orders set their own window with oko_test_set_merchant_days().
+	oko_test_set_merchant_days( 28 );
 	oko_test_set_pre_order( false );
 	\okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::purge_rules_cache();
 	oko_test_set_cart( array() );
@@ -70,6 +74,10 @@ function oko_test_reset(): void {
 	// state behind, and every test after it runs as though the customer were
 	// mid-split — which is both wrong and very hard to read in the output.
 	$GLOBALS['oko_test_wc']->session = new Oko_Test_Session();
+	// A customer who has got as far as a postcode: the fee is worked out at
+	// checkout, where one has been typed. Tests about a basket with no address
+	// yet clear it themselves.
+	oko_test_set_postcode( '2791' );
 }
 
 /**
@@ -214,6 +222,23 @@ function o_get_settings() {
 	return $GLOBALS['oko_test_settings'];
 }
 
+/**
+ * The merchant record. The exceptions only ever read the normal number of days
+ * ahead from it — the window the checkout asks Økoskabet for, and the line
+ * between an ordinary delivery day and a pre-order.
+ */
+function o_get_merchant( ?string $id = null ) {
+	return array(
+		'id'                     => 'default',
+		'maximum_days_in_future' => max( 1, (int) ( $GLOBALS['oko_test_settings']['_maximum_days_in_future'] ?? 3 ) ),
+	);
+}
+
+/** Set the shop's normal number of delivery days ahead. */
+function oko_test_set_merchant_days( int $days ): void {
+	$GLOBALS['oko_test_settings']['_maximum_days_in_future'] = $days;
+}
+
 /** A cart that answers the handful of questions the code under test asks it. */
 class Oko_Test_Cart {
 
@@ -315,9 +340,40 @@ class Oko_Test_WooCommerce {
 	public $session;
 }
 
-$GLOBALS['oko_test_wc']          = new Oko_Test_WooCommerce();
-$GLOBALS['oko_test_wc']->cart    = new Oko_Test_Cart();
-$GLOBALS['oko_test_wc']->session = new Oko_Test_Session();
+/** Just enough customer for the code that reads a postcode off one. */
+class Oko_Test_Customer {
+
+	/** @var string */
+	public $postcode = '';
+
+	public function get_shipping_postcode() { return $this->postcode; }
+	public function get_billing_postcode() { return $this->postcode; }
+}
+
+$GLOBALS['oko_test_wc']           = new Oko_Test_WooCommerce();
+$GLOBALS['oko_test_wc']->cart     = new Oko_Test_Cart();
+$GLOBALS['oko_test_wc']->session  = new Oko_Test_Session();
+$GLOBALS['oko_test_wc']->customer = new Oko_Test_Customer();
+
+/** The postcode the customer has typed, or '' for none yet. */
+function oko_test_set_postcode( string $postcode ): void {
+	$GLOBALS['oko_test_wc']->customer->postcode = $postcode;
+}
+
+/**
+ * Økoskabet's delivery-day endpoint, as the server-side callers reach it.
+ *
+ * The raw days the shop drives on, before any rule narrows them — which is
+ * what the real one returns, and what a horizon counted in delivery days has
+ * to be counted from. `null` is "could not be asked".
+ */
+function oko_home_delivery_dates( string $postcode, array $product_ids, ?bool $pre_order = null ): ?array {
+	if ( $postcode === '' ) {
+		return null;
+	}
+
+	return $GLOBALS['oko_test_delivery_days'];
+}
 
 function WC() {
 	return $GLOBALS['oko_test_wc'];
@@ -351,6 +407,9 @@ function oko_test_set_cart( array $items ): void {
 require_once dirname( __DIR__, 2 ) . '/engine/Base.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Delivery_Exceptions.php';
 require_once dirname( __DIR__, 2 ) . '/integrations/Split_Checkout.php';
+// Only the gateway table is exercised here; the capture calls themselves need
+// a live gateway and belong to the wpunit suite.
+require_once dirname( __DIR__, 2 ) . '/integrations/Payment_Capture.php';
 
 /**
  * The days the shop drives on, as Økoskabet would answer for this address.
@@ -404,6 +463,16 @@ class Oko_Test_Split_Checkout extends \okoskabet_woocommerce_plugin\Integrations
 
 		return ( new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions() )
 			->filter_dates_for_cart( $days, $product_ids, $pre_order );
+	}
+
+	/**
+	 * Move a line the way the AJAX endpoint does, without the HTTP request:
+	 * the endpoint itself only checks the nonce and answers in JSON.
+	 */
+	public function ajax_move_split_item_for_test( string $key, string $target ): void {
+		$moves         = (array) $GLOBALS['oko_test_wc']->session->get( 'oko_split_moves', array() );
+		$moves[ $key ] = $target;
+		$GLOBALS['oko_test_wc']->session->set( 'oko_split_moves', $moves );
 	}
 
 	/** The banner's own wording for a group, which is otherwise internal. */
