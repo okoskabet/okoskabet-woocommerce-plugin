@@ -2,7 +2,77 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
-## Unreleased
+## 1.5.0 - 2026-10-08
+
+Første udgivelse efter 1.4.2. Den indeholder også alt fra 1.4.3 til 1.4.7
+længere nede — butiksafhentning, forudbestilling, emballagegebyr og de nye
+fristregler — som aldrig blev udgivet hver for sig.
+
+= Sikkerhedsrettelse i webhooken =
+
+Webhooken fra Økoskabet er strammet op. Opdatér, også selvom intet af det
+øvrige her er noget, butikken bruger.
+
+= Vigtigt: hvornår betalingen hæves og ordren fuldføres =
+
+Listen over hændelser under "Capture events" og "Completion events" hentes nu
+fra butikkens egen Økoskabet-konto: Registreret, Klar til afsendelse, Modtaget,
+I skabet, Udleveret, Fjernet — plus "Etiket printet".
+
+De gamle valg skrives om én gang ved opdateringen:
+
+  - **"In Shed"** blev i praksis udløst, når kunden havde fået varerne. Det
+    trin hedder nu **Udleveret**, og tidspunktet er det samme som før.
+  - **"Order Delivered"** ventede på en status, Økoskabet aldrig har sendt, så
+    det skete aldrig. Det var standardvalget for fuldførelse. Det bliver nu
+    også til **Udleveret** — så en butik, der aldrig har ændret det, får fra
+    nu af sine ordrer fuldført, og med en kortbetaling som Nexi hævet,
+    når kunden har varerne.
+
+Fuldførelse kan nu slås helt fra ved at fjerne alle flueben.
+
+= Bankoverførsel, check og efterkrav =
+
+En ordre uden transaktions-id sendes nu til Økoskabet, når butikken sætter
+den til **Behandler** — før blev en bankoverførsel aldrig sendt. På hold
+holdes den stadig tilbage. Den slags ordrer bliver ikke forsøgt hævet
+automatisk; de står som ubetalte, til butikken selv har set pengene.
+
+= Pakkeriets ordrelinjer =
+
+En variantvare sendes med forældreproduktets navn og varianten for sig
+("Friske Græsæg" + "3 bakker"), og emballagegebyr og pant sendes ikke
+længere med som varer, der skal pakkes.
+
+= Producent og oprindelsesland til følgesedlen =
+
+Hver vare sendes med de egenskaber, mærker og taksonomier, den er registreret
+under. Hvilket felt der er producent og hvilket der er land, vælger butikken
+hos Økoskabet under Pakkeri → Følgeseddel.
+
+= Kundens bemærkning er kundens =
+
+Pluginet skriver ikke længere sin egen linje ("ØKOSKABET 2026-10-01
+Hjemmelevering") ind i kundens bemærkning. Datoen står i stedet i ordremailen,
+på følgesedlen (PDF Invoices & Packing Slips) og som en privat ordrenote.
+
+= Forudbestillingsgebyret følger de dage, kunden ser =
+
+En dag, kassen viser som almindelig levering, betaler emballagegebyr — også
+når en fra/til-regel strækker sig over den. En dag, der kun kan vælges som
+forudbestilling, betaler forudbestillingsgebyret. Det gælder både når
+visningen tælles i kalenderdage og i leveringsdage.
+
+= Rabatkoder ved opdelt levering =
+
+En rabatkode med en brugsgrænse bruges af den første ordre. En kode uden
+grænse gælder hver levering: 100 kr rabat er 100 kr på hver ordre.
+
+= Bricks-kasse =
+
+Pluginet kan nu køre på en Bricks-kasse (Checkout v2). Leveringsdelen kan
+placeres med `[okoskabet_levering]` eller `{do_action:okoskabet_levering}`.
+Klassiske kasser opfører sig som før.
 
 = Indstillingssiden: standard øverst, ekstra funktioner nedenunder =
 
