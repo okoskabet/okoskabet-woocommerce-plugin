@@ -2650,6 +2650,251 @@ function oko_status_events_as_chosen(array $events): array
 	return array_values(array_unique($out));
 }
 
+/**
+ * What the shop knows about a product, beyond its name.
+ *
+ * A packing slip has to name the producer and the country the goods come from.
+ * No two shops keep those in the same place: one has a global attribute called
+ * "Producent", the next writes it straight on the product, a third has a brand
+ * taxonomy from some other plugin. So nothing is assumed here — everything the
+ * product carries is sent, and Økoskabet lets the shop point at the two fields
+ * that matter.
+ *
+ * `key` is what the shop's choice is stored under at Økoskabet, so it has to
+ * stay the same when a field is renamed: it is built from the taxonomy or the
+ * attribute slug, never from the label. `label` is what the shop sees in
+ * WooCommerce, and it is the text they pick from.
+ *
+ * Tags are left out. They travel in their own field and would otherwise be
+ * offered twice.
+ *
+ * @param \WC_Product $product
+ * @return array<int,array{key:string,label:string,values:array<int,string>}>
+ */
+function oko_product_properties(\WC_Product $product): array
+{
+	// A variation is one choice out of the parent's list. Answering with the
+	// parent's whole list would put "Danmark, Spanien" on the packing slip for
+	// a customer who bought the Spanish one, and country of origin is the one
+	// field that has to be right.
+	if ($product instanceof \WC_Product_Variation) {
+		return oko_variation_properties($product);
+	}
+
+	$properties = array();
+	$product_id = (int) $product->get_id();
+
+	// Tags have their own field; attribute taxonomies are read as attributes
+	// below, where the shop's own label for them lives.
+	$covered = array('product_tag' => true);
+
+	foreach ($product->get_attributes() as $attribute) {
+		if (! $attribute instanceof \WC_Product_Attribute) {
+			continue;
+		}
+
+		// Only what the shop shows its own customers. An attribute kept off
+		// the product page is the shop's own bookkeeping — a buying price, a
+		// supplier — and not something to hand a third party. Producer and
+		// country of origin are on the page, because the law puts them there.
+		if (! $attribute->get_visible()) {
+			continue;
+		}
+
+		if ($attribute->is_taxonomy()) {
+			$taxonomy            = (string) $attribute->get_taxonomy();
+			$covered[$taxonomy]  = true;
+			$key                 = 'attribute:' . $taxonomy;
+			$label               = (string) wc_attribute_label($taxonomy, $product);
+			$values              = (array) wc_get_product_terms($product_id, $taxonomy, array('fields' => 'names'));
+		} else {
+			// Written straight on the product. The name is all there is, so the
+			// key is built from it — renaming such an attribute really is a
+			// different field, which is the one case where the key may move.
+			$name   = (string) $attribute->get_name();
+			$key    = oko_local_attribute_key($name);
+			$label  = $name;
+			$values = (array) $attribute->get_options();
+		}
+
+		$property = oko_product_property($key, $label, $values);
+		if ($property !== null) {
+			$properties[] = $property;
+		}
+	}
+
+	// Everything else the shop files its products under: brands, categories,
+	// whatever a plugin has registered. Asked of WordPress rather than listed
+	// here, so a shop that keeps its producer somewhere we have never heard of
+	// still gets to point at it.
+	$taxonomies = \function_exists('get_object_taxonomies')
+		? (array) get_object_taxonomies('product', 'objects')
+		: array();
+
+	foreach ($taxonomies as $taxonomy => $object) {
+		$taxonomy = (string) $taxonomy;
+		if (isset($covered[$taxonomy]) || strpos($taxonomy, 'pa_') === 0) {
+			continue;
+		}
+
+		// Public ones only. WooCommerce files its own bookkeeping as
+		// taxonomies — product_type, product_visibility, shipping class — and
+		// other plugins keep suppliers and buying prices the same way. None of
+		// that is ours to send on.
+		if (! is_object($object) || empty($object->public)) {
+			continue;
+		}
+
+		$label = '';
+		if (is_object($object)) {
+			$label = (string) ($object->labels->singular_name ?? '');
+			if ($label === '') {
+				$label = (string) ($object->label ?? '');
+			}
+		}
+
+		$property = oko_product_property(
+			'taxonomy:' . $taxonomy,
+			$label !== '' ? $label : $taxonomy,
+			(array) wp_get_post_terms($product_id, $taxonomy, array('fields' => 'names'))
+		);
+		if ($property !== null) {
+			$properties[] = $property;
+		}
+	}
+
+	return $properties;
+}
+
+/**
+ * The key for an attribute written straight on the product.
+ *
+ * Through Danish accent folding whatever language the site is in.
+ * `sanitize_title` folds accents by locale, so "Fødeland" keys as `fodeland`
+ * under English and `foedeland` under Danish, and the shop's choice at
+ * Økoskabet would fall away the day the site changed language.
+ *
+ * @param string $name The attribute's name as the shop typed it.
+ * @return string
+ */
+function oko_local_attribute_key(string $name): string
+{
+	return 'attribute:' . sanitize_title(remove_accents($name, 'da_DK'));
+}
+
+/**
+ * One field, or nothing when there is nothing to say.
+ *
+ * A field the product has no value in is left out rather than sent empty: the
+ * shop picks the producer field from this list, and a field that is blank on
+ * every product it meets is not one anybody can choose usefully.
+ *
+ * @param string            $key
+ * @param string            $label
+ * @param array<int,mixed>  $values
+ * @return array{key:string,label:string,values:array<int,string>}|null
+ */
+function oko_product_property(string $key, string $label, array $values): ?array
+{
+	$clean = array();
+	foreach ($values as $value) {
+		if (is_array($value) || is_object($value)) {
+			continue;
+		}
+		$value = oko_plain_text((string) $value);
+		if ($value !== '') {
+			$clean[] = $value;
+		}
+	}
+
+	if ($key === '' || empty($clean)) {
+		return null;
+	}
+
+	$label = oko_plain_text($label);
+
+	return array(
+		'key'    => $key,
+		'label'  => $label !== '' ? $label : $key,
+		'values' => array_values(array_unique($clean)),
+	);
+}
+
+/**
+ * Text as a person wrote it, ready to be printed by somebody else.
+ *
+ * WordPress keeps an ampersand in a term name as `&amp;`, and stripping tags
+ * leaves it that way. Sent on untouched, a packing slip prints "Hansen &amp;
+ * Søn" in full. Økoskabet escapes again when it shows the text, so what it
+ * needs from us is the plain characters.
+ *
+ * @param string $text
+ * @return string
+ */
+function oko_plain_text(string $text): string
+{
+	// A non-breaking space survives an ordinary trim, and `&nbsp;` in a field
+	// nobody filled in would then travel as a value with something in it.
+	return (string) preg_replace('/^\s+|\s+$/u', '', html_entity_decode(wp_strip_all_tags($text), ENT_QUOTES, 'UTF-8'));
+}
+
+/**
+ * What the shop knows about one variation.
+ *
+ * The parent carries the list of everything that variation could have been.
+ * The variation itself is one choice out of it, so each attribute the
+ * variation pins is answered with that value alone. "Any" leaves the parent's
+ * list standing, because that really is still the whole answer.
+ *
+ * @param \WC_Product_Variation $variation
+ * @return array<int,array{key:string,label:string,values:array<int,string>}>
+ */
+function oko_variation_properties(\WC_Product_Variation $variation): array
+{
+	$parent = wc_get_product($variation->get_parent_id());
+	if (! $parent instanceof \WC_Product || $parent instanceof \WC_Product_Variation) {
+		return array();
+	}
+
+	$properties = oko_product_properties($parent);
+
+	// WooCommerce keys a variation's choice by the parent attribute's name run
+	// through `sanitize_title` in the site's language, so on an English site
+	// "Fødeland" is `fodeland` here while its field is `attribute:foedeland`.
+	// The parent's own attribute is what gets from one to the other.
+	$attributes = array();
+	foreach ($parent->get_attributes() as $attribute) {
+		if ($attribute instanceof \WC_Product_Attribute) {
+			$attributes[sanitize_title((string) $attribute->get_name())] = $attribute;
+		}
+	}
+
+	foreach ($variation->get_attributes() as $name => $value) {
+		$value     = (string) $value;
+		$attribute = $attributes[(string) $name] ?? null;
+		if ($value === '' || $attribute === null) {
+			continue;
+		}
+
+		if ($attribute->is_taxonomy()) {
+			$taxonomy = (string) $attribute->get_taxonomy();
+			$key      = 'attribute:' . $taxonomy;
+			$term     = get_term_by('slug', $value, $taxonomy);
+			$value    = $term ? (string) $term->name : $value;
+		} else {
+			$key = oko_local_attribute_key((string) $attribute->get_name());
+		}
+
+		foreach ($properties as $i => $property) {
+			if ($property['key'] === $key) {
+				$properties[$i]['values'] = array(oko_plain_text($value));
+			}
+		}
+	}
+
+	return $properties;
+}
+
 /** Set once the shop has saved the plugin settings at least once. */
 const OKO_SETTINGS_SAVED_OPTION = 'okoskabet_settings_saved_once';
 
@@ -2679,5 +2924,4 @@ function oko_remember_settings_were_saved(): void
  */
 function oko_event_default(array $suggested): array
 {
-	return get_option(OKO_SETTINGS_SAVED_OPTION) ? array() : $suggested;
-}
+	return get_option(OKO_SETTINGS_SAVED_OPTION) ? array() : $suggested;}
