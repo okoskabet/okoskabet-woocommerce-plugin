@@ -275,12 +275,14 @@ class SplitCheckoutCouponsTest extends \Codeception\TestCase\WPTestCase {
 
 	/**
 	 * @test
-	 * Once the first order is placed, its coupons are spent. Giving up on the
-	 * rest brings back what is left of the basket, not the coupons the first
-	 * order already used.
+	 * Once the first order is placed, a coupon meant for one use is spent.
+	 * Giving up on the rest brings back what is left of the basket, not the
+	 * coupon the first order already used.
 	 */
 	public function cancelling_after_an_order_does_not_bring_back_the_coupons_it_used() {
-		$this->basket_with_coupons( array( $this->coupon( 'hundrede', array( 'discount_type' => 'fixed_cart', 'amount' => 100 ) ) ) );
+		$this->basket_with_coupons( array(
+			$this->coupon( 'en-gang', array( 'discount_type' => 'percent', 'amount' => 10, 'usage_limit' => 1, 'usage_limit_per_user' => 1 ) ),
+		) );
 		$this->call( 'ajax_start_split' );
 		$this->place_order();
 		$this->call( 'ajax_resume_split' );
@@ -289,6 +291,24 @@ class SplitCheckoutCouponsTest extends \Codeception\TestCase\WPTestCase {
 
 		$this->assertSame( array( 'Brød' ), $this->names_in_cart() );
 		$this->assertSame( array(), WC()->cart->get_applied_coupons() );
+	}
+
+	/**
+	 * @test
+	 * A code with no limit was never spent: it went on to the next delivery,
+	 * and giving up on that delivery leaves it where it was, on the basket
+	 * that is left.
+	 */
+	public function cancelling_after_an_order_keeps_a_coupon_that_may_be_used_again() {
+		$this->basket_with_coupons( array( $this->coupon( 'hundrede', array( 'discount_type' => 'fixed_cart', 'amount' => 100 ) ) ) );
+		$this->call( 'ajax_start_split' );
+		$this->place_order();
+		$this->call( 'ajax_resume_split' );
+
+		$this->call( 'ajax_cancel_split' );
+
+		$this->assertSame( array( 'Brød' ), $this->names_in_cart() );
+		$this->assertSame( array( 'hundrede' ), WC()->cart->get_applied_coupons() );
 	}
 
 	// --------------------------------------------------------------- helpers
