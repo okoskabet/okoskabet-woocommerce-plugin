@@ -29,6 +29,7 @@ class Upgrades extends Base {
 	private $migrations = array(
 		'rewrite_label_created_events_v1' => 'migrate_label_created_events',
 		'seed_default_merchant_v1'        => 'migrate_seed_default_merchant',
+		'rename_status_events_v1'         => 'migrate_status_events',
 	);
 
 	/**
@@ -71,6 +72,78 @@ class Upgrades extends Base {
 
 		if ( $dirty ) {
 			update_option( self::COMPLETED_OPTION, array_values( array_unique( $completed ) ) );
+		}
+	}
+
+	/**
+	 * Migration: the saved choices take the names Økoskabet reports.
+	 *
+	 * The settings screen used to offer three events the plugin named itself,
+	 * and two of them said something other than what they did: `in_shed` fired
+	 * when the customer had the goods, and `order_delivered` waited for a
+	 * status Økoskabet has never sent — so a shop that chose it, and it was the
+	 * default, was never charged automatically at all.
+	 *
+	 * The screen now lists the steps a shipment really passes, read from the
+	 * account. What a shop already ticked keeps doing what the shop believed it
+	 * was doing: all three old names meant "when the customer has it", and
+	 * `fulfilled` is the step that says so. `\oko_status_events_as_chosen()`
+	 * holds that reading; this writes it into the stored settings once, so the
+	 * ticks on screen match what actually happens.
+	 *
+	 * Both places settings live: the single-merchant options row, and each
+	 * merchant in the multi-merchant config.
+	 */
+	private function migrate_status_events(): void {
+		// The settings live in `<textdomain>-settings`. `<textdomain>_options`
+		// is CMB2's id for the box that renders them, not the row they are
+		// saved in, and reading that one finds nothing at all. The older
+		// `label_created` migration above has the same mistake; it is left as
+		// it is, because it is marked done on every install that has run it
+		// and changing the key now would not reach them.
+		$option_key = O_TEXTDOMAIN . '-settings';
+		$settings   = get_option( $option_key, array() );
+
+		if ( is_array( $settings ) ) {
+			$dirty = false;
+
+			foreach ( array( '_capture_events', '_webhook_events' ) as $field ) {
+				if ( ! isset( $settings[ $field ] ) || ! is_array( $settings[ $field ] ) ) {
+					continue;
+				}
+				$renamed = \oko_status_events_as_chosen( $settings[ $field ] );
+				if ( $renamed !== $settings[ $field ] ) {
+					$settings[ $field ] = $renamed;
+					$dirty              = true;
+				}
+			}
+
+			if ( $dirty ) {
+				update_option( $option_key, $settings );
+			}
+		}
+
+		if ( ! class_exists( Merchants::class ) ) {
+			return;
+		}
+
+		$config  = Merchants::get_config();
+		$dirty   = false;
+
+		foreach ( (array) ( $config['merchants'] ?? array() ) as $id => $merchant ) {
+			foreach ( array( 'capture_events', 'webhook_events' ) as $field ) {
+				$before = (array) ( $merchant[ $field ] ?? array() );
+				$after  = \oko_status_events_as_chosen( $before );
+
+				if ( $before !== $after ) {
+					$config['merchants'][ $id ][ $field ] = $after;
+					$dirty                                = true;
+				}
+			}
+		}
+
+		if ( $dirty ) {
+			Merchants::save_config( $config );
 		}
 	}
 
