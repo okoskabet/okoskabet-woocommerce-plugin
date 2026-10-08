@@ -45,6 +45,27 @@ class Payment_Capture extends Base {
 			return array( 'success' => true, 'message' => 'Order already paid' );
 		}
 
+		// Offline methods have nothing to capture: the money comes by bank
+		// transfer, cheque or cash, and only the shop knows when it has. Moving
+		// such an order to 'processing' would report it paid when it is not.
+		// Ask the order, not the merchant's gateway hint: the hint names the
+		// card gateway to capture through, not how this order was paid.
+		$offline_methods = apply_filters(
+			'okoskabet_offline_payment_methods',
+			array( 'bacs', 'cheque', 'cod' )
+		);
+		if ( in_array( $order->get_payment_method(), (array) $offline_methods, true ) ) {
+			$msg = sprintf(
+				'Order #%s uses "%s", an offline payment method; nothing to capture, order left unpaid.',
+				$order->get_order_number(),
+				$order->get_payment_method()
+			);
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'okoskabet_woocommerce_plugin: ' . $msg );
+			}
+			return array( 'success' => false, 'message' => $msg );
+		}
+
 		// Don't capture orders that have moved to a terminal or out-of-flow
 		// status. A late webhook from Økoskabet must not flip a cancelled,
 		// refunded, or failed order back into 'processing'. Accept only the
