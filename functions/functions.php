@@ -1565,18 +1565,26 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
  * two variations of one product are the same goods to a warehouse. The
  * variation is kept beside it for the SKU it explains.
  *
- * Fees and deposits have no product behind them and are included anyway —
- * Økoskabet files those under a catch-all, which is where things nobody
- * categorised are supposed to show up.
+ * Fees and deposits are left out. They are not goods: nobody put them in the
+ * basket, and nobody packs them. But a packing room counts lines — the label
+ * has a limit on how many it will print, and the dispatch note lists them — so
+ * an order of one product and a packaging fee reads as two things to pack.
+ * Only `line_item` is asked for, which is what makes the count match the box.
+ *
+ * The variation travels in `variant_title`, beside the product's own name,
+ * rather than written into it. WooCommerce names a variation line after both
+ * ("Hakkebøffer, 8 stk. - 3 pakker"), and a packing room that cannot tell the
+ * two apart cannot leave the variation off a label when the shop asks it to.
+ * Shopify has always sent them apart; now so do we.
  *
  * @param \WC_Order $order
- * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,sku:string,quantity:int}>
+ * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,variant_title:string|null,sku:string,quantity:int}>
  */
 function oko_order_line_items(\WC_Order $order): array
 {
 	$lines = array();
 
-	foreach ($order->get_items(array('line_item', 'fee')) as $item) {
+	foreach ($order->get_items('line_item') as $item) {
 		// Minus whatever has been refunded. WooCommerce only lets a line be
 		// edited while an order is pending or on hold, so on an order that has
 		// been sent, refunding a line IS how the shop takes it off. Reading the
@@ -1599,9 +1607,11 @@ function oko_order_line_items(\WC_Order $order): array
 			continue;
 		}
 
-		$product_id = 0;
-		$variant_id = 0;
-		$sku        = '';
+		$product_id    = 0;
+		$variant_id    = 0;
+		$sku           = '';
+		$name          = (string) $item->get_name();
+		$variant_title = null;
 
 		if ($item instanceof \WC_Order_Item_Product) {
 			$product_id = (int) $item->get_product_id();
@@ -1613,14 +1623,50 @@ function oko_order_line_items(\WC_Order $order): array
 			if ($product instanceof \WC_Product) {
 				$sku = (string) $product->get_sku();
 			}
+
+			// A variation line: the goods are the parent product, and what the
+			// customer chose is the variation. Both are read off the product
+			// rather than off the line's name, which is the two run together.
+			// A variation deleted after the order is refused by WooCommerce when
+			// the line loads, so the line answers with the parent and never
+			// gets here: it keeps the name it was sold under, variation and all.
+			if ($variant_id > 0 && $product instanceof \WC_Product_Variation) {
+				$parent = wc_get_product($product->get_parent_id());
+				if ($parent instanceof \WC_Product) {
+					$name = (string) $parent->get_name();
+				}
+
+				// What the customer chose is read off the line, where
+				// WooCommerce wrote it when the order was placed. The variation
+				// itself can be edited afterwards — a shop that reuses "Uge 40"
+				// as "Uge 41" would otherwise have the packing room pack the new
+				// one — and an attribute left as "any" is only ever recorded on
+				// the line, never on the variation.
+				$chosen = array();
+				foreach ($product->get_attributes() as $key => $value) {
+					$on_line      = (string) $item->get_meta($key, true);
+					$chosen[$key] = $on_line !== '' ? $on_line : (string) $value;
+				}
+
+				$formatted = wc_get_formatted_variation($chosen, true, false);
+				$formatted = trim(html_entity_decode(wp_strip_all_tags((string) $formatted), ENT_QUOTES, 'UTF-8'));
+
+				// Only beside a name that is the parent's. Without the parent
+				// the line keeps the name it was sold under, variation and all,
+				// and repeating the variation next to it says it twice.
+				if ($formatted !== '' && $parent instanceof \WC_Product) {
+					$variant_title = $formatted;
+				}
+			}
 		}
 
 		$lines[] = array(
-			'product_id' => $product_id > 0 ? $product_id : null,
-			'variant_id' => $variant_id > 0 ? $variant_id : null,
-			'name'       => (string) $item->get_name(),
-			'sku'        => $sku,
-			'quantity'   => $quantity,
+			'product_id'    => $product_id > 0 ? $product_id : null,
+			'variant_id'    => $variant_id > 0 ? $variant_id : null,
+			'name'          => $name,
+			'variant_title' => $variant_title,
+			'sku'           => $sku,
+			'quantity'      => $quantity,
 		);
 	}
 

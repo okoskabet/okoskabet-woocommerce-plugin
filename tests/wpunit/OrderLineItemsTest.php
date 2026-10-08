@@ -117,26 +117,29 @@ class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 	 * counting a refunded fee the way a refunded product is counted adds one
 	 * where it should take one off. The packing room was sent the fee twice.
 	 */
-	public function a_refunded_fee_is_still_one_fee() {
+	public function a_refunded_fee_was_never_a_line_to_begin_with() {
 		$order = $this->sent_order();
 
 		$this->refund( $order, $this->item_of_type( $order, 'fee' ), 0, 22.40 );
 
-		$this->assertSame( array( 'Æbler' => 2, 'Emballage' => 1 ), $this->lines( $order ) );
+		// The packing room is told what to put in the box, and a packaging fee
+		// is not something anyone packs. It is never sent, so refunding it
+		// cannot change what is (Marc, 6 October).
+		$this->assertSame( array( 'Æbler' => 2 ), $this->lines( $order ) );
 	}
 
 	/**
 	 * @test
 	 * Two partial refunds of the same fee: one fee, not three.
 	 */
-	public function a_fee_refunded_twice_is_still_one_fee() {
+	public function a_fee_refunded_twice_still_never_reaches_the_packing_room() {
 		$order = $this->sent_order();
 		$fee   = $this->item_of_type( $order, 'fee' );
 
 		$this->refund( $order, $fee, 0, 10.00 );
 		$this->refund( $order, $fee, 0, 5.00 );
 
-		$this->assertSame( array( 'Æbler' => 2, 'Emballage' => 1 ), $this->lines( $order ) );
+		$this->assertSame( array( 'Æbler' => 2 ), $this->lines( $order ) );
 	}
 
 	/**
@@ -164,7 +167,7 @@ class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 
 		$this->refund( $order, $this->item_of_type( $order, 'line_item' ), 1, 10.00 );
 
-		$this->assertSame( array( 'Æbler' => 1, 'Emballage' => 1 ), $this->lines( $order ) );
+		$this->assertSame( array( 'Æbler' => 1 ), $this->lines( $order ) );
 
 		$puts = array_values( array_filter( $this->requests, function ( $r ) { return $r['method'] === 'PUT'; } ) );
 		$this->assertCount( 1, $puts );
@@ -172,7 +175,7 @@ class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 		foreach ( json_decode( $puts[0]['body'], true )['line_items'] as $line ) {
 			$sent[ $line['name'] ] = $line['quantity'];
 		}
-		$this->assertSame( array( 'Æbler' => 1, 'Emballage' => 1 ), $sent );
+		$this->assertSame( array( 'Æbler' => 1 ), $sent );
 	}
 
 	/**
@@ -184,6 +187,8 @@ class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 
 		$this->refund( $order, $this->item_of_type( $order, 'line_item' ), 2, 20.00 );
 
-		$this->assertSame( array( 'Emballage' => 1 ), $this->lines( $order ) );
+		// Nothing left to pack. The packaging fee is still on the order and
+		// still charged; it is simply not something the packing room is shown.
+		$this->assertSame( array(), $this->lines( $order ) );
 	}
 }
