@@ -31,6 +31,8 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 }
 ?>
 <div id="tabs-1" class="wrap">
+	<h2 class="oko-settings-group" style="font-size:1.6em;"><?php esc_html_e( 'Standard settings', O_TEXTDOMAIN ); ?></h2>
+	<p class="description"><?php esc_html_e( 'What every shop needs: the connection to Økoskabet, the texts at checkout and the webhooks. The extras your shop can choose come further down.', O_TEXTDOMAIN ); ?></p>
 	<?php
 	$cmb = new_cmb2_box(
 		array(
@@ -45,7 +47,7 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		$cmb->add_field(
 			array(
 				'name'            => __('API Key', O_TEXTDOMAIN),
-				'desc'            => __('Økoskabet API Key.', O_TEXTDOMAIN),
+				'desc'            => __('The merchant\'s API key from Økoskabet\'s back office, under "API & Webhooks" (NOT the WooCommerce "Access token"). Used for all API calls.', O_TEXTDOMAIN),
 				'id'              => '_api_key',
 				'type'            => 'text',
 				'attributes'      => array('type' => 'password'),
@@ -66,6 +68,9 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				'inline' => __('Inline', O_TEXTDOMAIN),
 				'modal'   => __('Modal', O_TEXTDOMAIN),
 			),
+			// What an unset option now behaves as (see the checkout config),
+			// so the radio shows the truth instead of neither choice.
+			'default'          => 'inline',
 		)
 	);
 
@@ -173,6 +178,27 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
+	$cmb->add_field(
+		array(
+			'name'       => __('Shipping in a row of its own', O_TEXTDOMAIN),
+			'desc'       => __('Shipping methods shown in their own row under Shipping at checkout, e.g. an add-on to an earlier order.', O_TEXTDOMAIN),
+			'id'         => '_separate_shipping_methods',
+			'type'       => 'multicheck',
+			'options_cb' => 'oko_all_shipping_method_choices',
+		)
+	);
+
+	$cmb->add_field(
+		array(
+			'name'            => __('Heading of that row', O_TEXTDOMAIN),
+			'id'              => '_separate_shipping_label',
+			'type'            => 'text',
+			'sanitization_cb' => 'sanitize_text_field',
+			'attributes'      => array('placeholder' => __('Other options', O_TEXTDOMAIN)),
+		)
+	);
+
+
 	if ( ! $oko_multi_merchant_active ) {
 		$cmb->add_field(
 			array(
@@ -211,6 +237,13 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 	);
 
 	if ( ! $oko_multi_merchant_active ) {
+		// The steps a shipment passes, as this shop's own Økoskabet account
+		// reports them, plus the label print — which is not a step but the
+		// moment the boxes come into being. Read from the account so a step
+		// added later can be chosen without a plugin release.
+		$oko_status_event_options = array( 'label_printed' => __('Label printed', O_TEXTDOMAIN) )
+			+ oko_merchant_statuses( 'default' );
+
 		$cmb->add_field(
 			array(
 				'name'    => __('Payment Gateway', O_TEXTDOMAIN),
@@ -229,20 +262,37 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 			)
 		);
 
-		$cmb->add_field(
-			array(
-				'name'    => __('Capture events', O_TEXTDOMAIN),
-				'desc'    => __('Choose which events from Økoskabet should capture the payment.', O_TEXTDOMAIN),
-				'id'      => '_capture_events',
-				'type'    => 'multicheck',
-				'options' => array(
-					'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
-					'in_shed'         => __('In Shed', O_TEXTDOMAIN),
-					'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
-				),
-				'default' => array('label_printed'),
-			)
-		);
+		// Only where the shop's gateway can actually take the money on one of
+		// these events. Nexi and its kin charge the card when the order is
+		// COMPLETED, so for them this list would promise something that never
+		// happens — the completion events below are what fetches the money.
+		$oko_gateway = (string) (o_get_settings()['_payment_gateway'] ?? 'auto');
+		if (\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop(
+			$oko_gateway,
+			\okoskabet_woocommerce_plugin\Integrations\Payment_Capture::enabled_gateway_ids()
+		)) {
+			$cmb->add_field(
+				array(
+					'name'    => __('Capture events', O_TEXTDOMAIN),
+					'desc'    => __('Choose which events from Økoskabet should capture the payment.', O_TEXTDOMAIN),
+					'id'      => '_capture_events',
+					'type'       => 'multicheck',
+					'options'    => $oko_status_event_options,
+					'default_cb' => function () {
+						return oko_event_default(array('label_printed'));
+					},
+				)
+			);
+		} else {
+			$cmb->add_field(
+				array(
+					'name' => __('Capture events', O_TEXTDOMAIN),
+					'desc' => __('Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged.', O_TEXTDOMAIN),
+					'id'   => '_capture_events_not_available',
+					'type' => 'title',
+				)
+			);
+		}
 
 		$cmb->add_field(
 			array(
@@ -250,25 +300,13 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				'desc'             => __('Choose which events from Økoskabet should mark the order as completed.', O_TEXTDOMAIN),
 				'id'               => '_webhook_events',
 				'type'             => 'multicheck',
-				'options'          => array(
-					'label_printed'   => __('Label Printed', O_TEXTDOMAIN),
-					'in_shed'         => __('In Shed', O_TEXTDOMAIN),
-					'order_delivered' => __('Order Delivered', O_TEXTDOMAIN),
-				),
-				'default'          => array('order_delivered'),
+				'options'          => $oko_status_event_options,
+				'default_cb'       => function () {
+					return oko_event_default(array('fulfilled'));
+				},
 			)
 		);
 	}
-
-	$cmb->add_field(
-		array(
-			'name'    => __('Allow split checkout', O_TEXTDOMAIN),
-			'desc'    => __('When ON: if a customer\'s cart contains items that cannot all be delivered on the same day, they\'ll be guided through one separate order per delivery date. When OFF: a notice tells the customer to remove items so they all share at least one delivery date.', O_TEXTDOMAIN),
-			'id'      => '_split_checkout_enabled',
-			'type'    => 'checkbox',
-			'default' => '',
-		)
-	);
 
 	$cmb->add_field(
 		array(

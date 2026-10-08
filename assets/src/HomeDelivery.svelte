@@ -1,14 +1,21 @@
 <script lang="ts">
 	import { callApi } from './api';
 	import { formatDate } from './format-date';
+	import type { DateMode } from './types';
 
 	export let locale: string;
 	export let description: string;
 	export let address: string;
 	export let postalCode: string;
+	export let initialDeliveryDate: string | undefined = undefined;
+	export let dateMode: DateMode = 'required';
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
 
-	let selectedDeliveryDate: string | undefined;
+	// Starting from the date the customer already chose, rather than from
+	// nothing. Left empty, the date list would pick its own first option the
+	// moment it appears, and every recalculation of the checkout would quietly
+	// move the delivery to the soonest day.
+	let selectedDeliveryDate: string | undefined = initialDeliveryDate;
 
 	$: {
 		if (selectedDeliveryDate) {
@@ -17,6 +24,36 @@
 	}
 
 	$: apiResponse = callApi('home-delivery', address, postalCode);
+
+	// A date that was on offer before the recalculation may not be any more —
+	// a new postcode, a different cart. Keep it only while it still is, and
+	// fall back to the soonest date otherwise, as the list always did. With no
+	// dates at all the choice is cleared, so an order cannot go out on a day
+	// that was never offered for this address.
+	$: keepChosenDateIfStillOffered(apiResponse);
+
+	async function keepChosenDateIfStillOffered(
+		response: typeof apiResponse
+	) {
+		let deliveryDates: string[];
+		try {
+			({ delivery_dates: deliveryDates } = await response);
+		} catch {
+			return;
+		}
+
+		// A newer lookup has started since this one; let it decide.
+		if (response !== apiResponse) {
+			return;
+		}
+
+		if (selectedDeliveryDate && !deliveryDates.includes(selectedDeliveryDate)) {
+			selectedDeliveryDate = deliveryDates[0];
+			if (!selectedDeliveryDate) {
+				onSelectDeliveryDate('');
+			}
+		}
+	}
 </script>
 
 <div>
@@ -27,7 +64,11 @@
 	{#await apiResponse}
 		<span class="skeleton-loader"></span>
 	{:then response}
-		{#if response.delivery_dates.length === 0}
+		{#if response.delivery_dates.length === 0 && dateMode !== 'required'}
+			<p class="oko-without-date">
+				Leveringsdagen aftales efter bestillingen – vi kontakter dig.
+			</p>
+		{:else if response.delivery_dates.length === 0}
 			{#if response.exceptions_explanation && response.exceptions_explanation.has_exceptions}
 				<div class="oko-no-dates-explained">
 					<p class="oko-no-dates-headline">{response.exceptions_explanation.summary}</p>
@@ -68,6 +109,10 @@
 		line-height: 1.1;
 		font-size: 80%;
 		margin-bottom: 20px;
+	}
+
+	.oko-without-date {
+		margin: 8px 0 16px;
 	}
 
 	.oko-no-dates-explained {

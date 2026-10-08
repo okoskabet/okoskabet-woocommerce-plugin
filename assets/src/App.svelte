@@ -1,7 +1,7 @@
 <script lang="ts">
 	import HomeDelivery from './HomeDelivery.svelte';
 	import ShedDelivery from './ShedDelivery.svelte';
-	import type { DisplayMode, ShippingMethod } from './types';
+	import type { DateMode, DisplayMode, ShippingMethod } from './types';
 
 	interface Strings {
 		shedDeliveryDescription: string;
@@ -15,8 +15,15 @@
 	export let address: string;
 	export let postalCode: string;
 
+	// What the customer had chosen before the checkout was last recalculated.
+	export let initialDeliveryDate: string | undefined = undefined;
+	export let initialShedId: string | undefined = undefined;
+	export let initialShowOptions = false;
+	export let dateMode: DateMode = 'required';
+
 	export let onSelectShed: (selectedShedId: string) => void;
 	export let onSelectDeliveryDate: (selectedDate: string) => void;
+	export let onToggleOptions: (open: boolean) => void = () => undefined;
 </script>
 
 {#if shippingMethod === 'shed-delivery'}
@@ -25,7 +32,11 @@
 		{locale}
 		{address}
 		{postalCode}
+		{initialShedId}
+		{initialDeliveryDate}
+		{initialShowOptions}
 		{onSelectShed}
+		{onToggleOptions}
 		{onSelectDeliveryDate}
 		description={strings.shedDeliveryDescription}
 	/>
@@ -34,6 +45,8 @@
 		{locale}
 		{address}
 		{postalCode}
+		{initialDeliveryDate}
+		{dateMode}
 		{onSelectDeliveryDate}
 		description={strings.homeDeliveryDescription}
 	/>

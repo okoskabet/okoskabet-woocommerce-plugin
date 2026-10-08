@@ -416,8 +416,12 @@ msgstr "Du kan også scrolle ned for at se din ordrebekræftelse først."
 msgid "Cancel split delivery and start over"
 msgstr "Annullér opdelt levering og start forfra"
 
-msgid "Cancel the split delivery and clear your cart? You'll be sent back to the shop and can start a fresh order."
-msgstr "Annullér den opdelte levering og tøm din kurv? Du sendes tilbage til shoppen og kan starte en ny ordre."
+msgid "The split delivery is cancelled, and your basket is back as it was."
+msgstr "Den opdelte levering er annulleret, og din kurv er som før."
+
+#. translators: %s = coupon code
+msgid "The coupon \"%s\" does not apply to what is in your basket now, so it has been taken off."
+msgstr "Rabatkoden \"%s\" gælder ikke for det, der er i din kurv nu, så den er fjernet."
 
 # Merchant form — secret-field controls and hints
 msgid "Show/hide API key"
@@ -733,3 +737,777 @@ msgstr "kræver at <a href=\"https://wordpress.org/plugins/woocommerce/\">WooCom
 
 msgid "requires WooCommerce %1$s or newer. You are running WooCommerce %2$s. Update WooCommerce, then re-activate Økoskabet."
 msgstr "kræver WooCommerce %1$s eller nyere. Du kører WooCommerce %2$s. Opdater WooCommerce, og aktivér derefter Økoskabet igen."
+
+# ----------------------------------------------------------------------
+# Delivery days display + upgrade notice (1.4.2)
+# ----------------------------------------------------------------------
+
+msgid "Delivery days shown in checkout"
+msgstr "Leveringsdage vist i checkout"
+
+msgid "Choose how many delivery days the customer sees. Leave the number at 0 to keep the existing behaviour (the merchant's \"maximum days in future\" setting)."
+msgstr "Vælg hvor mange leveringsdage kunden ser. Lad tallet stå på 0 for at bevare den nuværende opførsel (merchantens \"maksimalt antal dage frem\"-indstilling)."
+
+msgid "Number of delivery days"
+msgstr "Antal leveringsdage"
+
+msgid "Number of calendar days ahead"
+msgstr "Antal kalenderdage frem"
+
+msgid "Value"
+msgstr "Værdi"
+
+msgid "Show a special number of delivery days for products in this section"
+msgstr "Vis et særligt antal leveringsdage for produkter i denne sektion"
+
+msgid "Uses the same mode (number of days / calendar days) as the global setting. When a cart mixes limits, the smallest wins."
+msgstr "Bruger samme tilstand (antal dage / kalenderdage) som den globale indstilling. Når en kurv blander grænser, vinder den mindste."
+
+msgid "The delivery-day logic has been updated. Please review your delivery-day setup so dates show correctly in checkout — settings now need to match in BOTH the Økoskabet plugin and the Økoskabet back office."
+msgstr "Logikken for leveringsdage er blevet opdateret. Gennemgå venligst din opsætning af leveringsdage, så datoer vises korrekt i checkout — indstillingerne skal nu stemme overens i BÅDE Økoskabet-pluginet og Økoskabets backoffice."
+
+msgid "Open delivery settings"
+msgstr "Åbn leveringsindstillinger"
+
+msgid "Got it, dismiss"
+msgstr "Forstået, luk"
+
+# ----------------------------------------------------------------------
+# WooCommerce Access token relabel (1.4.2)
+# ----------------------------------------------------------------------
+
+msgid "The merchant's Access token from Økoskabet's back office (under WooCommerce settings). Used for all API calls."
+msgstr "Merchantens Access token fra Økoskabets back office (under WooCommerce-indstillinger). Bruges til alle API-kald."
+
+msgid "The merchant's Access token from Økoskabet's back office (under WooCommerce settings). Used for all API calls (sheds, dates, shipment creation)."
+msgstr "Merchantens Access token fra Økoskabets back office (under WooCommerce-indstillinger). Bruges til alle API-kald (skabe, datoer, shipment-oprettelse)."
+
+msgid "Show/hide access token"
+msgstr "Vis/skjul access token"
+
+msgid "Enable: Earlier cutoff rules"
+msgstr "Aktivér: Regler for tidligere cutoff"
+
+msgid "Each rule closes ordering for the chosen categories and/or tags a number of days before delivery, at a set time — so e.g. fresh produce and dairy can each have their own deadline. If several rules apply to the cart, the earliest deadline wins."
+msgstr "Hver regel lukker for bestilling af de valgte kategorier og/eller tags et antal dage før levering, på et fast tidspunkt — så f.eks. frisk frugt & grønt og mejeri kan have hver sin frist. Gælder flere regler for kurven, vinder den tidligste frist."
+
+msgid "Add cutoff rule"
+msgstr "Tilføj cutoff-regel"
+
+msgid "Days before delivery"
+msgstr "Dage før levering"
+
+msgid "Cutoff time"
+msgstr "Cutoff-tidspunkt"
+
+msgid "e.g. Fresh produce"
+msgstr "f.eks. Frisk frugt & grønt"
+
+msgid "Store pickup"
+msgstr "Butiksafhentning"
+
+msgid "The customer collects the order in your shop"
+msgstr "Kunden henter ordren i din butik"
+
+msgid "Pickup location"
+msgstr "Afhentningssted"
+
+msgid "Pickup date"
+msgstr "Afhentningsdato"
+
+msgid "— choose —"
+msgstr "— vælg —"
+
+msgid "No pickup locations have been set up. Please contact the shop."
+msgstr "Der er ikke sat nogen afhentningssteder op. Kontakt venligst butikken."
+
+msgid "No pickup dates are available right now. Please contact the shop."
+msgstr "Der er ingen ledige afhentningsdatoer lige nu. Kontakt venligst butikken."
+
+# ----------------------------------------------------------------------
+# Packaging fee (1.4.6)
+# ----------------------------------------------------------------------
+
+msgid "Packaging fee"
+msgstr "Emballagegebyr"
+
+msgid ""
+"An extra fee added to the order at checkout, for packaging, cool packs, "
+"boxes and the like. It is a cart fee, not shipping — so a free-shipping "
+"coupon does not remove it, and it is charged once per order."
+msgstr ""
+"Et ekstra gebyr, der lægges på ordren i checkout — til emballage, køleelementer, "
+"kasser og lignende. Det er et kurvgebyr, ikke fragt, så en rabatkode med gratis "
+"fragt fjerner det ikke, og det opkræves én gang pr. ordre."
+
+msgid "Add a packaging fee"
+msgstr "Tilføj emballagegebyr"
+
+msgid ""
+"Turn the fee on. With this off nothing is added and the settings below are "
+"ignored."
+msgstr ""
+"Tænd for gebyret. Er dette slået fra, lægges der intet på, og indstillingerne "
+"nedenfor bruges ikke."
+
+msgid "Fee text at checkout"
+msgstr "Tekst i checkout"
+
+msgid "What the customer sees on the line, e.g. \"Packaging\"."
+msgstr "Det kunden ser på linjen, fx \"Emballage\"."
+
+msgid "Packaging"
+msgstr "Emballage"
+
+msgid "Fee amount"
+msgstr "Gebyrets størrelse"
+
+msgid ""
+"The fee on every order. Leave the ladder below empty to use this fixed "
+"amount."
+msgstr ""
+"Gebyret på alle ordrer. Lad trappen nedenfor stå tom for at bruge dette faste "
+"beløb."
+
+msgid "Fee ladder (optional)"
+msgstr "Gebyrtrappe (valgfri)"
+
+msgid ""
+"Same format as the shipping fee ladder: one tier per line as \"from amount = "
+"fee\". The highest tier whose \"from\" is not above the cart subtotal wins, "
+"and 0 means no fee. Example: 0 = 28 / 500 = 15 / 1000 = 0 charges 28 kr on "
+"small orders and nothing from 1000 kr up. Leave empty to use the fixed "
+"amount above."
+msgstr ""
+"Samme format som fragttrappen: ét trin pr. linje som \"fra beløb = gebyr\". "
+"Det højeste trin, hvis \"fra\" ikke er over kurvens subtotal, vinder, og 0 "
+"betyder intet gebyr. Eksempel: 0 = 28 / 500 = 15 / 1000 = 0 giver 28 kr på "
+"små ordrer og intet fra 1000 kr og op. Lad feltet stå tomt for at bruge det "
+"faste beløb ovenfor."
+
+msgid "Amounts are excl. VAT"
+msgstr "Beløb er ekskl. moms"
+
+msgid ""
+"Leave this off if you typed the amount the customer should actually pay "
+"(incl. VAT) — the normal case. Tick it to have VAT added on top of the "
+"amount instead."
+msgstr ""
+"Lad denne stå slået fra, hvis du har skrevet det beløb, kunden faktisk skal "
+"betale (inkl. moms) — det normale. Sæt flueben for i stedet at lægge moms oven "
+"i beløbet."
+
+msgid "Not taxed"
+msgstr "Ingen moms"
+
+msgid "Standard rate"
+msgstr "Standardsats"
+
+msgid "VAT class"
+msgstr "Momsklasse"
+
+msgid ""
+"Which VAT rate the fee is charged at. Use the same class as the goods it "
+"packs."
+msgstr ""
+"Hvilken momssats gebyret opkræves med. Brug samme klasse som de varer, der "
+"pakkes."
+
+msgid "Only on these delivery methods"
+msgstr "Kun på disse leveringsmetoder"
+
+msgid ""
+"Tick the methods that should carry the fee — for example skip it on store "
+"pickup. Leave every box empty to charge the fee on all orders, including "
+"non-Økoskabet shipping methods."
+msgstr ""
+"Sæt flueben ved de metoder, gebyret skal gælde for — fx for at undlade det ved "
+"butiksafhentning. Lad alle felter stå tomme for at lægge gebyret på alle "
+"ordrer, også fragtmetoder der ikke kommer fra Økoskabet."
+
+msgid "Home delivery"
+msgstr "Hjemmelevering"
+
+msgid "Only when the cart contains these categories"
+msgstr "Kun når kurven indeholder disse kategorier"
+
+msgid ""
+"Leave empty to charge the fee on every order. Tick categories to charge it "
+"only when the cart holds at least one product from them — for example a "
+"frozen category that needs an insulated box. Sub-categories count too."
+msgstr ""
+"Lad feltet stå tomt for at opkræve gebyret på alle ordrer. Sæt flueben ved "
+"kategorier for kun at opkræve det, når kurven indeholder mindst én vare "
+"derfra — fx en frost-kategori, der kræver en flamingokasse. Underkategorier "
+"tæller med."
+
+msgid "…or these tags"
+msgstr "…eller disse tags"
+
+msgid ""
+"Works alongside the categories above: one match in either list is enough for "
+"the fee to apply."
+msgstr ""
+"Virker sammen med kategorierne ovenfor: ét match i én af listerne er nok til, "
+"at gebyret opkræves."
+
+# ----------------------------------------------------------------------
+# Packaging fee rules + coupon (1.4.6)
+# ----------------------------------------------------------------------
+
+msgid ""
+"An extra fee added to the order at checkout, for packaging, cool packs, "
+"boxes and the like. It is a cart fee, not shipping — a free-shipping coupon "
+"does not remove it, and it is charged once per order."
+msgstr ""
+"Et ekstra gebyr, der lægges på ordren i checkout — til emballage, "
+"køleelementer, kasser og lignende. Det er et kurvgebyr, ikke fragt, så en "
+"rabatkode med gratis fragt fjerner det ikke, og det opkræves én gang pr. ordre."
+
+msgid ""
+"The rules are read from the top down and the FIRST one that fits the cart "
+"wins — only ever one fee. Put your specific rules first and leave a rule "
+"with nothing selected at the bottom as the catch-all."
+msgstr ""
+"Reglerne læses oppefra og ned, og den FØRSTE der passer til kurven vinder — "
+"der opkræves altid kun ét gebyr. Sæt dine specifikke regler øverst, og lad en "
+"regel uden noget valgt stå nederst som opsamling."
+
+msgid "Packaging fee saved."
+msgstr "Emballagegebyr gemt."
+
+msgid "Save packaging fee"
+msgstr "Gem emballagegebyr"
+
+msgid "Add fee rule"
+msgstr "Tilføj gebyrregel"
+
+msgid ""
+"Leave \"excl. VAT\" off if you typed the amount the customer should actually "
+"pay — the normal case. These two settings apply to every rule below."
+msgstr ""
+"Lad \"ekskl. moms\" stå slået fra, hvis du har skrevet det beløb, kunden "
+"faktisk skal betale — det normale. De to indstillinger gælder for alle regler "
+"nedenfor."
+
+msgid "e.g. Packaging (frozen)"
+msgstr "fx Emballage (frost)"
+
+msgid "Amount"
+msgstr "Beløb"
+
+msgid "Move up"
+msgstr "Flyt op"
+
+msgid "Move down"
+msgstr "Flyt ned"
+
+msgid "Sub-categories count too. Leave empty for any product."
+msgstr "Underkategorier tæller med. Lad feltet stå tomt for alle varer."
+
+msgid "One match in either list is enough."
+msgstr "Ét match i én af listerne er nok."
+
+msgid "Delivery methods"
+msgstr "Leveringsmetoder"
+
+msgid "Leave empty for any delivery method."
+msgstr "Lad feltet stå tomt for alle leveringsmetoder."
+
+msgid ""
+"Same format as the shipping fee ladder: one tier per line as \"from amount = "
+"fee\". The highest tier at or below the cart subtotal wins, and 0 means no "
+"fee. Leave empty to use the fixed amount above."
+msgstr ""
+"Samme format som fragttrappen: ét trin pr. linje som \"fra beløb = gebyr\". "
+"Det højeste trin på eller under kurvens subtotal vinder, og 0 betyder intet "
+"gebyr. Lad feltet stå tomt for at bruge det faste beløb ovenfor."
+
+msgid "Free packaging"
+msgstr "Gratis emballage"
+
+msgid "Waive Økoskabet's packaging fee for orders using this coupon."
+msgstr "Fjern Økoskabets emballagegebyr på ordrer med denne rabatkode."
+
+# ----------------------------------------------------------------------
+# Feature pricing panel (1.4.7)
+# ----------------------------------------------------------------------
+
+msgid "Your Økoskabet features and prices"
+msgstr "Dine funktioner og priser hos Økoskabet"
+
+msgid ""
+"What Økoskabet charges you for the features you use. This is not the shipping "
+"your customers pay — it is your own agreement, and it is managed in "
+"Økoskabet's back office."
+msgstr ""
+"Hvad Økoskabet opkræver dig for de funktioner du bruger. Det er ikke den fragt "
+"dine kunder betaler — det er din egen aftale, og den styres i Økoskabets "
+"backoffice."
+
+msgid ""
+"Prices could not be fetched from Økoskabet right now, so none are shown. This "
+"does not affect your deliveries."
+msgstr ""
+"Priserne kunne ikke hentes fra Økoskabet lige nu, så der vises ingen. Det "
+"påvirker ikke dine leveringer."
+
+msgid "Økoskabet has not set up any priced features for you yet."
+msgstr "Økoskabet har endnu ikke sat nogen prissatte funktioner op til dig."
+
+msgid ""
+"Økoskabet could not be reached, so these prices are the last ones we saw, %s "
+"ago. They may have changed since."
+msgstr ""
+"Økoskabet kunne ikke kontaktes, så disse priser er de senest kendte, fra for "
+"%s siden. De kan være ændret siden."
+
+msgid "Feature"
+msgstr "Funktion"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Your price (excl. VAT)"
+msgstr "Din pris (ekskl. moms)"
+
+msgid "All prices are excluding VAT. VAT is added on your invoice."
+msgstr "Alle priser er ekskl. moms. Momsen lægges på din faktura."
+
+msgid "What your setup costs in total"
+msgstr "Hvad din opsætning koster i alt"
+
+msgid "Nothing. None of the features you have switched on carry a price."
+msgstr "Ingenting. Ingen af de funktioner, du har slået til, koster noget."
+
+msgid "Counted once per thing you are billed for, not once per feature — switching on more delivery methods does not raise the price of a label."
+msgstr "Talt én gang pr. ting du afregnes for, ikke én gang pr. funktion — flere leveringsmetoder gør ikke et label dyrere."
+
+msgid ""
+"To switch a feature on or off, do it in Økoskabet's back office — that way it "
+"applies wherever you sell, not just in this shop."
+msgstr ""
+"Vil du tænde eller slukke for en funktion, gør det i Økoskabets backoffice — "
+"så gælder det alle de steder du sælger, ikke kun denne shop."
+
+msgid "Billing"
+msgstr "Afregning"
+
+msgid "Weekly"
+msgstr "Ugentligt"
+
+msgid "Every two weeks"
+msgstr "Hver 14. dag"
+
+msgid "Monthly"
+msgstr "Månedligt"
+
+msgid "current period %1$s to %2$s"
+msgstr "nuværende periode %1$s til %2$s"
+
+msgid "On"
+msgstr "Til"
+
+msgid "Off"
+msgstr "Fra"
+
+msgid "Locked by Økoskabet"
+msgstr "Låst af Økoskabet"
+
+msgid "No extra charge"
+msgstr "Ingen ekstra pris"
+
+msgid "%s and above"
+msgstr "%s og derover"
+
+msgid "%1$s–%2$s"
+msgstr "%1$s–%2$s"
+
+msgid "per label"
+msgstr "pr. label"
+
+msgid "per shipment"
+msgstr "pr. forsendelse"
+
+msgid "per order"
+msgstr "pr. ordre"
+
+msgid "per month"
+msgstr "pr. måned"
+
+#. translators: %s = a delivery method, e.g. "Home delivery"
+msgid "%s — everywhere"
+msgstr "%s — overalt"
+
+#. translators: %s = the internal id of a delivery method that no longer exists
+msgid "Removed delivery method (%s)"
+msgstr "Slettet leveringsmetode (%s)"
+
+msgid "Shows these products every date up to the until date, even past the normal number of days. For pre-orders: the soonest days as usual, and Christmas as well."
+msgstr "Viser disse varer alle datoer frem til til-datoen, også ud over det normale antal dage. Til forudbestilling: de nærmeste dage som altid, og julen med."
+
+msgid "Pre-order: offer these dates on top of the normal ones"
+msgstr "Forudbestilling: tilbyd disse datoer ud over de normale"
+
+msgid "Only when the chosen delivery date is further ahead than this. Match it to your normal number of days, and the rule charges pre-orders only. 0 means any date."
+msgstr "Kun når den valgte leveringsdato ligger længere fremme end dette. Sæt det til jeres normale antal dage, så rammer reglen kun forudbestillinger. 0 betyder alle datoer."
+
+msgid "Pre-order only: date more than"
+msgstr "Kun forudbestilling: dato mere end"
+
+msgid "days ahead"
+msgstr "dage frem"
+
+msgid "Pre-order: offer this date on top of the normal ones"
+msgstr "Forudbestilling: tilbyd denne dato ud over de normale"
+
+msgid "Offers this date for these products even past the normal number of days, while the normal days stay open. For pre-orders: the soonest days as usual, and this day as well."
+msgstr "Tilbyder denne dato for varerne, også ud over det normale antal dage, mens de normale dage stadig kan vælges. Til forudbestilling: de nærmeste dage som altid, og denne dag også."
+
+msgid "Delivery date"
+msgstr "Leveringsdato"
+
+msgid "For island deliveries. Orders without a date reach Økoskabet as unprocessable shipments and are given a date by hand."
+msgstr "Til ø-leveringer. Ordrer uden dato kommer ind hos Økoskabet som ubehandlede forsendelser og får en dato manuelt."
+
+msgid "The customer picks a date"
+msgstr "Kunden vælger en dato"
+
+msgid "A date if the area has delivery days — otherwise the order is placed without one"
+msgstr "Dato hvis området har leveringsdage – ellers bestilles uden dato"
+
+msgid "No date at checkout — every order is scheduled by hand"
+msgstr "Ingen dato i kassen – alle ordrer planlægges manuelt"
+
+msgid "without delivery date"
+msgstr "uden leveringsdato"
+
+msgid "Pre-order"
+msgstr "Forudbestilling"
+
+msgid "Normal order"
+msgstr "Normal bestilling"
+
+msgid "Pre-order button"
+msgstr "Knap til forudbestilling"
+
+msgid "Back to normal order"
+msgstr "Knap tilbage til normal bestilling"
+
+msgid "A date further ahead than your normal number of delivery days is treated as a pre-order: it is not offered in the normal checkout, and the customer reaches it with the pre-order button under Shipping. A date within the normal days is simply the only day offered."
+msgstr "En dato, der ligger længere ude end jeres normale antal leveringsdage, er en forudbestilling: den vises ikke i den normale kasse, og kunden når den med forudbestillingsknappen under Forsendelse. Ligger datoen inden for de normale dage, er den blot den eneste dag, der tilbydes."
+
+msgid "Postcodes without delivery days"
+msgstr "Postnumre uden leveringsdage"
+
+msgid "Can still be ordered — without a date, landing among unprocessed orders at Økoskabet"
+msgstr "Kan stadig bestilles – uden dato, og lander blandt ubehandlede ordrer hos Økoskabet"
+
+msgid "For island deliveries. Areas Økoskabet delivers to are booked on their days as usual."
+msgstr "Til ø-leveringer. Områder som Økoskabet leverer til bookes på deres dage som normalt."
+
+msgid "Pre-orders only"
+msgstr "Kun forudbestilling"
+
+msgid "Charged only when the customer has pressed the pre-order button at checkout."
+msgstr "Opkræves kun når kunden har trykket på forudbestillingsknappen i kassen."
+
+msgid "Other options"
+msgstr "Andre muligheder"
+
+msgid "Shipping in a row of its own"
+msgstr "Fragt i egen række"
+
+msgid "Shipping methods shown in their own row under Shipping at checkout, e.g. an add-on to an earlier order."
+msgstr "Fragtmetoder der vises i deres egen række under Forsendelse i kassen, fx tillæg til en tidligere ordre."
+
+msgid "Heading of that row"
+msgstr "Overskrift på rækken"
+
+msgid "Free"
+msgstr "Gratis"
+
+msgid "Show a note above the buttons while a pre-order is chosen"
+msgstr "Vis en tekst over knapperne, når forudbestilling er valgt"
+
+msgid "e.g. Fresh vegetables and dairy cannot be pre-ordered."
+msgstr "fx Frisk grønt og mælkeprodukter kan ikke forudbestilles."
+
+msgid "Pre-order: customers choose between a normal order and a pre-order at checkout, with its own days, note and fee."
+msgstr "Forudbestilling: kunderne vælger mellem normal bestilling og forudbestilling i kassen, med egne dage, egen tekst og eget gebyr."
+
+msgid "Packaging fee by product category and delivery method."
+msgstr "Emballagegebyr efter varegruppe og leveringsmetode."
+
+msgid "Store pickup as a delivery method."
+msgstr "Butiksafhentning som leveringsmetode."
+
+msgid "Island delivery: postcodes without delivery days can still be ordered and land among unprocessed orders."
+msgstr "Ø-levering: postnumre uden leveringsdage kan stadig bestilles og lander blandt ubehandlede ordrer."
+
+msgid "Shipping methods in a row of their own at checkout."
+msgstr "Fragtmetoder i deres egen række i kassen."
+
+msgid "New in this version. You don't need to do anything — everything new stays off until you turn it on."
+msgstr "Nyt i denne version. Du behøver ikke gøre noget – alt nyt er slået fra, indtil du selv slår det til."
+
+msgid "See the settings"
+msgstr "Se indstillingerne"
+
+#. translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup".
+msgid "Sent to Økoskabet — %1$s, %2$s"
+msgstr "Sendt til Økoskabet — %1$s, %2$s"
+
+msgid "Label printed"
+msgstr "Etiket printet"
+
+#. The fallback list, used only until Økoskabet publishes the steps itself.
+msgid "Registered"
+msgstr "Registreret"
+
+msgid "Ready for dispatch"
+msgstr "Klar til afsendelse"
+
+msgid "Received"
+msgstr "Modtaget"
+
+msgid "In shed"
+msgstr "I skabet"
+
+msgid "Fulfilled"
+msgstr "Udleveret"
+
+msgid "Removed"
+msgstr "Fjernet"
+# ----------------------------------------------------------------------
+# Opdelt levering: to knapper, og vending af leveringsundtagelser
+# ----------------------------------------------------------------------
+
+# Split_Checkout — the two buttons and their settings
+msgid "When ON: a basket that cannot be delivered on one day gets two buttons at checkout — split it into one order per delivery day, or take the items in the way out of the basket so the rest is delivered together. Each part-order is an ordinary order and pays its own shipping and packaging fee. When OFF: a notice tells the customer to remove items so they all share at least one delivery date."
+msgstr "Når TÆNDT: en kurv der ikke kan leveres på én dag får to knapper i kassen — del den op i én ordre per leveringsdag, eller tag de varer ud af kurven der står i vejen, så resten leveres sammen. Hver delordre er en helt almindelig ordre og betaler sin egen fragt og sit eget emballagegebyr. Når SLUKKET: en besked beder kunden fjerne varer, så de har mindst én fælles leveringsdato."
+
+msgid "Button: split the delivery"
+msgstr "Knap: opdel leveringen"
+
+msgid "What the first button says when the basket needs exactly two delivery days. The customer orders the first delivery now and the rest straight after. Leave empty for \"Opdel levering i to\"."
+msgstr "Hvad den første knap siger, når kurven har brug for præcis to leveringsdage. Kunden bestiller den første levering nu og resten lige efter. Lad feltet stå tomt for \"Opdel levering i to\"."
+
+msgid "Button: split into more than two"
+msgstr "Knap: opdel i mere end to"
+
+msgid "What that button says when the basket needs three or more delivery days, where \"i to\" would not be true. Write %d where the number belongs. Leave empty for \"Opdel levering i 3 leveringer\"."
+msgstr "Hvad den samme knap siger, når kurven har brug for tre eller flere leveringsdage, hvor \"i to\" ikke ville passe. Skriv %d der hvor tallet hører hjemme. Lad feltet stå tomt for \"Opdel levering i 3 leveringer\"."
+
+msgid "Button: take items out of the basket"
+msgstr "Knap: tag varer ud af kurven"
+
+msgid "What the second button says. It shows the customer which items to give up for the rest of the basket to be delivered on one day, with the date, and removes them when they choose. Leave empty for \"Tøm fra kurven\"."
+msgstr "Hvad den anden knap siger. Den viser kunden hvilke varer der skal gives afkald på, for at resten af kurven kan leveres på én dag, med datoen, og fjerner dem når kunden vælger. Lad feltet stå tomt for \"Tøm fra kurven\"."
+
+msgid "Split the delivery in two"
+msgstr "Opdel levering i to"
+
+msgid "Split into %d deliveries"
+msgstr "Opdel levering i %d leveringer"
+
+msgid "Empty from the basket"
+msgstr "Tøm fra kurven"
+
+msgid "You can split the order so each part is delivered on its own day, or take a few items out of the basket so everything else arrives together. Choose below."
+msgstr "Du kan dele ordren op, så hver del leveres på sin egen dag, eller tage et par varer ud af kurven, så alt det andet kommer samlet. Vælg nedenfor."
+
+msgid "No delivery day available"
+msgstr "Ingen leveringsdag tilgængelig"
+
+msgid "Choose what you would rather do without this time. We take those items out of the basket, and everything else is delivered on the same day."
+msgstr "Vælg hvad du hellere vil undvære denne gang. Vi tager de varer ud af kurven, og alt det andet leveres på samme dag."
+
+msgid "Remove %1$s, and the rest can be delivered together on %2$s"
+msgstr "Fjern %1$s, så kan resten leveres sammen %2$s"
+
+msgid "Remove the items and continue"
+msgstr "Fjern varerne og fortsæt"
+
+msgid "and"
+msgstr "og"
+
+msgid "We took %s out of your basket. The rest is delivered together."
+msgstr "Vi tog %s ud af din kurv. Resten leveres samlet."
+
+msgid "Choose one of the options first."
+msgstr "Vælg en af mulighederne først."
+
+msgid "Could not remove the items. Please try again."
+msgstr "Kunne ikke fjerne varerne. Prøv venligst igen."
+
+msgid "That option is no longer available. Please try again."
+msgstr "Den mulighed er der ikke længere. Prøv venligst igen."
+
+msgid "No option chosen"
+msgstr "Der er ikke valgt en mulighed"
+
+msgid "No split needed"
+msgstr "Der er ikke brug for en opdeling"
+
+msgid "A split is already in progress"
+msgstr "En opdeling er allerede i gang"
+
+msgid "WooCommerce cart not available"
+msgstr "WooCommerce-kurven er ikke tilgængelig"
+
+msgid "Some items have no delivery day, so the order cannot be split. Remove them instead."
+msgstr "Nogle varer har ingen leveringsdag, så ordren kan ikke deles op. Fjern dem i stedet."
+
+msgid "Your basket needs more than one delivery day. Please choose one of the options above before you order."
+msgstr "Din kurv har brug for mere end én leveringsdag. Vælg venligst en af mulighederne ovenfor, før du bestiller."
+
+msgid "We cannot find a delivery day for your basket"
+msgstr "Vi kan ikke finde en leveringsdag til din kurv"
+
+msgid "One or more items in the basket cannot be delivered at the moment. Please go back to the basket and remove them, or contact the shop."
+msgstr "En eller flere varer i kurven kan ikke leveres lige nu. Gå venligst tilbage til kurven og fjern dem, eller kontakt butikken."
+
+msgid "Back to the basket"
+msgstr "Tilbage til kurven"
+
+# Delivery_Exceptions — the per-rule flip
+msgid "Applies to all products other than the chosen ones"
+msgstr "Gælder alle andre varer end de valgte"
+
+msgid "Turns the rule around: it then covers every product that carries NONE of the categories and tags chosen below. A rule with nothing chosen still covers nothing."
+msgstr "Vender reglen om: den dækker så alle varer der IKKE har nogen af de kategorier og tags, der er valgt nedenfor. En regel uden noget valgt dækker stadig ingenting."
+
+msgid "Every rule has an \"Applies to all products other than the chosen ones\" tick. Ticked, the rule covers exactly the products that carry none of the categories and tags you picked — so \"everything but frost\" needs one rule rather than a list of every other category. A rule with nothing picked covers nothing, ticked or not."
+msgstr "Hver regel har et flueben, \"Gælder alle andre varer end de valgte\". Med flueben dækker reglen præcis de varer, der ikke har nogen af de kategorier og tags, du har valgt — så \"alt andet end frost\" kræver én regel i stedet for en liste over alle de øvrige kategorier. En regel uden noget valgt dækker ingenting, med eller uden flueben."
+
+# What's new
+msgid "Split delivery: a basket that needs more than one delivery day offers the customer two buttons — split it into one order per day, or see exactly which items to take out so the rest arrives together. The button wording is yours to set."
+msgstr "Opdelt levering: en kurv der har brug for mere end én leveringsdag giver kunden to knapper — del den op i én ordre per dag, eller se præcis hvilke varer der skal tages ud, så resten kommer samlet. Teksten på knapperne bestemmer du selv."
+
+msgid "Delivery exceptions: each rule can be turned around to cover every product OTHER than the categories and tags you picked."
+msgstr "Leveringsundtagelser: hver regel kan vendes om, så den dækker alle andre varer end de kategorier og tags, du har valgt."
+
+# Opdeling på tværs af forudbestilling og almindelig levering
+msgid "Only part of your basket can be pre-ordered"
+msgstr "Kun en del af din kurv kan forudbestilles"
+
+msgid "You can split the order into a pre-order for the items that can be held, and an ordinary delivery for the rest — each with its own date and its own fee. Or take the items that cannot be pre-ordered out of the basket. Choose below."
+msgstr "Du kan dele ordren op i en forudbestilling på de varer, der kan gemmes, og en almindelig levering på resten — hver med sin egen dato og sit eget gebyr. Eller du kan tage de varer ud af kurven, der ikke kan forudbestilles. Vælg nedenfor."
+
+msgid "Pre-order %1$d (%2$s)"
+msgstr "Forudbestilling %1$d (%2$s)"
+
+msgid "Remove %1$s, and the rest can be pre-ordered together for %2$s"
+msgstr "Fjern %1$s, så kan resten forudbestilles samlet til %2$s"
+
+# Vejen ud af en forudbestilling, og genberegnede muligheder
+msgid "Choose an ordinary order instead"
+msgstr "Vælg normal bestilling i stedet"
+
+msgid "Your basket has changed, so we have worked the options out again. Please choose once more."
+msgstr "Din kurv har ændret sig, så vi har regnet mulighederne ud igen. Vælg venligst på ny."
+
+# Ingen dato hvor flere dage er mulige
+msgid "Your items cannot all be delivered on the same day"
+msgstr "Varerne i din kurv kan ikke leveres på samme dag"
+
+msgid "Delivery %d"
+msgstr "Levering %d"
+
+msgid "Pre-order %d"
+msgstr "Forudbestilling %d"
+
+msgid "Remove %s, and the rest can be delivered together"
+msgstr "Fjern %s, så kan resten leveres sammen"
+
+msgid "Remove %s, and the rest can be pre-ordered together"
+msgstr "Fjern %s, så kan resten forudbestilles samlet"
+
+# Settings page — standard settings on top, the extras below
+msgid "Standard settings"
+msgstr "Standardindstillinger"
+
+msgid "What every shop needs: the connection to Økoskabet, the texts at checkout and the webhooks. The extras your shop can choose come further down."
+msgstr "Det, hver butik skal have sat op: forbindelsen til Økoskabet, teksterne i kassen og webhooks. De ekstra funktioner, I selv kan vælge, kommer længere nede."
+
+msgid "Extra features"
+msgstr "Ekstra funktioner"
+
+msgid "Features beyond the basics. Each one is switched on and off on its own."
+msgstr "Funktioner ud over det grundlæggende. Hver af dem slås til og fra for sig."
+
+msgid "Split delivery"
+msgstr "Opdelt levering"
+
+msgid "Split delivery saved."
+msgstr "Opdelt levering er gemt."
+
+msgid "Save split delivery"
+msgstr "Gem opdelt levering"
+
+msgid "These items can only be pre-ordered"
+msgstr "Varerne kan kun forudbestilles"
+
+msgid "They are delivered on a fixed day further ahead than the ordinary delivery days. Press \"%s\" above to see the date."
+msgstr "De leveres på en fast dag, der ligger længere ude end de almindelige leveringsdage. Tryk på \"%s\" ovenfor for at se datoen."
+
+msgid "Headline: the basket needs more than one day"
+msgstr "Overskrift: kurven skal bruge mere end én dag"
+
+msgid "The headline above the two buttons when the items in the basket cannot be delivered on the same day. Leave empty for \"Varerne i din kurv kan ikke leveres på samme dag\"."
+msgstr "Overskriften over de to knapper, når varerne i kurven ikke kan leveres på samme dag. Lad feltet stå tomt for \"Varerne i din kurv kan ikke leveres på samme dag\"."
+
+msgid "Text under that headline"
+msgstr "Tekst under overskriften"
+
+msgid "What the customer is being offered, in your own words. Leave empty for the built-in wording."
+msgstr "Hvad kunden bliver tilbudt, skrevet med jeres egne ord. Lad feltet stå tomt for den indbyggede tekst."
+
+msgid "Headline: only part of the basket can be pre-ordered"
+msgstr "Overskrift: kun en del af kurven kan forudbestilles"
+
+msgid "The headline when the basket crosses a pre-order and an ordinary delivery. Leave empty for \"Kun en del af din kurv kan forudbestilles\"."
+msgstr "Overskriften, når kurven både rummer en forudbestilling og en almindelig levering. Lad feltet stå tomt for \"Kun en del af din kurv kan forudbestilles\"."
+
+msgid "The same, for the pre-order case. Leave empty for the built-in wording."
+msgstr "Det samme, men for forudbestillinger. Lad feltet stå tomt for den indbyggede tekst."
+
+msgid "Keep only this one"
+msgstr "Behold kun denne"
+
+msgid "Button: keep only this delivery"
+msgstr "Knap: behold kun denne levering"
+
+msgid "What the small button beside each delivery says. It keeps that delivery and takes the other items out of the basket. Leave empty for \"Behold kun denne\"."
+msgstr "Hvad den lille knap ved siden af hver levering siger. Den beholder den levering og tager de øvrige varer ud af kurven. Lad feltet stå tomt for \"Behold kun denne\"."
+
+msgid "Cannot be pre-ordered: categories"
+msgstr "Kan ikke forudbestilles: kategorier"
+
+msgid "Cannot be pre-ordered: tags"
+msgstr "Kan ikke forudbestilles: tags"
+
+msgid "Goods you will not hold for a later date — fresh produce and the like. They are never offered a pre-order day, whichever rule opens one. A basket holding them is offered the split instead: the rest as a pre-order, these on an ordinary delivery."
+msgstr "Varer, I ikke vil gemme til en senere dato — frisk frugt og grønt og den slags. De får aldrig en forudbestillingsdag, uanset hvilken regel der åbner en. En kurv med dem i får i stedet tilbudt opdelingen: resten som forudbestilling, disse med en almindelig levering."
+
+msgid "Move %1$s to %2$s"
+msgstr "Flyt %1$s til %2$s"
+
+msgid "Could not move that item. Please try again."
+msgstr "Varen kunne ikke flyttes. Prøv igen."
+
+msgid "That item cannot go in that delivery."
+msgstr "Den vare kan ikke komme med i den levering."
+
+msgid "Nothing to move"
+msgstr "Der er ikke noget at flytte"
+
+msgid "Applies to every product"
+msgstr "Gælder alle varer"
+
+msgid "The window covers the whole catalogue. What cannot wait is named once, under the pre-order settings, rather than category by category here."
+msgstr "Vinduet gælder hele sortimentet. Det, der ikke kan vente, nævnes ét sted under forudbestillingsindstillingerne i stedet for kategori for kategori her."
+
+msgid "Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged."
+msgstr "Jeres betalingsløsning hæver pengene, når ordren markeres som gennemført, og ikke før. Vælg nedenfor hvilket event der skal gennemføre ordren — det er samtidig det øjeblik, kunden bliver trukket."

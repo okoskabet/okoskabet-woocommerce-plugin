@@ -2,6 +2,376 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.5.0 - 2026-10-08
+
+Første udgivelse efter 1.4.2. Den indeholder også alt fra 1.4.3 til 1.4.7
+længere nede — butiksafhentning, forudbestilling, emballagegebyr og de nye
+fristregler — som aldrig blev udgivet hver for sig.
+
+= Sikkerhedsrettelse i webhooken =
+
+Webhooken fra Økoskabet er strammet op. Opdatér, også selvom intet af det
+øvrige her er noget, butikken bruger.
+
+= Vigtigt: hvornår betalingen hæves og ordren fuldføres =
+
+Listen over hændelser under "Capture events" og "Completion events" hentes nu
+fra butikkens egen Økoskabet-konto: Registreret, Klar til afsendelse, Modtaget,
+I skabet, Udleveret, Fjernet — plus "Etiket printet".
+
+De gamle valg skrives om én gang ved opdateringen:
+
+  - **"In Shed"** blev i praksis udløst, når kunden havde fået varerne. Det
+    trin hedder nu **Udleveret**, og tidspunktet er det samme som før.
+  - **"Order Delivered"** ventede på en status, Økoskabet aldrig har sendt, så
+    det skete aldrig. Det var standardvalget for fuldførelse. Det bliver nu
+    også til **Udleveret** — så en butik, der aldrig har ændret det, får fra
+    nu af sine ordrer fuldført, og med en kortbetaling som Nexi hævet,
+    når kunden har varerne.
+
+Fuldførelse kan nu slås helt fra ved at fjerne alle flueben.
+
+= Bankoverførsel, check og efterkrav =
+
+En ordre uden transaktions-id sendes nu til Økoskabet, når butikken sætter
+den til **Behandler** — før blev en bankoverførsel aldrig sendt. På hold
+holdes den stadig tilbage. Den slags ordrer bliver ikke forsøgt hævet
+automatisk; de står som ubetalte, til butikken selv har set pengene.
+
+= Pakkeriets ordrelinjer =
+
+En variantvare sendes med forældreproduktets navn og varianten for sig
+("Friske Græsæg" + "3 bakker"), og emballagegebyr og pant sendes ikke
+længere med som varer, der skal pakkes.
+
+= Producent og oprindelsesland til følgesedlen =
+
+Hver vare sendes med de egenskaber, mærker og taksonomier, den er registreret
+under. Hvilket felt der er producent og hvilket der er land, vælger butikken
+hos Økoskabet under Pakkeri → Følgeseddel.
+
+= Kundens bemærkning er kundens =
+
+Pluginet skriver ikke længere sin egen linje ("ØKOSKABET 2026-10-01
+Hjemmelevering") ind i kundens bemærkning. Datoen står i stedet i ordremailen,
+på følgesedlen (PDF Invoices & Packing Slips) og som en privat ordrenote.
+
+= Forudbestillingsgebyret følger de dage, kunden ser =
+
+En dag, kassen viser som almindelig levering, betaler emballagegebyr — også
+når en fra/til-regel strækker sig over den. En dag, der kun kan vælges som
+forudbestilling, betaler forudbestillingsgebyret. Det gælder både når
+visningen tælles i kalenderdage og i leveringsdage.
+
+= Rabatkoder ved opdelt levering =
+
+En rabatkode med en brugsgrænse bruges af den første ordre. En kode uden
+grænse gælder hver levering: 100 kr rabat er 100 kr på hver ordre.
+
+= Bricks-kasse =
+
+Pluginet kan nu køre på en Bricks-kasse (Checkout v2). Leveringsdelen kan
+placeres med `[okoskabet_levering]` eller `{do_action:okoskabet_levering}`.
+Klassiske kasser opfører sig som før.
+
+= Indstillingssiden: standard øverst, ekstra funktioner nedenunder =
+
+"Tillad opdelt checkout" og de tre knaptekster stod nederst i hovedformularen,
+under "Webhook & Betaling", hvor ingen ville lede efter dem. De har nu deres
+egen sektion, **Opdelt levering**, lige under Leveringsundtagelser.
+
+Siden er samtidig delt i to: **Standardindstillinger** øverst — forbindelsen til
+Økoskabet, teksterne i kassen, webhooks — og **Ekstra funktioner** nedenunder:
+leveringsundtagelser, opdelt levering, emballagegebyr og oversigten over
+funktioner og priser.
+
+Det er kun placeringen, der er ændret. Indstillingerne er gemt samme sted som
+før, så en butik, der opdaterer, beholder det, den havde sat op. Sektionen har
+sin egen gem-knap, og den rører kun sine egne fire felter — API-nøglen og resten
+af hovedformularen kan den ikke komme til at overskrive.
+
+= Fortryder man opdelingen, får man sin kurv tilbage =
+
+"Annullér opdelt levering og start forfra" tømte kurven og sendte kunden ud i
+shoppen. Opdelingen havde selv taget den anden leverings varer ud af kurven, så
+den eneste vej ud af forløbet kostede kunden alt, hun havde lagt i.
+
+Nu lægges varerne tilbage — både dem, der stod i kurven, og dem, opdelingen
+havde gemt til næste trin — og kunden lander i kassen med hele kurven foran sig.
+Har hun allerede betalt den første levering, kommer kun resten tilbage; en
+betalt ordre må ikke kunne købes igen. Advarslen inden ("tøm din kurv?") er
+væk, for der er ikke længere noget at advare om.
+
+= Banneret lover ikke en bestemt dag, det ikke kan holde =
+
+Listen over leveringer viste en dato ud for hver del: "Levering 1 (23. september
+2026)". Men den dato var bare den første af flere dage, der ville fungere, og
+kunden vælger selv den rigtige i datovælgeren et øjeblik senere. At skrive den
+læste som en beslutning, ingen havde taget.
+
+Nu står der "Levering 1 — Økologiske galia melon". Nummereringen og varenavnene
+er der stadig; det er datoen, der er væk. Overskriften siger i stedet det, sagen
+drejer sig om: **"Varerne i din kurv kan ikke leveres på samme dag"**.
+
+Det samme gælder mulighederne under "Tøm fra kurven": "Fjern X, så kan resten
+leveres sammen" — uden at udpege en dag.
+
+Én undtagelse: har en del kun **én** mulig dag, står datoen der stadig, for så er
+den en kendsgerning og ikke ét bud blandt flere. En forudbestilling er det
+tydeligste tilfælde: "Forudbestilling 2 (10. december 2026)".
+
+= Opdelt levering: kunden får to veje videre =
+
+Når en kurv ikke kan leveres på én dag, viste kassen før kun en besked. Nu får
+kunden to knapper at vælge imellem:
+
+  - **Opdel levering i to** — kunden bestiller den første levering nu og resten
+    lige efter. Det er det flow, der allerede lå i pluginet, og som nu virker
+    hele vejen igennem.
+  - **Tøm fra kurven** — for hver leveringsdag viser vi præcis hvilke varer der
+    står i vejen, og hvad der så kan leveres hvornår: "Fjern Mælk og Ost, så kan
+    resten leveres sammen den 22. september 2026". Kunden vælger én, de varer
+    ryger ud af kurven, og kassen fortsætter som normalt.
+
+Mulighederne står i den rækkefølge, der koster kunden mindst — færrest varer
+først. Har kurven brug for tre eller flere leveringsdage, siger knappen "Opdel
+levering i 3 leveringer" i stedet for "i to", for det ville ikke passe.
+
+Teksten på begge knapper sætter du selv under Indstillinger. Hele funktionen er
+slukket, indtil "Tillad opdelt checkout" tændes.
+
+Hver delordre er en helt almindelig ordre og betaler sin egen fragt og sit eget
+emballagegebyr. To leveringer er to ture og to kasser, så to gebyrer er det
+rigtige tal — ikke en fejl.
+
+= Forudbestilling: opdeling virker nu også på tværs af de to slags ordrer =
+
+Trykker kunden Forudbestilling, mener de hele kurven — men det er ikke alt, der
+kan forudbestilles. En kurv med cornflakes, Pak Choi og nougat ispinde svarede
+før med ingenting: intet banner, ingen datovælger, ingen forklaring. Og et
+forudbestillingsgebyr på 50 kr oveni.
+
+Nu rejser den de samme to knapper:
+
+  - **Opdel levering i to** — en forudbestilling på de varer, der kan gemmes, og
+    en almindelig ordre på resten. Hver del er sin egen ordre med sin egen slags,
+    sin egen dato og sit eget gebyr, og kunden betaler begge. Det er det rigtige
+    tal: begge dele er virkelige.
+  - **Tøm fra kurven** — muligheden for at fjerne præcis de varer, der ikke kan
+    forudbestilles, så resten kan forudbestilles samlet.
+
+Banneret siger hvad der er hvad — "Forudbestilling 1 (10. december)" ved siden af
+"Levering 2 (23. september)" — for "Levering 2" om en decemberdato læses som en
+meget sen levering i stedet for det, den er.
+
+Mulighederne under "Tøm fra kurven" holder sig inden for den slags ordre, kunden
+har valgt. "Fjern isen, så kan resten leveres på onsdag" ville være sandt og
+ville stille og roligt tage kunden ud af den forudbestilling, de bad om. Vejen
+tilbage er knappen til almindelig ordre.
+
+Forudbestillingsgebyret opkræves ikke længere, mens kurven ingen
+forudbestillingsdag har. Et gebyr for at gemme varer til en dato kræver en dato.
+Kun et klart "der er ingen dag" fjerner det — kan spørgsmålet ikke besvares,
+opkræves gebyret som hidtil, så butikken ikke mister det til en timeout.
+
+= En forudbestilling gælder det besøg, den blev valgt på =
+
+Hver visning af kassen starter som en almindelig ordre. Det er ikke nyt — feltet
+til forudbestilling nulstilles ved hver sideindlæsning, netop så sidste års
+juleforudbestilling ikke kommer igen af sig selv. Men banneret tegnes, før
+checkout-scriptet når at rydde cookien, og læste derfor en cookie, som siden var
+ved at kassere.
+
+En kunde, der kom tilbage med en helt anden kurv, blev mødt af "Kun en del af din
+kurv kan forudbestilles" om et valg fra et tidligere besøg — med
+checkout-formularen gemt bag banneret og dermed uden vej tilbage.
+
+Nu gælder en forudbestilling kun, når kunden beder om den på denne side, og aldrig
+når kurven ikke indeholder noget, der kan forudbestilles. Valget følger adressen i
+browseren, fordi det er en oplysning om den side, man står på.
+
+Trykker man Forudbestilling, genindlæses siden nu (i butikker med opdelt
+checkout). Det er nødvendigt: om kurven skal deles op kan ændre sig med
+ordretypen, og banneret ligger over formularen, uden for alt det, WooCommerce
+tegner om ved en genberegning. Før skete der ganske enkelt ingenting, når man
+trykkede.
+
+Banneret har desuden fået sin egen vej ud: **"Vælg normal bestilling i stedet"** —
+et link frem for en tredje larmende knap, og et almindeligt link, så det virker
+uanset om siden har JavaScript kørende.
+
+Vælger man en mulighed under "Tøm fra kurven", som ikke længere findes — fordi
+kurven eller reglerne har ændret sig, mens siden stod åben — afvises valget
+stadig, men man ender ikke længere i en blindgyde med "prøv igen" på en side, der
+stadig viser de gamle muligheder. Man sendes tilbage til banneret, som det ser ud
+nu, med en linje om hvorfor det har ændret sig.
+
+= Datoerne i banneret kommer nu fra Økoskabet =
+
+Grupperingen byggede sin egen kalender på 365 dage og kørte undtagelsesreglerne
+hen over den. Reglerne siger, hvilke af butikkens leveringsdage en vare må bruge;
+de kan ikke sige, hvilke dage butikken kører. Hver eneste dato i banneret var
+altså et gæt, der tilfældigvis overlevede reglerne.
+
+På Gaardmesters staging var gættet dags dato. Torsdag den 17. september, is der
+kun må leveres om torsdagen, og altså var den nærmeste tilladte torsdag den dag,
+siden blev åbnet — en dag uden levering overhovedet. Datovælgeren længere nede på
+samme side havde ret, fordi den spørger Økoskabet.
+
+Det gør banneret nu også. Kan Økoskabet ikke spørges — intet postnummer endnu,
+API'et nede — vises der intet banner i stedet for et banner med opdigtede datoer,
+og en gruppe uden en rigtig dag siger det med ord frem for at låne en dato.
+
+= Opdelingen finder færre leveringer end før =
+
+Grupperingen ser nu på hele kurven på én gang og vælger den dag, der kan tage
+flest varer med. Før faldt hver vare ned i den første gruppe, den rørte ved, og
+en vare uden regler på sig kunne dermed åbne en tredje levering, hvor to var
+nok — og svaret skiftede med den rækkefølge, varerne lå i kurven.
+
+Opdelingen tager nu også højde for bestillingsfrister, så den dag, kunden bliver
+lovet, er en dag der stadig kan nås.
+
+= Leveringsinfo i kassen ligner igen et felt =
+
+Feltet til leveringsinfo og "Besked til chaufføren" ligger inde i kassens
+ordreoversigt, og den tabel er i de fleste temaer sat op til det, den plejer at
+indeholde: priser. Centreret, fed, højrestillet. Teksten over dropdownen fik den
+formatering, dropdownen stod smal og venstrestillet under den, og resultatet så
+i stedet ud som om noget var gået i stykker.
+
+Nu står etiketten på sin egen række, og feltet fylder tabellens fulde bredde.
+Dropdown og notefelt er ens: samme bredde, samme ramme, samme afrunding, samme
+afstand. På mobil er skriften stor nok til, at iOS ikke zoomer ind, når kunden
+trykker i feltet.
+
+Det er ren præsentation — hvad der sendes med ordren, og hvordan "Andet" folder
+notefeltet ud, er uændret. Rettelsen ligger ét sted i stedet for spredt ud i
+opbygningen af felterne, og den overlever WooCommerces genberegning af kassen.
+
+= Leveringsundtagelser kan vendes om =
+
+Hver regel — faste ugedage, en enkelt dag, fra/til og bestillingsfrister — har
+fået et flueben: **"Gælder alle andre varer end de valgte"**. Med flueben dækker
+reglen præcis de varer, der ikke har nogen af de valgte kategorier og tags. Så
+"alt andet end frost leveres kun om onsdagen" er én regel i stedet for en liste
+over alle de øvrige kategorier.
+
+En regel uden noget valgt dækker ingenting, med eller uden flueben. En halvfærdig
+regel skal ikke kunne lukke hele butikken ned.
+
+Regler, der er gemt før dette, betyder præcis det samme som før.
+
+## 1.4.7 - 2026-08-29
+
+= See what your Økoskabet features cost =
+
+A new panel under Settings lists the Økoskabet features your shop has, whether
+each one is on, and what Økoskabet charges you for it — a flat price, or one
+line per step when it is a volume ladder. It is your own agreement with
+Økoskabet, not the shipping your customers pay.
+
+Features are switched on and off in Økoskabet's back office rather than here,
+so the same answer holds whether you sell through WooCommerce, Shopify or the
+API directly. Where Økoskabet has locked a feature, the panel says so and why.
+
+If Økoskabet cannot be reached the panel shows the last prices it saw, dated,
+rather than an empty table — and if there are no priced features yet, it says
+that too. Neither affects your deliveries.
+
+## 1.4.6 - 2026-08-26
+
+= Packaging fee =
+
+The plugin can now add a packaging fee to the order itself, so shops no longer
+need a separate fee plugin for the box, the cool packs and the packing. Set it
+up under Settings, below the delivery exceptions.
+
+The fee is a list of rules read from the top down, and the first one that fits
+the cart wins — so a shop can charge one amount when the order needs an
+insulated box and another when it doesn't:
+
+  1. "Emballage (frost)" — categories: Frost — 45 kr
+  2. "Emballage" — nothing selected — 28 kr
+
+Every cart pays exactly one fee, and a cart matching no rule pays nothing. Each
+rule can be attached to product categories or tags (picking a category includes
+its sub-categories; one matching product in the cart is enough), limited to
+particular delivery methods, and priced either as a fixed amount or with a
+ladder using the same "from = price" lines the shipping methods already use, so
+the fee can shrink or disappear on bigger orders.
+
+= Coupons can make the packaging free =
+
+Coupons have a new "Gratis emballage" tick, next to WooCommerce's own "Allow
+free shipping". It is deliberately separate: a shop can hand out free delivery
+without also giving the box away.
+
+= Notes =
+
+The fee is a cart fee, not shipping, so an ordinary free-shipping coupon leaves
+it alone and it is charged once per order. With split checkout each part-order
+carries its own fee, which matches the real cost: two deliveries mean two
+boxes.
+
+## 1.4.5 - 2026-08-25
+
+= The shop's order number now reaches Økoskabet =
+
+The order id was being sent under a name Økoskabet doesn't read, so the
+"Webshop order" column stayed empty. It now sends the two fields Økoskabet
+actually keeps: the bare number to search on, and the reference as the shop
+prints it.
+
+= Turning off the staging API works again =
+
+An unchecked checkbox is absent from WordPress's saved settings rather than
+false, so switching "Staging API" off never reached the stored merchant. A shop
+that had once used staging kept calling it with a production key, and every
+delivery method disappeared from the checkout.
+
+## 1.4.3 - 2026-08-25
+
+= Butiksafhentning (store pickup) =
+
+Merchants who have store pickup enabled in Økoskabet's back office can now
+offer it at checkout. The customer picks which of the shop's pickup locations
+to collect from and which day to collect on; the days come from the location's
+own collection days, not from the delivery regions. Collection is free by
+default. The opening hours are the shop's own to state — write them in the
+shipping method's Description field and WooCommerce shows them under the
+method.
+
+= Cutoff rules =
+
+Products can now close for ordering earlier than the merchant's normal cutoff.
+Each rule names a category and/or tag, a number of days before delivery, and a
+time of day, so fresh produce and dairy can each have their own deadline. When
+several rules apply to one basket the earliest deadline wins. Cutoffs apply to
+a collection exactly as they do to a delivery.
+
+= Delivery dates =
+
+Past dates are never shown. A weekday rule combined with a from-date no longer
+loses the dates it should keep. How many delivery days to show is configurable,
+either as a number of days or a calendar window. A basket with several products
+only offers dates every product can make.
+
+= Shipping fee ladder =
+
+Shipping methods take a tiered price — "0 = 99 / 500 = 69 / 1000 = 49 /
+2000 = 0" — set per WooCommerce shipping zone, with a switch for whether the
+amounts include VAT. A line that isn't a pair of numbers is ignored rather
+than read as "free from 0".
+
+= Also =
+
+The order sent to Økoskabet now carries the shop's own order number alongside
+the unchanged shipment reference, so merchants can search for a shipment by
+the number they see in WooCommerce. Saving the merchant settings now clears
+the cached shipping-method lookup, so a corrected API key takes effect at once
+instead of after five minutes.
+
 ## 1.4.2 - 2026-05-20
 
 = Show the fulfilling merchant on the admin order page =

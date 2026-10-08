@@ -82,6 +82,23 @@ class OkoRest extends Base
 			)
 		);
 
+		// Where a merchant's store pickups are collected from. Mirrors the
+		// `/sheds` shape (id, name, address) plus the weekdays a location
+		// collects on, so the checkout can render either with one code path.
+		\register_rest_route(
+			'wp/v2',
+			'okoskabet/store_pickup',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => '__return_true',
+				'callback'            => array($this, 'get_store_pickup'),
+				'args'                => array(
+					'product_ids' => array('required' => false),
+					'merchant_id' => array('required' => false),
+				),
+			)
+		);
+
 		\register_rest_route(
 			'wp/v2',
 			'okoskabet/delivery_location_options',
@@ -142,6 +159,28 @@ class OkoRest extends Base
 					'event'              => array('required' => true),
 					'shipment_reference' => array('required' => true),
 					'data'               => array('required' => false),
+				),
+			)
+		);
+
+		// Catalogue lookup for Økoskabet's packing room. Keyed on the
+		// merchant for the same reason the webhook is: one shop can host
+		// several merchants, each with its own secret, and a signature must
+		// never be verifiable against the wrong one.
+		//
+		// POST rather than GET because the signature covers the raw body,
+		// and a GET has no body to cover. That also puts the timestamp
+		// inside what is signed, so a replay cannot be given a fresh one.
+		\register_rest_route(
+			'wp/v2',
+			'okoskabet/products/(?P<merchant_id>[a-z0-9_\-]+)',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => '__return_true',
+				'callback'            => array($this, 'handle_products'),
+				'args'                => array(
+					'ids'       => array('required' => true),
+					'timestamp' => array('required' => true),
 				),
 			)
 		);
@@ -243,6 +282,26 @@ class OkoRest extends Base
 	}
 
 	/**
+	 * Whether the checkout asked for pre-order days rather than normal ones.
+	 * The checkout script says so in the request; the cookie the pre-order
+	 * button sets says it too, for a checkout script a page cache is still
+	 * serving from before the button existed.
+	 */
+	private static function is_pre_order_request(\WP_REST_Request $request): bool {
+		// A caller that states the mode outright decides it. Split checkout has
+		// to be able to ask what a product's NORMAL days are while the customer
+		// is in the middle of a pre-order, and the cookie alone would make that
+		// impossible. The checkout script only ever sends the parameter for a
+		// pre-order, never to say "normal", so nothing existing lands here.
+		$stated = $request->get_param('pre_order');
+		if ($stated !== null && (string) $stated !== '') {
+			return (string) $stated === '1';
+		}
+
+		return (string) ($_COOKIE['okoskabet_pre_order'] ?? '') === '1'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared, never output.
+	}
+
+	/**
 	 * Parse a comma-separated list of integers into a sanitised array of
 	 * positive product IDs. Defensive against any input shape.
 	 */
@@ -313,7 +372,7 @@ class OkoRest extends Base
 		$product_ids  = self::parse_product_ids($params['product_ids'] ?? '');
 
 		if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
-			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids);
+			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids, self::is_pre_order_request($request));
 		} else {
 			$maximum_days_in_future = $default_days;
 		}
@@ -346,7 +405,8 @@ class OkoRest extends Base
 					$shed['delivery_dates'] = apply_filters(
 						'okoskabet_filtered_delivery_dates',
 						$shed['delivery_dates'],
-						$product_ids
+						$product_ids,
+						self::is_pre_order_request($request)
 					);
 					if (!empty($shed['delivery_dates'])) {
 						$any_dates_left = true;
@@ -366,6 +426,15 @@ class OkoRest extends Base
 			if (!empty($explanation['has_exceptions'])) {
 				$output_content['exceptions_explanation'] = $explanation;
 			}
+			// Nothing left to pick, but the basket can be pre-ordered: say so,
+			// rather than leaving the customer with "contact the shop".
+			$hint = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_hint_for_cart(
+				$product_ids,
+				self::is_pre_order_request($request)
+			);
+			if (!empty($hint)) {
+				$output_content['pre_order_hint'] = $hint;
+			}
 		}
 
 		return new \WP_REST_Response(array(
@@ -382,7 +451,18 @@ class OkoRest extends Base
 	 */
 	public function get_home_delivery(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
+		return self::home_delivery_response($request);
+	}
 
+	/**
+	 * The home-delivery dates for a postcode and cart, as the checkout asks
+	 * for them. Static so the checkout's own validation can ask the same
+	 * question the picker did, without a round trip through HTTP.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function home_delivery_response(\WP_REST_Request $request)
+	{
 		$merchant = self::resolve_request_merchant($request);
 		if ($merchant === null || empty($merchant['api_key'])) {
 			return new \WP_Error('missing_api_key', 'API key not configured for the resolved merchant', array('status' => 500));
@@ -393,7 +473,7 @@ class OkoRest extends Base
 		$product_ids  = self::parse_product_ids($params['product_ids'] ?? '');
 
 		if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
-			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids);
+			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids, self::is_pre_order_request($request));
 		} else {
 			$maximum_days_in_future = $default_days;
 		}
@@ -421,7 +501,8 @@ class OkoRest extends Base
 			$output_content['delivery_dates'] = apply_filters(
 				'okoskabet_filtered_delivery_dates',
 				$output_content['delivery_dates'],
-				$product_ids
+				$product_ids,
+				self::is_pre_order_request($request)
 			);
 		}
 
@@ -434,6 +515,125 @@ class OkoRest extends Base
 			$explanation = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::explanation_for_cart($product_ids);
 			if (!empty($explanation['has_exceptions'])) {
 				$output_content['exceptions_explanation'] = $explanation;
+			}
+			// Nothing left to pick, but the basket can be pre-ordered: say so,
+			// rather than leaving the customer with "contact the shop".
+			$hint = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_hint_for_cart(
+				$product_ids,
+				self::is_pre_order_request($request)
+			);
+			if (!empty($hint)) {
+				$output_content['pre_order_hint'] = $hint;
+			}
+		}
+
+		return new \WP_REST_Response(array(
+			'settings' => self::public_settings_payload($merchant, $maximum_days_in_future),
+			'results'  => $output_content,
+		), 200);
+	}
+
+	/**
+	 * Get the merchant's store-pickup locations, each with the dates a
+	 * customer can collect on.
+	 *
+	 * The upstream endpoint answers in the same shape `/sheds` does — id,
+	 * name, address — plus `days` (the weekdays that location collects on)
+	 * and, when asked, `delivery_dates`. It answers 404 for a merchant who
+	 * hasn't been sold store pickup, which we pass through as an empty list
+	 * so the checkout simply shows no method rather than an error.
+	 *
+	 * Collection dates run through the same `okoskabet_filtered_delivery_dates`
+	 * filter as sheds and home delivery, so the merchant's per-product cutoff
+	 * rules apply to a collection exactly as they do to a delivery.
+	 *
+	 * @param \WP_REST_Request<array> $request
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function get_store_pickup(\WP_REST_Request $request)
+	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
+
+		$merchant = self::resolve_request_merchant($request);
+		if ($merchant === null || empty($merchant['api_key'])) {
+			return new \WP_Error('missing_api_key', 'API key not configured for the resolved merchant', array('status' => 500));
+		}
+
+		$params       = $request->get_params();
+		$default_days = (int) ($merchant['maximum_days_in_future'] ?? 3);
+		$product_ids  = self::parse_product_ids($params['product_ids'] ?? '');
+
+		if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')) {
+			$maximum_days_in_future = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::effective_query_window($default_days, $product_ids, self::is_pre_order_request($request));
+		} else {
+			$maximum_days_in_future = $default_days;
+		}
+
+		$request_url = \add_query_arg(array(
+			'delivery_dates'         => 'true',
+			'maximum_days_in_future' => $maximum_days_in_future,
+		), Merchants::api_url_for($merchant) . '/api/v1/store_pickup');
+
+		$response = \wp_remote_get($request_url, array(
+			'timeout' => 15,
+			'headers' => array(
+				'Authorization' => $merchant['api_key'],
+			),
+		));
+
+		if (\is_wp_error($response)) {
+			return new \WP_Error('api_error', $response->get_error_message(), array('status' => 502));
+		}
+
+		$code = (int) \wp_remote_retrieve_response_code($response);
+		$body = \wp_remote_retrieve_body($response);
+
+		// 404 means this merchant doesn't offer store pickup at all. That's a
+		// fact about the merchant, not a failure — answer with an empty list.
+		if ($code === 404) {
+			return new \WP_REST_Response(array(
+				'settings' => self::public_settings_payload($merchant, $maximum_days_in_future),
+				'results'  => array('pickup_locations' => array()),
+			), 200);
+		}
+
+		$output_content = \json_decode($body, true);
+
+		$any_dates_left = false;
+		if (is_array($output_content) && !empty($output_content['pickup_locations']) && is_array($output_content['pickup_locations'])) {
+			foreach ($output_content['pickup_locations'] as &$location) {
+				if (isset($location['delivery_dates']) && is_array($location['delivery_dates'])) {
+					$location['delivery_dates'] = apply_filters(
+						'okoskabet_filtered_delivery_dates',
+						$location['delivery_dates'],
+						$product_ids,
+						self::is_pre_order_request($request)
+					);
+					if (!empty($location['delivery_dates'])) {
+						$any_dates_left = true;
+					}
+				}
+			}
+			unset($location);
+		}
+
+		if (
+			is_array($output_content)
+			&& !$any_dates_left
+			&& !empty($product_ids)
+			&& class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Delivery_Exceptions')
+		) {
+			$explanation = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::explanation_for_cart($product_ids);
+			if (!empty($explanation['has_exceptions'])) {
+				$output_content['exceptions_explanation'] = $explanation;
+			}
+			// Nothing left to pick, but the basket can be pre-ordered: say so,
+			// rather than leaving the customer with "contact the shop".
+			$hint = \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::pre_order_hint_for_cart(
+				$product_ids,
+				self::is_pre_order_request($request)
+			);
+			if (!empty($hint)) {
+				$output_content['pre_order_hint'] = $hint;
 			}
 		}
 
@@ -515,7 +715,7 @@ class OkoRest extends Base
 		$raw_dates = array_map('sanitize_text_field', (array) $raw_dates);
 
 		$product_ids = self::parse_product_ids($params['product_ids'] ?? '');
-		$filtered    = apply_filters('okoskabet_filtered_delivery_dates', $raw_dates, $product_ids);
+		$filtered    = apply_filters('okoskabet_filtered_delivery_dates', $raw_dates, $product_ids, self::is_pre_order_request($request));
 
 		return new \WP_REST_Response(array('dates' => array_values($filtered)), 200);
 	}
@@ -567,6 +767,116 @@ class OkoRest extends Base
 	 * @param \WP_REST_Request<array> $request
 	 * @return array|\WP_Error
 	 */
+	/** How far a request's timestamp may be from ours before we refuse it. */
+	const PRODUCTS_CLOCK_SKEW = 300;
+
+	/** Most products Økoskabet may ask about in one request. */
+	const PRODUCTS_MAX_IDS = 100;
+
+	/**
+	 * Tell Økoskabet what a handful of product ids are.
+	 *
+	 * Read-only, and the only endpoint here that Økoskabet calls of its own
+	 * accord rather than in answer to a shop's request. The packing room uses
+	 * it to turn order lines into something a person can pick: a name, a
+	 * picture, and the tags that decide which zone a thing belongs to.
+	 *
+	 * Authenticated exactly like the webhook — HMAC-SHA256 over the raw body,
+	 * against this merchant's own secret — so there is no second credential to
+	 * issue, store and rotate.
+	 *
+	 * @param \WP_REST_Request $request
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function handle_products(\WP_REST_Request $request)
+	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
+
+		$merchant = Merchants::get(Merchant_Router::sanitize_id((string) $request->get_param('merchant_id')));
+		if (!$merchant) {
+			return new \WP_Error('unknown_merchant', 'Unknown merchant', array('status' => 404));
+		}
+
+		// The same switch that stops incoming webhooks stops this. A merchant
+		// who has turned Økoskabet's inbound calls off means all of them, and
+		// one kill switch that does what it says beats two that each do half.
+		$settings = \o_get_settings();
+		if (empty($settings['_webhook_enabled'])) {
+			return new \WP_Error('webhook_disabled', 'Økoskabet inbound calls are disabled', array('status' => 403));
+		}
+
+		$secret = (string) ($merchant['webhook_secret'] ?? '');
+		if ($secret === '') {
+			return new \WP_Error('webhook_secret_missing', 'Webhook secret not configured for this merchant', array('status' => 500));
+		}
+
+		$headers            = $request->get_headers();
+		$received_signature = '';
+		if (!empty($headers['x_hmac_sha256'])) {
+			$received_signature = is_array($headers['x_hmac_sha256']) ? $headers['x_hmac_sha256'][0] : $headers['x_hmac_sha256'];
+		}
+		if ($received_signature === '') {
+			return new \WP_Error('signature_missing', 'Missing signature header', array('status' => 401));
+		}
+
+		$expected_signature = hash_hmac('sha256', $request->get_body(), $secret);
+		if (!hash_equals($expected_signature, strtolower($received_signature))) {
+			return new \WP_Error('signature_invalid', 'Invalid HMAC signature', array('status' => 401));
+		}
+
+		// Inside the signature, not beside it, and read out of the signed body
+		// rather than with `get_param()`: that merges the query
+		// string in on top, and a body sent as text/plain is not parsed as JSON
+		// at all, so the query string wins. A captured signed request could
+		// otherwise be replayed with a fresh timestamp and any ids at all, and
+		// answer with every product in the shop, drafts included.
+		$signed = json_decode($request->get_body(), true);
+		if (!is_array($signed)) {
+			return new \WP_Error('invalid_body', 'Signed body must be JSON', array('status' => 400));
+		}
+
+		$timestamp = (int) ($signed['timestamp'] ?? 0);
+		if (abs(time() - $timestamp) > self::PRODUCTS_CLOCK_SKEW) {
+			return new \WP_Error('timestamp_out_of_range', 'Timestamp outside the accepted window', array('status' => 401));
+		}
+
+		$ids = array();
+		foreach ((array) ($signed['ids'] ?? array()) as $id) {
+			$id = (int) $id;
+			if ($id > 0) {
+				$ids[$id] = $id;
+			}
+		}
+		$ids = array_slice(array_values($ids), 0, self::PRODUCTS_MAX_IDS);
+
+		$products = array();
+		foreach ($ids as $id) {
+			$product = \function_exists('wc_get_product') ? \wc_get_product($id) : null;
+
+			// A product the shop does not have is left out rather than
+			// refused. An order line outlives the product it was bought from,
+			// and Økoskabet caches the absence as an answer.
+			if (!$product instanceof \WC_Product) {
+				continue;
+			}
+
+			$image_id = (int) $product->get_image_id();
+
+			$products[] = array(
+				'id'    => $id,
+				'name'  => (string) $product->get_name(),
+				'image' => $image_id > 0 ? (string) \wp_get_attachment_url($image_id) : '',
+				'tags'  => array_values(array_map('strval', (array) \wp_get_post_terms($id, 'product_tag', array('fields' => 'names')))),
+				// Everything else the shop files this product under. A packing
+				// slip has to name the producer and the country of origin, and
+				// no two shops keep those in the same field — so the shop picks
+				// which of these is which, at Økoskabet.
+				'properties' => \oko_product_properties($product),
+			);
+		}
+
+		return new \WP_REST_Response($products, 200);
+	}
+
 	public function handle_webhook(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
@@ -669,32 +979,49 @@ class OkoRest extends Base
 		}
 
 		// --- Step 3: Map Økoskabet's event semantics to internal names ---
-		$params             = $request->get_params();
+		// Read out of the signed body and nothing else. `get_params()` merges
+		// the query string in on top, and a body sent as text/plain is not
+		// parsed as JSON at all, so the query string wins outright. Anyone
+		// holding one captured signed request could therefore keep the
+		// signature and replace the fields it was supposed to protect: point
+		// it at another order, say the parcel was delivered, and have the
+		// order completed and the card charged.
+		$params = json_decode($raw_body, true);
+		if (!is_array($params)) {
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				error_log('Økoskabet webhook: REJECTED — signed body is not JSON');
+			}
+			return new \WP_Error('invalid_body', 'Signed body must be JSON', array('status' => 400));
+		}
+
 		$raw_event          = isset($params['event']) ? sanitize_text_field($params['event']) : '';
 		$shipment_reference = isset($params['shipment_reference']) ? sanitize_text_field($params['shipment_reference']) : '';
 
+		// A status is its own event, under the name Økoskabet reports it by.
+		// It used to be three names translated by hand here, which meant a step
+		// nobody had written a branch for could never reach a shop — and one of
+		// the three, `delivered`, is a status Økoskabet has never sent, so the
+		// choice built on it could not fire at all.
 		$internal_event = null;
 		if ($raw_event === 'reservation_updated') {
 			$parcels_previous = isset($params['changes']['parcels']['previous']) ? $params['changes']['parcels']['previous'] : null;
 			$parcels_value    = isset($params['changes']['parcels']['value']) ? $params['changes']['parcels']['value'] : null;
 			if (is_array($parcels_previous) && is_array($parcels_value)
 				&& count($parcels_previous) === 0 && count($parcels_value) > 0) {
+				// Not a status: the moment the boxes come into being.
 				$internal_event = 'label_printed';
 			} elseif (!empty($params['changes']['status']['value'])) {
-				$new_status = sanitize_text_field($params['changes']['status']['value']);
-				if ($new_status === 'fulfilled') {
-					$internal_event = 'in_shed';
-				} elseif ($new_status === 'delivered') {
-					$internal_event = 'order_delivered';
-				}
+				$internal_event = sanitize_text_field($params['changes']['status']['value']);
 			}
 		}
 
-		// Backwards-compat: still remap legacy label_created at runtime.
-		$webhook_events_raw = (array) ($merchant['webhook_events'] ?? array());
-		$capture_events_raw = (array) ($merchant['capture_events'] ?? array());
-		$webhook_events = array_map(function ($e) { return $e === 'label_created' ? 'in_shed' : $e; }, $webhook_events_raw);
-		$capture_events = array_map(function ($e) { return $e === 'label_created' ? 'in_shed' : $e; }, $capture_events_raw);
+		// As the shop saved them. The old names are rewritten once, by the
+		// migration, and translating again here would undo a shop's own
+		// choice: a freshly ticked "I skabet" is the real `in_shed` step, and
+		// rewriting it to `fulfilled` would mean that step could never be
+		// chosen and never fire.
+		$webhook_events = (array) ($merchant['webhook_events'] ?? array());
+		$capture_events = (array) ($merchant['capture_events'] ?? array());
 
 		if ($internal_event === null) {
 			if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -790,7 +1117,25 @@ class OkoRest extends Base
 
 		// --- Step 7: Mark order as completed if this event triggers completion ---
 		if ($triggers_complete) {
-			if ($order->get_status() !== 'completed') {
+			// A delivery says nothing about an order the shop has already
+			// settled. Cancelled, refunded and failed orders are done with,
+			// and an order nobody has paid for is not one to call finished:
+			// completing it tells the customer their order is on its way and,
+			// on a gateway that charges at completion, asks for the money
+			// without anything behind it. The parcel can still arrive late in
+			// a courier's feed long after a shop cancelled the order, so this
+			// is an ordinary Tuesday rather than an edge case.
+			$settled = array('cancelled', 'refunded', 'failed', 'trash');
+			if (in_array($order->get_status(), $settled, true) || ! $order->is_paid()) {
+				if (defined('WP_DEBUG') && WP_DEBUG) {
+					error_log(sprintf(
+						'Økoskabet webhook: not completing order %s — status "%s", paid: %s',
+						$shipment_reference,
+						$order->get_status(),
+						$order->is_paid() ? 'yes' : 'no'
+					));
+				}
+			} elseif ($order->get_status() !== 'completed') {
 				$order->update_status('completed', sprintf(
 					/* translators: %s = internal event name */
 					__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),

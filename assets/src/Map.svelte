@@ -12,6 +12,7 @@
 
 	let map: Map | undefined;
 	let mapContainer: any;
+	let resizeObserver: ResizeObserver | undefined;
 	let popup: { popup: Popup; shed: Shed } | undefined = undefined;
 
 	const onClickMarker = (shed: Shed) => (p: Popup) => {
@@ -55,9 +56,45 @@
 			bounds.extend(lngLat);
 		}
 		map.fitBounds(bounds, { padding: 5 });
+
+		// Mapbox measures its container once, when it is built, and draws to
+		// that size until told otherwise. A multi-step checkout builds the map
+		// while its step is hidden, so it measured nothing: the tiles came out
+		// in a small box, the markers spread across the full width around it,
+		// and one sat below the map entirely. Watch the container and redraw
+		// when its size changes.
+		//
+		// The view is fitted once more the first time the container has a
+		// real size, because the first fit was to an invisible map. Only
+		// once, so a customer who has panned or zoomed is not pulled back on
+		// every later resize. A map built visible — the classic checkout — is
+		// already fitted, and resize() at an unchanged size does nothing.
+		let fittedWithSize =
+			mapContainer.clientWidth > 0 && mapContainer.clientHeight > 0;
+
+		if (typeof ResizeObserver !== 'undefined') {
+			resizeObserver = new ResizeObserver(() => {
+				if (!map) {
+					return;
+				}
+				map.resize();
+				if (
+					!fittedWithSize &&
+					mapContainer.clientWidth > 0 &&
+					mapContainer.clientHeight > 0
+				) {
+					map.fitBounds(bounds, { padding: 5 });
+					fittedWithSize = true;
+				}
+			});
+			resizeObserver.observe(mapContainer);
+		}
 	});
 
 	onDestroy(() => {
+		if (resizeObserver) {
+			resizeObserver.disconnect();
+		}
 		if (map) {
 			map.remove();
 		}

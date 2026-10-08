@@ -10,7 +10,7 @@
  * Plugin Name:		Økoskabet WooCommerce Plugin
  * Plugin URI:		https://github.com/okoskabet/okoskabet-woocommerce-plugin
  * Description:		Connect your WooCommerce store to Økoskabet
- * Version:         1.4.2
+ * Version:         1.5.0
  * Author:          Foodshipper
  * Author URI:      https://okoskabet.dk
  * Text Domain:     okoskabet-woocommerce-plugin
@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) {
 	die('We\'re sorry, but you can not directly access this file.');
 }
 
-define('O_VERSION', '1.4.2');
+define('O_VERSION', '1.5.0');
 define('O_TEXTDOMAIN', 'okoskabet-woocommerce-plugin');
 define('O_NAME', 'Økoskabet WooCommerce Plugin');
 define('O_PLUGIN_ROOT', plugin_dir_path(__FILE__));
@@ -50,8 +50,15 @@ add_action(
  * setup (wrong PHP/WP version, no WooCommerce, etc.) sees a clear
  * actionable error in wp-admin instead of a plugin that just
  * silently does nothing.
+ *
+ * The message arrives as a function, not a string, because these checks run
+ * while the plugin file is being read and on `plugins_loaded` — both before
+ * `init`, which is the earliest WordPress will load a translation. Asking for
+ * the Danish text there made WordPress say so out loud, and that output broke
+ * every later attempt to set a cookie. Building the sentence inside the
+ * `admin_notices` callback asks at a time the answer exists.
  */
-function okoskabet_woocommerce_plugin_show_blocking_notice( $message ) {
+function okoskabet_woocommerce_plugin_show_blocking_notice( callable $message ) {
 	add_action(
 		'admin_init',
 		static function () {
@@ -65,7 +72,7 @@ function okoskabet_woocommerce_plugin_show_blocking_notice( $message ) {
 				sprintf(
 					'<div class="notice notice-error"><p><strong>%s:</strong> %s</p></div>',
 					esc_html( O_NAME ),
-					$message
+					$message()
 				)
 			);
 		}
@@ -73,22 +80,26 @@ function okoskabet_woocommerce_plugin_show_blocking_notice( $message ) {
 }
 
 if ( version_compare( PHP_VERSION, O_MIN_PHP_VERSION, '<' ) ) {
-	okoskabet_woocommerce_plugin_show_blocking_notice( sprintf(
-		/* translators: 1 = required PHP version, 2 = currently running PHP version */
-		__( 'requires PHP %1$s or newer. You are running PHP %2$s. Ask your hosting provider to upgrade PHP, then re-activate the plugin.', O_TEXTDOMAIN ),
-		O_MIN_PHP_VERSION,
-		PHP_VERSION
-	) );
+	okoskabet_woocommerce_plugin_show_blocking_notice( static function () {
+		return sprintf(
+			/* translators: 1 = required PHP version, 2 = currently running PHP version */
+			__( 'requires PHP %1$s or newer. You are running PHP %2$s. Ask your hosting provider to upgrade PHP, then re-activate the plugin.', O_TEXTDOMAIN ),
+			O_MIN_PHP_VERSION,
+			PHP_VERSION
+		);
+	} );
 	return;
 }
 
 if ( version_compare( get_bloginfo( 'version' ), O_WP_VERSION, '<' ) ) {
-	okoskabet_woocommerce_plugin_show_blocking_notice( sprintf(
-		/* translators: 1 = required WP version, 2 = currently running WP version */
-		__( 'requires WordPress %1$s or newer. You are running WordPress %2$s. Update WordPress, then re-activate the plugin.', O_TEXTDOMAIN ),
-		O_WP_VERSION,
-		get_bloginfo( 'version' )
-	) );
+	okoskabet_woocommerce_plugin_show_blocking_notice( static function () {
+		return sprintf(
+			/* translators: 1 = required WP version, 2 = currently running WP version */
+			__( 'requires WordPress %1$s or newer. You are running WordPress %2$s. Update WordPress, then re-activate the plugin.', O_TEXTDOMAIN ),
+			O_WP_VERSION,
+			get_bloginfo( 'version' )
+		);
+	} );
 	return;
 }
 
@@ -97,20 +108,24 @@ if ( version_compare( get_bloginfo( 'version' ), O_WP_VERSION, '<' ) ) {
 // defer the check and run it once all plugins are present.
 add_action( 'plugins_loaded', static function () {
 	if ( ! class_exists( 'WooCommerce' ) ) {
-		okoskabet_woocommerce_plugin_show_blocking_notice( wp_kses(
-			__( 'requires the <a href="https://wordpress.org/plugins/woocommerce/">WooCommerce</a> plugin to be installed and active. Install WooCommerce, then re-activate Økoskabet.', O_TEXTDOMAIN ),
-			array( 'a' => array( 'href' => array() ) )
-		) );
+		okoskabet_woocommerce_plugin_show_blocking_notice( static function () {
+			return wp_kses(
+				__( 'requires the <a href="https://wordpress.org/plugins/woocommerce/">WooCommerce</a> plugin to be installed and active. Install WooCommerce, then re-activate Økoskabet.', O_TEXTDOMAIN ),
+				array( 'a' => array( 'href' => array() ) )
+			);
+		} );
 		return;
 	}
 
 	if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, O_MIN_WC_VERSION, '<' ) ) {
-		okoskabet_woocommerce_plugin_show_blocking_notice( sprintf(
-			/* translators: 1 = required WC version, 2 = currently running WC version */
-			__( 'requires WooCommerce %1$s or newer. You are running WooCommerce %2$s. Update WooCommerce, then re-activate Økoskabet.', O_TEXTDOMAIN ),
-			O_MIN_WC_VERSION,
-			WC_VERSION
-		) );
+		okoskabet_woocommerce_plugin_show_blocking_notice( static function () {
+			return sprintf(
+				/* translators: 1 = required WC version, 2 = currently running WC version */
+				__( 'requires WooCommerce %1$s or newer. You are running WooCommerce %2$s. Update WooCommerce, then re-activate Økoskabet.', O_TEXTDOMAIN ),
+				O_MIN_WC_VERSION,
+				WC_VERSION
+			);
+		} );
 		return;
 	}
 }, 5 ); // priority 5 so the notice is registered BEFORE other plugin init at priority 10.
