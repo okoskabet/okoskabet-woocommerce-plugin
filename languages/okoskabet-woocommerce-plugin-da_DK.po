@@ -1249,3 +1249,7 @@ msgstr "Nyt i denne version. Du behøver ikke gøre noget – alt nyt er slået 
 
 msgid "See the settings"
 msgstr "Se indstillingerne"
+
+#. translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup".
+msgid "Sent to Økoskabet — %1$s, %2$s"
+msgstr "Sendt til Økoskabet — %1$s, %2$s"
