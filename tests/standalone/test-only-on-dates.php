@@ -411,6 +411,30 @@ it( 'hands the window over to the ordinary checkout as the weeks pass', function
 	assert_true( in_array( oko_test_date( 35 ), $pre, true ), 'and the far end is still behind the button' );
 } );
 
+it( 'still offers the days when the window has no end date', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 14 );
+	// The setting invites it: "Slut-dato er valgfri — undlad den hvis produktet
+	// skal kunne leveres ubegrænset efter start-datoen." Without an end date
+	// the window has no last day to pre-order up to, but it still takes the
+	// ordinary days away — and a product with neither list is one nobody can
+	// buy and nobody is told why.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'window',
+		'display_value'      => 14,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 21 ), 'until' => '', 'enabled' => true, 'pre_order_mode' => 'preorder', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false ), 'still nothing in the ordinary checkout' );
+	assert_true(
+		in_array( oko_test_date( 21 ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), true ),
+		'but the day the window opens can be pre-ordered'
+	);
+} );
+
 it( 'leaves "on top of the normal days" exactly as it was', function () {
 	oko_only_catalogue();
 	oko_test_set_merchant_days( 7 );

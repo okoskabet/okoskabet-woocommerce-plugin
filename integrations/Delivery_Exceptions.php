@@ -1821,7 +1821,26 @@ class Delivery_Exceptions extends Base {
 			if ( self::from_until_mode( $rule ) === 'none' ) {
 				continue;
 			}
-			if ( ( $rule['type'] ?? '' ) !== 'from_until' || empty( $rule['until'] ) ) {
+			if ( ( $rule['type'] ?? '' ) !== 'from_until' ) {
+				continue;
+			}
+
+			// An open-ended window has no end to pre-order up to, so "on top of
+			// the normal days" opens nothing: there would be no last day. But
+			// "only in the period" still takes the ordinary days away, and a
+			// product with neither list is one nobody can buy and nobody is
+			// told why. The days the shop drives on are the end of it.
+			$until = (string) ( $rule['until'] ?? '' );
+			if ( $until === '' ) {
+				if ( self::from_until_mode( $rule ) !== 'preorder' ) {
+					continue;
+				}
+				$days = self::strip_past_dates( $dates );
+				if ( empty( $days ) ) {
+					continue;
+				}
+				sort( $days );
+				$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) end( $days ) );
 				continue;
 			}
 
@@ -1835,8 +1854,6 @@ class Delivery_Exceptions extends Base {
 				$ranges[] = array( (string) ( $rule['from'] ?? '' ), (string) $rule['until'] );
 				continue;
 			}
-
-			$until = (string) $rule['until'];
 
 			// A window that ends inside the normal days opens nothing: every
 			// day it names is already offered in the ordinary checkout.
