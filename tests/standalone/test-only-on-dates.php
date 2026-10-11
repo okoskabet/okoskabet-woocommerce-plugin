@@ -365,6 +365,150 @@ it( 'charges the pre-order fee rather than lose it when the days cannot be count
 	);
 } );
 
+it( 'keeps a pre-order window out of the ordinary checkout until it comes within reach', function () {
+	oko_only_catalogue();
+	// Fourteen ordinary days, and a window that opens three weeks out. The
+	// shop sells the goose today, delivers it in the window, and never before.
+	oko_test_set_merchant_days( 14 );
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'window',
+		'display_value'      => 14,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 21 ), 'until' => oko_test_date( 35 ), 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	$normale = oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false );
+	$pre     = oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true );
+
+	assert_same( array(), $normale, 'today it cannot be had as an ordinary delivery at all' );
+	assert_true( in_array( oko_test_date( 21 ), $pre, true ), 'the first day of the window is behind the button' );
+	assert_true( in_array( oko_test_date( 35 ), $pre, true ), 'and so is the last' );
+	assert_false( in_array( oko_test_date( 5 ), $pre, true ), 'a day before the window is nobody\'s business' );
+} );
+
+it( 'hands the window over to the ordinary checkout as the weeks pass', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 14 );
+	// Same rule, except the window has now come within the fourteen days —
+	// which is what happens by itself as the calendar moves. From here the
+	// near days are an ordinary delivery, because by now that is what they are.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'window',
+		'display_value'      => 14,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 3 ), 'until' => oko_test_date( 35 ), 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	$normale = oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false );
+	$pre     = oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true );
+
+	assert_true( in_array( oko_test_date( 5 ), $normale, true ), 'a day inside both the window and the fourteen is ordinary' );
+	assert_false( in_array( oko_test_date( 1 ), $normale, true ), 'a day before the window is still refused' );
+	assert_true( in_array( oko_test_date( 35 ), $pre, true ), 'and the far end is still behind the button' );
+} );
+
+it( 'still offers the days when the window has no end date', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 14 );
+	// The setting invites it: "Slut-dato er valgfri — undlad den hvis produktet
+	// skal kunne leveres ubegrænset efter start-datoen." Without an end date
+	// the window has no last day to pre-order up to, but it still takes the
+	// ordinary days away — and a product with neither list is one nobody can
+	// buy and nobody is told why.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'window',
+		'display_value'      => 14,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 21 ), 'until' => '', 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false ), 'still nothing in the ordinary checkout' );
+	assert_true(
+		in_array( oko_test_date( 21 ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ), true ),
+		'but the day the window opens can be pre-ordered'
+	);
+} );
+
+it( 'never lets the same day be both an ordinary delivery and a pre-order', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 14 );
+	// A display limit counted in DELIVERY days, not calendar days. It slices
+	// the first fourteen dates off a list that the window has already narrowed
+	// to November — so without a cut they would be offered in the ordinary
+	// checkout and charged the pre-order fee at the same time.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'count',
+		'display_value'      => 14,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 21 ), 'until' => oko_test_date( 35 ), 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	$normale = oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false );
+	$pre     = oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true );
+
+	assert_same( array(), array_values( array_intersect( $normale, $pre ) ), 'no day is in both lists' );
+	assert_same( array(), $normale, 'and the window stays behind the button' );
+} );
+
+it( 'charges the pre-order fee on an open-ended window', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 14 );
+	// The fee is worked out on the server, where nobody has sent a list of
+	// days. An end date borrowed from that list would be missing there, and
+	// the checkout and the fee would disagree about the very same date.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'display_mode'       => 'window',
+		'display_value'      => 14,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 21 ), 'until' => '', 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_true(
+		Delivery_Exceptions::date_is_pre_order( oko_test_date( 25 ), array( OKO_ONLY_PRODUCT_BOX ) ),
+		'a day in the open window owes the pre-order fee'
+	);
+} );
+
+it( 'leaves "on top of the normal days" exactly as it was', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 21 ), 'until' => oko_test_date( 35 ), 'enabled' => true, 'pre_order_mode' => 'extend', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_true( in_array( oko_test_date( 2 ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false ), true ), 'next week is untouched' );
+	assert_true( count( oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ) ) > 1, 'and the window is open as well' );
+} );
+
+it( 'reads a rule saved with the old tick as "on top of the normal days"', function () {
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	// No pre_order_mode at all, just the boolean a shop saved before the
+	// three states existed. Updating must not change what their rule does.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 21 ), 'until' => oko_test_date( 35 ), 'enabled' => true, 'extend' => true, 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_true( in_array( oko_test_date( 2 ), oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), false ), true ), 'next week survives the update' );
+	assert_true( count( oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ) ) > 1, 'and so does the window' );
+} );
+
 it( 'leaves a window that names nothing inert, as it always was', function () {
 	oko_only_catalogue();
 	oko_test_set_merchant_days( 7 );
