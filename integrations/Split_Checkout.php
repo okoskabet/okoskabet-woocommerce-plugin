@@ -1514,6 +1514,15 @@ class Split_Checkout extends Base {
 		$can_split    = $this->groups_are_bookable( $groups );
 		$group_count  = count( $groups );
 
+		// The list under "take items out" only shows offers of the kind of
+		// order the customer is in, so the button that opens it has to be
+		// decided on the same list. Asking the unfiltered one put up a button
+		// over an empty panel: the customer pressed it, chose nothing because
+		// there was nothing to choose, and the page answered "pick one of the
+		// options first". A cart holding a pre-orderable item and one that
+		// cannot be delivered at all reaches exactly that.
+		$listed = $this->removal_options_for_mode( $options );
+
 		// Neither way out is available: no bookable split and nothing that
 		// could be removed to rescue the rest. Say so plainly rather than
 		// showing two buttons that do nothing.
@@ -1668,7 +1677,7 @@ class Split_Checkout extends Base {
 				. '</button>';
 		}
 
-		if ( ! empty( $options ) ) {
+		if ( ! empty( $listed ) ) {
 			echo '<button type="button" id="oko-split-reduce-toggle" class="oko-split-cta is-secondary"'
 				. ' aria-expanded="false" aria-controls="oko-split-remove-panel">'
 				. esc_html( self::reduce_button_label() )
@@ -1677,10 +1686,10 @@ class Split_Checkout extends Base {
 
 		echo '</div>';
 
-		if ( ! empty( $options ) ) {
+		if ( ! empty( $listed ) ) {
 			// Open by default when there is nothing else to click, so the
 			// customer's only way forward isn't hidden behind a toggle.
-			$this->render_removal_options( $options, ! $can_split );
+			$this->render_removal_options( $listed, ! $can_split );
 		}
 
 		// The way back out of a pre-order. The banner hides the checkout form,
@@ -1883,6 +1892,26 @@ class Split_Checkout extends Base {
 	 * @param array<int, array> $options From compute_removal_options().
 	 * @param bool              $open    Whether the panel starts expanded.
 	 */
+	/**
+	 * The offers this list may show: those of the kind of order the customer
+	 * is in. "Remove the roast and the rest can be delivered on Wednesday" is
+	 * true, and inside a pre-order it would take away the very thing the
+	 * customer pressed the button for. The way out of a pre-order is the
+	 * button, or the delivery's own "keep only this" — which is why the
+	 * buttons beside each delivery are still built from the whole list.
+	 *
+	 * @param array<int, array> $options
+	 * @return array<int, array>
+	 */
+	private function removal_options_for_mode( array $options ): array {
+		$wanted = $this->is_pre_order_mode() ? self::MODE_PRE_ORDER : self::MODE_NORMAL;
+
+		return array_values( array_filter( $options, static function ( array $option ) use ( $wanted ): bool {
+			return ( $option['mode'] ?? self::MODE_NORMAL ) === $wanted;
+		} ) );
+	}
+
+	/** Takes the list `removal_options_for_mode()` has already narrowed. */
 	private function render_removal_options( array $options, bool $open ): void {
 		printf(
 			'<div class="oko-split-remove-panel" id="oko-split-remove-panel"%s>',
@@ -1893,16 +1922,7 @@ class Split_Checkout extends Base {
 			. esc_html__( 'Choose what you would rather do without this time. We take those items out of the basket, and everything else is delivered on the same day.', O_TEXTDOMAIN )
 			. '</p>';
 
-		$wanted_mode = $this->is_pre_order_mode() ? self::MODE_PRE_ORDER : self::MODE_NORMAL;
-
 		foreach ( $options as $option ) {
-			// "Remove the roast and the rest can be delivered on Wednesday" is
-			// true, and inside a pre-order it would take away the very thing
-			// the customer pressed the button for. The way out of a pre-order
-			// is the button, or the delivery's own "keep only this".
-			if ( ( $option['mode'] ?? self::MODE_NORMAL ) !== $wanted_mode ) {
-				continue;
-			}
 			echo '<label class="oko-split-remove-option">';
 			printf(
 				'<input type="radio" name="oko_split_remove_option" value="%s" />',
