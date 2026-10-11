@@ -493,6 +493,7 @@ class Delivery_Exceptions extends Base {
 				$this->render_weekdays_section( $config, $categories, $tags );
 				$this->render_only_on_section( $config, $categories, $tags );
 				$this->render_from_until_section( $config, $categories, $tags );
+				$this->render_pre_order_section( $config, $categories, $tags );
 				$this->render_cutoff_section( $config, $categories, $tags );
 				?>
 
@@ -791,36 +792,6 @@ class Delivery_Exceptions extends Base {
 				<p class="oko-help">
 					<?php esc_html_e( 'A date further ahead than your normal number of delivery days is treated as a pre-order: it is not offered in the normal checkout, and the customer reaches it with the pre-order button under Shipping. A date within the normal days is simply the only day offered.', O_TEXTDOMAIN ); ?>
 				</p>
-				<div class="oko-row-row" style="margin-bottom:12px;">
-					<label><?php esc_html_e( 'Pre-order button', O_TEXTDOMAIN ); ?>:
-						<input type="text" name="pre_order_label" value="<?php echo esc_attr( $config['pre_order_label'] ); ?>" placeholder="<?php echo esc_attr( self::pre_order_label( array() ) ); ?>" style="width:200px;" />
-					</label>
-					<label><?php esc_html_e( 'Back to normal order', O_TEXTDOMAIN ); ?>:
-						<input type="text" name="normal_order_label" value="<?php echo esc_attr( $config['normal_order_label'] ); ?>" placeholder="<?php echo esc_attr( self::normal_order_label( array() ) ); ?>" style="width:200px;" />
-					</label>
-				</div>
-				<div style="margin-bottom:12px;">
-					<label>
-						<input type="checkbox" name="pre_order_notice_enabled" value="1" <?php checked( ! empty( $config['pre_order_notice_enabled'] ) ); ?> />
-						<?php esc_html_e( 'Show a note above the buttons while a pre-order is chosen', O_TEXTDOMAIN ); ?>
-					</label><br />
-					<textarea name="pre_order_notice" rows="2" style="width:100%;max-width:520px;margin-top:6px;" placeholder="<?php esc_attr_e( 'e.g. Fresh vegetables and dairy cannot be pre-ordered.', O_TEXTDOMAIN ); ?>"><?php echo esc_textarea( $config['pre_order_notice'] ); ?></textarea>
-				</div>
-				<div style="margin-bottom:12px;">
-					<p class="oko-help" style="margin-bottom:6px;">
-						<?php esc_html_e( 'Goods you will not hold for a later date — fresh produce and the like. They are never offered a pre-order day, whichever rule opens one. A basket holding them is offered the split instead: the rest as a pre-order, these on an ordinary delivery.', O_TEXTDOMAIN ); ?>
-					</p>
-					<div class="oko-row-fields">
-						<div>
-							<label><?php esc_html_e( 'Cannot be pre-ordered: categories', O_TEXTDOMAIN ); ?></label>
-							<?php $this->render_term_select( 'no_pre_order_categories[]', $categories, (array) ( $config['no_pre_order_categories'] ?? array() ) ); ?>
-						</div>
-						<div>
-							<label><?php esc_html_e( 'Cannot be pre-ordered: tags', O_TEXTDOMAIN ); ?></label>
-							<?php $this->render_term_select( 'no_pre_order_tags[]', $tags, (array) ( $config['no_pre_order_tags'] ?? array() ) ); ?>
-						</div>
-					</div>
-				</div>
 				<?php $this->render_section_limit_control( $config, 'only_on' ); ?>
 				<div id="only_on_rows">
 					<?php foreach ( $rows as $i => $row ) : ?>
@@ -863,6 +834,60 @@ class Delivery_Exceptions extends Base {
 					<label><?php esc_html_e( 'Tags', O_TEXTDOMAIN ); ?></label>
 					<?php $this->render_term_select( "only_on[$index][tags][]", $tags, (array) ( $row['tags'] ?? array() ) ); ?>
 				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * How a pre-order behaves, wherever the day comes from.
+	 *
+	 * These lived inside "Delivery only on a specific day", because back then
+	 * a fixed date was the only thing that could hold a product. A from/until
+	 * window can too, so a shop that pre-orders only from windows found its
+	 * button wording and its list of goods that cannot wait inside a section
+	 * about something else — and switching that section off greyed the whole
+	 * body out, `pointer-events: none` and all, so the settings could not even
+	 * be reached while they went on applying.
+	 */
+	private function render_pre_order_section( array $config, array $categories, array $tags ): void {
+		?>
+		<div class="oko-section">
+			<strong class="oko-master-toggle"><?php esc_html_e( 'Pre-order', O_TEXTDOMAIN ); ?></strong>
+			<p class="oko-help">
+				<?php esc_html_e( 'These apply wherever a pre-order day comes from — a fixed date, or a from/until window set to be pre-ordered.', O_TEXTDOMAIN ); ?>
+			</p>
+			<div class="oko-section-body">
+				<div class="oko-row-row" style="margin-bottom:12px;">
+				<label><?php esc_html_e( 'Pre-order button', O_TEXTDOMAIN ); ?>:
+					<input type="text" name="pre_order_label" value="<?php echo esc_attr( $config['pre_order_label'] ); ?>" placeholder="<?php echo esc_attr( self::pre_order_label( array() ) ); ?>" style="width:200px;" />
+				</label>
+				<label><?php esc_html_e( 'Back to normal order', O_TEXTDOMAIN ); ?>:
+					<input type="text" name="normal_order_label" value="<?php echo esc_attr( $config['normal_order_label'] ); ?>" placeholder="<?php echo esc_attr( self::normal_order_label( array() ) ); ?>" style="width:200px;" />
+				</label>
+			</div>
+			<div style="margin-bottom:12px;">
+				<label>
+					<input type="checkbox" name="pre_order_notice_enabled" value="1" <?php checked( ! empty( $config['pre_order_notice_enabled'] ) ); ?> />
+					<?php esc_html_e( 'Show a note above the buttons while a pre-order is chosen', O_TEXTDOMAIN ); ?>
+				</label><br />
+				<textarea name="pre_order_notice" rows="2" style="width:100%;max-width:520px;margin-top:6px;" placeholder="<?php esc_attr_e( 'e.g. Fresh vegetables and dairy cannot be pre-ordered.', O_TEXTDOMAIN ); ?>"><?php echo esc_textarea( $config['pre_order_notice'] ); ?></textarea>
+			</div>
+			<div style="margin-bottom:12px;">
+				<p class="oko-help" style="margin-bottom:6px;">
+					<?php esc_html_e( 'Goods you will not hold for a later date — fresh produce and the like. They are never offered a pre-order day, whichever rule opens one. A basket holding them is offered the split instead: the rest as a pre-order, these on an ordinary delivery.', O_TEXTDOMAIN ); ?>
+				</p>
+				<div class="oko-row-fields">
+					<div>
+						<label><?php esc_html_e( 'Cannot be pre-ordered: categories', O_TEXTDOMAIN ); ?></label>
+						<?php $this->render_term_select( 'no_pre_order_categories[]', $categories, (array) ( $config['no_pre_order_categories'] ?? array() ) ); ?>
+					</div>
+					<div>
+						<label><?php esc_html_e( 'Cannot be pre-ordered: tags', O_TEXTDOMAIN ); ?></label>
+						<?php $this->render_term_select( 'no_pre_order_tags[]', $tags, (array) ( $config['no_pre_order_tags'] ?? array() ) ); ?>
+					</div>
+				</div>
+			</div>
 			</div>
 		</div>
 		<?php

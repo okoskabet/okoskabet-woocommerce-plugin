@@ -1526,3 +1526,160 @@ msgstr "Vinduet gælder hele sortimentet. Det, der ikke kan vente, nævnes ét s
 
 msgid "Your payment gateway takes the money when the order is marked completed, and not before. Choose below which event should complete the order — that is also the moment the customer is charged."
 msgstr "Jeres betalingsløsning hæver pengene, når ordren markeres som gennemført, og ikke før. Vælg nedenfor hvilket event der skal gennemføre ordren — det er samtidig det øjeblik, kunden bliver trukket."
+
+# ----------------------------------------------------------------------
+# Tilføjet 11. oktober 2026 — strenge der ikke tidligere var oversat
+# ----------------------------------------------------------------------
+
+msgid "These apply wherever a pre-order day comes from — a fixed date, or a from/until window set to be pre-ordered."
+msgstr "Disse gælder, uanset hvor forudbestillingsdagen kommer fra — en bestemt dato eller et fra/til-vindue, der er sat til at kunne forudbestilles."
+
+msgid "Zone #%d"
+msgstr "Zone #%d"
+
+msgid "Locations not covered by your other zones"
+msgstr "Steder, der ikke er dækket af dine andre zoner"
+
+msgid "Shipping zones"
+msgstr "Forsendelseszoner"
+
+msgid "All zones (catch-all)"
+msgstr "Alle zoner (opsamling)"
+
+msgid "All zones"
+msgstr "Alle zoner"
+
+msgid "The merchant's API key from Økoskabet's back office, under \"API & Webhooks\" (NOT the WooCommerce \"Access token\"). Used for all API calls (sheds, dates, shipment creation)."
+msgstr "Forhandlerens API-nøgle fra Økoskabets backoffice under \"API & Webhooks\" (IKKE WooCommerces \"Access token\"). Bruges til alle API-kald (skabe, datoer, oprettelse af forsendelser)."
+
+msgid "Restrict to shipping zones"
+msgstr "Begræns til forsendelseszoner"
+
+msgid "No WooCommerce shipping zones found. Set up shipping zones under WooCommerce → Settings → Shipping first."
+msgstr "Der blev ikke fundet nogen forsendelseszoner i WooCommerce. Opret dem først under WooCommerce → Indstillinger → Forsendelse."
+
+msgid "The default merchant must handle every cart by definition, so this field is disabled — the default merchant always operates in every shipping zone."
+msgstr "Standardforhandleren skal pr. definition kunne håndtere enhver kurv, så feltet er slået fra — standardforhandleren dækker altid alle forsendelseszoner."
+
+msgid "Leave empty to let this merchant handle carts shipping anywhere. Pick one or more zones to restrict it (e.g. an Express merchant that only covers Copenhagen). Carts shipping outside the selected zones fall back to the default merchant."
+msgstr "Lad feltet stå tomt, hvis forhandleren skal kunne håndtere kurve til hele landet. Vælg en eller flere zoner for at begrænse den (f.eks. en ekspresforhandler, der kun dækker København). Kurve uden for de valgte zoner falder tilbage til standardforhandleren."
+
+msgid "Payment capture triggered by Økoskabet webhook."
+msgstr "Betaling hævet via webhook fra Økoskabet."
+
+msgid "Payment capture triggered by Økoskabet webhook (Stripe)."
+msgstr "Betaling hævet via webhook fra Økoskabet (Stripe)."
+
+msgid "Payment capture triggered by Økoskabet webhook (Nets Easy)."
+msgstr "Betaling hævet via webhook fra Økoskabet (Nets Easy)."
+
+msgid "Payment capture triggered by Økoskabet webhook (Pensopay)."
+msgstr "Betaling hævet via webhook fra Økoskabet (Pensopay)."
+
+msgid "Økoskabet: the delivery picker is not showing in your checkout"
+msgstr "Økoskabet: leveringsvælgeren vises ikke i din kasse"
+
+msgid "Your checkout offers Økoskabet delivery, but the date and locker picker was not drawn on the last checkout a customer opened. They can choose a delivery method and still have no way to choose a day — and the checkout gives them no sign that anything is missing."
+msgstr "Din kasse tilbyder levering med Økoskabet, men dato- og skabsvælgeren blev ikke tegnet i den seneste kasse, en kunde åbnede. De kan vælge en leveringsmåde og stadig ikke have nogen måde at vælge en dag på — og kassen giver dem ikke et vink om, at der mangler noget."
+
+msgid "This happens when the checkout is built with something other than WooCommerce's own checkout — a page builder, or the block checkout. Place [okoskabet_levering] where the delivery options belong, or in Bricks a text element holding {do_action:okoskabet_levering}, and this notice disappears by itself."
+msgstr "Det sker, når kassen er bygget med andet end WooCommerces egen kasse — en sidebygger eller blok-kassen. Placér [okoskabet_levering] dér, hvor leveringsmulighederne hører hjemme, eller i Bricks et tekstelement med {do_action:okoskabet_levering}, så forsvinder denne besked af sig selv."
+
+msgid "Method Title"
+msgstr "Navn på leveringsmåde"
+
+msgid "Enter the method title"
+msgstr "Skriv navnet på leveringsmåden"
+
+msgid "Description"
+msgstr "Beskrivelse"
+
+msgid "Enter the Description"
+msgstr "Skriv beskrivelsen"
+
+msgid "Fee ladder"
+msgstr "Fragttrappe"
+
+msgid "One tier per line as \"from amount = price\". The highest tier whose \"from\" is not above the cart subtotal wins; price 0 means free. Example: 0 = 99 / 500 = 69 / 1000 = 49 / 2000 = 0. Leave empty to use the single-tier fields below."
+msgstr "Ét trin pr. linje som \"fra beløb = pris\". Det højeste trin, hvis \"fra\" ikke ligger over kurvens subtotal, vinder; prisen 0 betyder gratis. Eksempel: 0 = 99 / 500 = 69 / 1000 = 49 / 2000 = 0. Lad feltet stå tomt for at bruge felterne med ét trin nedenfor."
+
+msgid "VAT"
+msgstr "Moms"
+
+msgid "Ladder thresholds and prices are incl. VAT (what the customer sees and pays)"
+msgstr "Trappens grænser og priser er inkl. moms (det, kunden ser og betaler)"
+
+msgid "Shipping price (fallback)"
+msgstr "Fragtpris (reserve)"
+
+msgid "Used only when the fee ladder above is empty."
+msgstr "Bruges kun, når fragttrappen ovenfor er tom."
+
+msgid "Discounted shipping order minimum (fallback)"
+msgstr "Ordreminimum for nedsat fragt (reserve)"
+
+msgid "Discounted shipping price (fallback)"
+msgstr "Nedsat fragtpris (reserve)"
+
+msgid "Free shipping order minimum (fallback)"
+msgstr "Ordreminimum for gratis fragt (reserve)"
+
+msgid "Discounted shipping rate"
+msgstr "Nedsat fragtpris"
+
+msgid "Delivery to your home"
+msgstr "Levering til din adresse"
+
+msgid "Økoskabet merchant"
+msgstr "Økoskabet-forhandler"
+
+msgid "Økoskabet pickup location"
+msgstr "Økoskabet-afhentningssted"
+
+msgid "Please upload a valid .json file"
+msgstr "Upload en gyldig .json-fil"
+
+msgid "Please upload a file to import"
+msgstr "Upload en fil, der skal importeres"
+
+msgid "Failed to import the settings."
+msgstr "Indstillingerne kunne ikke importeres."
+
+msgid "Page Title"
+msgstr "Sidetitel"
+
+msgid "okoskabet-woocommerce-plugin Settings"
+msgstr "Indstillinger for Økoskabet WooCommerce Plugin"
+
+msgid "Settings"
+msgstr "Indstillinger"
+
+msgid "The merchant's API key from Økoskabet's back office, under \"API & Webhooks\" (NOT the WooCommerce \"Access token\"). Used for all API calls."
+msgstr "Forhandlerens API-nøgle fra Økoskabets backoffice under \"API & Webhooks\" (IKKE WooCommerces \"Access token\"). Bruges til alle API-kald."
+
+msgid "How many days into the future delivery dates are shown by default."
+msgstr "Hvor mange dage frem leveringsdatoer som udgangspunkt vises."
+
+msgid "Secret key from your webhook configuration."
+msgstr "Hemmelig nøgle fra din webhook-opsætning."
+
+msgid "Export Settings"
+msgstr "Eksportér indstillinger"
+
+msgid "Export the plugin's settings for this site as a .json file. This will allows you to easily import the configuration to another installation."
+msgstr "Eksportér pluginets indstillinger for dette websted som en .json-fil. Så kan opsætningen nemt importeres i en anden installation."
+
+msgid "Export"
+msgstr "Eksportér"
+
+msgid "Import Settings"
+msgstr "Importér indstillinger"
+
+msgid "Import the plugin's settings from a .json file. This file can be retrieved by exporting the settings from another installation."
+msgstr "Importér pluginets indstillinger fra en .json-fil. Filen får du ved at eksportere indstillingerne fra en anden installation."
+
+msgid "Import"
+msgstr "Importér"
+
+msgid "okoskabet-woocommerce-plugin is on production environment with missing `composer dumpautoload -o` that will improve the performance on autoloading itself."
+msgstr "okoskabet-woocommerce-plugin kører i produktionsmiljø uden `composer dumpautoload -o`, som ville gøre dets egen autoloading hurtigere."
