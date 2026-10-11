@@ -2113,10 +2113,27 @@ class Delivery_Exceptions extends Base {
 		$instance = new self();
 
 		foreach ( $product_ids as $pid ) {
+			// The earliest day each rule still allows the product to travel.
+			// A single date is that day; a window is its first day. Both kinds
+			// pin a product out of the ordinary checkout when that day lies
+			// past the horizon — reading only the single dates left a product
+			// held by a window looking like an ordinary one, so the checkout
+			// kept the ordinary button and answered it with an empty date list
+			// and "contact the shop".
 			$dates = array();
 			foreach ( $instance->collect_applicable_rules( array( $pid ), $config ) as $rule ) {
-				if ( ( $rule['type'] ?? '' ) === 'only_on' && ! empty( $rule['date'] ) ) {
+				$type = (string) ( $rule['type'] ?? '' );
+
+				if ( $type === 'only_on' && ! empty( $rule['date'] ) ) {
 					$dates[] = (string) $rule['date'];
+					continue;
+				}
+
+				// "On top of the normal days" restricts nothing, so it pins
+				// nothing either.
+				if ( $type === 'from_until' && ! empty( $rule['from'] )
+					&& self::from_until_mode( $rule ) !== 'extend' ) {
+					$dates[] = (string) $rule['from'];
 				}
 			}
 			// Nothing pins this product, or one of the days it is pinned to is

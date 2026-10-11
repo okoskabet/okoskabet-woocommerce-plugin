@@ -197,6 +197,58 @@ it( 'calls a basket pinned to a near date an ordinary one', function () {
 	);
 } );
 
+it( 'calls a basket held by a window a pre-order-only one as well', function () {
+	// The checkout hides the ordinary button when there is no ordinary order
+	// to be had, because a button that leads to an empty date list is worse
+	// than no button. That reckoning read the single dates only, so a product
+	// held by a from/until window looked ordinary: the button stayed, and
+	// pressing it answered "no delivery days available, contact the shop".
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Juleand', 'from' => oko_test_date( 30 ), 'until' => oko_test_date( 60 ), 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'categories' => array( OKO_ONLY_CAT_XMAS ), 'tags' => array() ),
+		),
+	) );
+
+	assert_true(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_BOX ) ),
+		'the window opens past the ordinary days, so there is no ordinary order'
+	);
+	assert_false(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_BOX, OKO_ONLY_PRODUCT_MILK ) ),
+		'with the milk along, an ordinary order is still on the table — that is a split'
+	);
+
+	// A window that is already open is simply a restriction on the ordinary
+	// days, not a pre-order.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Juleand', 'from' => oko_test_date( 2 ), 'until' => oko_test_date( 60 ), 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'categories' => array( OKO_ONLY_CAT_XMAS ), 'tags' => array() ),
+		),
+	) );
+
+	assert_false(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_BOX ) ),
+		'the window is already open, so the box has ordinary days'
+	);
+
+	// And "on top of the normal days" restricts nothing, however far out.
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Juleand', 'from' => oko_test_date( 30 ), 'until' => oko_test_date( 60 ), 'enabled' => true, 'pre_order_mode' => 'extend', 'flip' => false, 'categories' => array( OKO_ONLY_CAT_XMAS ), 'tags' => array() ),
+		),
+	) );
+
+	assert_false(
+		Delivery_Exceptions::cart_is_pre_order_only( array( OKO_ONLY_PRODUCT_BOX ) ),
+		'an extending window pins nothing'
+	);
+} );
+
 it( 'never offers a pre-order day to goods the shop will not hold', function () {
 	oko_only_catalogue();
 	oko_test_set_merchant_days( 7 );
