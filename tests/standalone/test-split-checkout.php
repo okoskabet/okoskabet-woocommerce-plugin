@@ -943,6 +943,54 @@ it( 'never puts up "take items out" over a panel with nothing in it', function (
 	);
 } );
 
+it( 'offers to give up either side, not only the one the customer stands in', function () {
+	// Gaardmester, 11 October: almonds and carrots that travel now, and a
+	// duck that can only be pre-ordered. Standing in the ordinary checkout,
+	// the customer used to be shown one way out — drop the duck — because the
+	// list kept to the kind of order they were already in. Someone who came
+	// for the duck had to work out for themselves that dropping the other two
+	// was allowed.
+	$december = oko_test_date( 40 );
+
+	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Tamari mandler', array() );
+	oko_test_add_product( OKO_SPLIT_ICE, 'Juleand', array( OKO_SPLIT_CAT_ICE ) );
+
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			// The duck is held to the window; the almonds are named by no
+			// rule, so they travel now and only now.
+			array( 'label' => 'Juleand', 'from' => $december, 'until' => $december, 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		),
+	) );
+
+	oko_test_set_delivery_days( array( oko_test_weekday_next_week( 2 ), $december ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE ) );
+
+	oko_test_set_pre_order( false );
+
+	ob_start();
+	oko_split()->maybe_render_banner();
+	$html = (string) ob_get_clean();
+
+	assert_same(
+		2,
+		substr_count( $html, '<input type="radio" name="oko_split_remove_option"' ),
+		'both ways out are listed'
+	);
+
+	// And each one says which kind of order it leaves behind, so neither is a
+	// surprise — the handler sends the customer on to that checkout.
+	assert_true(
+		strpos( $html, 'Remove Juleand, and the rest can be delivered together' ) !== false,
+		'drop the duck and keep the ordinary delivery'
+	);
+	assert_true(
+		strpos( $html, 'Remove Tamari mandler, and the rest can be pre-ordered together' ) !== false,
+		'or drop the almonds and keep the pre-order'
+	);
+} );
+
 it( 'says nothing about pre-orders when the split is an ordinary one', function () {
 	oko_split_weekday_shop();
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
