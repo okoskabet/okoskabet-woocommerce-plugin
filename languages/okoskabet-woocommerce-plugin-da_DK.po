@@ -1185,6 +1185,18 @@ msgstr "uden leveringsdato"
 msgid "Pre-order"
 msgstr "Forudbestilling"
 
+msgid "Whether the window only restricts, restricts and lets the days further ahead be pre-ordered, or is offered on top of the normal days without restricting at all."
+msgstr "Om vinduet kun begrænser, begrænser og samtidig lader dagene længere ude forudbestille, eller lægges oven på de normale dage uden at begrænse noget."
+
+msgid "No — the goods can only be delivered in the period"
+msgstr "Nej — varerne kan kun leveres i perioden"
+
+msgid "Only in the period, and the days further ahead can be pre-ordered"
+msgstr "Kun i perioden, og dagene længere ude kan forudbestilles"
+
+msgid "On top of the normal days — no restriction"
+msgstr "Oven på de normale dage — ingen begrænsning"
+
 msgid "Normal order"
 msgstr "Normal bestilling"
 
@@ -1334,6 +1346,9 @@ msgstr "og"
 
 msgid "We took %s out of your basket. The rest is delivered together."
 msgstr "Vi tog %s ud af din kurv. Resten leveres samlet."
+
+msgid "We took %s out of your basket. The rest is pre-ordered together."
+msgstr "Vi tog %s ud af din kurv. Resten forudbestilles samlet."
 
 msgid "Choose one of the options first."
 msgstr "Vælg en af mulighederne først."

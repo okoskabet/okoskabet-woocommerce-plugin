@@ -1514,14 +1514,7 @@ class Split_Checkout extends Base {
 		$can_split    = $this->groups_are_bookable( $groups );
 		$group_count  = count( $groups );
 
-		// The list under "take items out" only shows offers of the kind of
-		// order the customer is in, so the button that opens it has to be
-		// decided on the same list. Asking the unfiltered one put up a button
-		// over an empty panel: the customer pressed it, chose nothing because
-		// there was nothing to choose, and the page answered "pick one of the
-		// options first". A cart holding a pre-orderable item and one that
-		// cannot be delivered at all reaches exactly that.
-		$listed = $this->removal_options_for_mode( $options );
+
 
 		// Neither way out is available: no bookable split and nothing that
 		// could be removed to rescue the rest. Say so plainly rather than
@@ -1677,7 +1670,7 @@ class Split_Checkout extends Base {
 				. '</button>';
 		}
 
-		if ( ! empty( $listed ) ) {
+		if ( ! empty( $options ) ) {
 			echo '<button type="button" id="oko-split-reduce-toggle" class="oko-split-cta is-secondary"'
 				. ' aria-expanded="false" aria-controls="oko-split-remove-panel">'
 				. esc_html( self::reduce_button_label() )
@@ -1686,10 +1679,10 @@ class Split_Checkout extends Base {
 
 		echo '</div>';
 
-		if ( ! empty( $listed ) ) {
+		if ( ! empty( $options ) ) {
 			// Open by default when there is nothing else to click, so the
 			// customer's only way forward isn't hidden behind a toggle.
-			$this->render_removal_options( $listed, ! $can_split );
+			$this->render_removal_options( $options, ! $can_split );
 		}
 
 		// The way back out of a pre-order. The banner hides the checkout form,
@@ -1893,25 +1886,18 @@ class Split_Checkout extends Base {
 	 * @param bool              $open    Whether the panel starts expanded.
 	 */
 	/**
-	 * The offers this list may show: those of the kind of order the customer
-	 * is in. "Remove the roast and the rest can be delivered on Wednesday" is
-	 * true, and inside a pre-order it would take away the very thing the
-	 * customer pressed the button for. The way out of a pre-order is the
-	 * button, or the delivery's own "keep only this" — which is why the
-	 * buttons beside each delivery are still built from the whole list.
+	 * Every offer, both kinds of order. The list used to keep to the kind the
+	 * customer was already in, for fear of quietly taking a pre-order away
+	 * from them. It does not: each line says which it leads to — "the rest can
+	 * be delivered together" against "the rest can be pre-ordered together" —
+	 * and the handler sends them on to the checkout that offer belongs to. A
+	 * customer who came for the roast and a customer who came for the melon
+	 * are looking at the same basket, and only one of them was being served.
 	 *
-	 * @param array<int, array> $options
-	 * @return array<int, array>
+	 * It is also what keeps the button and the panel in step: the button is
+	 * put up when there are offers, so narrowing the list afterwards could
+	 * leave a button over an empty panel.
 	 */
-	private function removal_options_for_mode( array $options ): array {
-		$wanted = $this->is_pre_order_mode() ? self::MODE_PRE_ORDER : self::MODE_NORMAL;
-
-		return array_values( array_filter( $options, static function ( array $option ) use ( $wanted ): bool {
-			return ( $option['mode'] ?? self::MODE_NORMAL ) === $wanted;
-		} ) );
-	}
-
-	/** Takes the list `removal_options_for_mode()` has already narrowed. */
 	private function render_removal_options( array $options, bool $open ): void {
 		printf(
 			'<div class="oko-split-remove-panel" id="oko-split-remove-panel"%s>',
@@ -2571,12 +2557,14 @@ class Split_Checkout extends Base {
 			WC()->session->save_data();
 		}
 
+		$names = self::format_name_list( $chosen['remove_names'] );
+
 		wc_add_notice(
-			sprintf(
+			( $chosen['mode'] ?? self::MODE_NORMAL ) === self::MODE_PRE_ORDER
 				/* translators: %s = product names ("Mælk og Brød") */
-				__( 'We took %s out of your basket. The rest is delivered together.', O_TEXTDOMAIN ),
-				self::format_name_list( $chosen['remove_names'] )
-			),
+				? sprintf( __( 'We took %s out of your basket. The rest is pre-ordered together.', O_TEXTDOMAIN ), $names )
+				/* translators: %s = product names ("Mælk og Brød") */
+				: sprintf( __( 'We took %s out of your basket. The rest is delivered together.', O_TEXTDOMAIN ), $names ),
 			'notice'
 		);
 
