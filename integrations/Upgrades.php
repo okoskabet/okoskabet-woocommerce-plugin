@@ -193,15 +193,17 @@ class Upgrades extends Base {
 			$live    = $live || $enabled;
 
 			$converted[] = array(
-				'label'      => (string) ( $row['label'] ?? '' ),
-				'from'       => $date,
-				'until'      => $date,
-				'enabled'    => $enabled,
-				'extend'     => true,
-				'flip'       => ! empty( $row['flip'] ),
-				'all'        => ! empty( $row['all'] ),
-				'categories' => (array) ( $row['categories'] ?? array() ),
-				'tags'       => (array) ( $row['tags'] ?? array() ),
+				'label'          => (string) ( $row['label'] ?? '' ),
+				'from'           => $date,
+				'until'          => $date,
+				'enabled'        => $enabled,
+				// The row described a day on top of the ordinary list, which
+				// is what this mode means in the from/until section.
+				'pre_order_mode' => 'extend',
+				'flip'           => ! empty( $row['flip'] ),
+				'all'            => ! empty( $row['all'] ),
+				'categories'     => (array) ( $row['categories'] ?? array() ),
+				'tags'           => (array) ( $row['tags'] ?? array() ),
 			);
 		}
 

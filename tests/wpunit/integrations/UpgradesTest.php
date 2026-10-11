@@ -88,13 +88,19 @@ class UpgradesTest extends \Codeception\TestCase\WPTestCase {
 		Delivery_Exceptions::purge_rules_cache();
 	}
 
-	/** The from/until rules that apply to the product, as "extend from..until". */
+	/**
+	 * The from/until rules that apply to the product, as "<mode> from..until".
+	 *
+	 * The mode is read the way the rest of the plugin reads it, so a row saved
+	 * with the pensioned tick and one saved with the mode picker are described
+	 * alike — the migration's job is that they end up meaning the same thing.
+	 */
 	private function live_windows(): array {
 		$rules = ( new Delivery_Exceptions() )->collect_applicable_rules( array( $this->product ), Delivery_Exceptions::get_config() );
 		$out   = array();
 		foreach ( $rules as $rule ) {
 			if ( $rule['type'] === 'from_until' ) {
-				$out[] = ( empty( $rule['extend'] ) ? 'restrict ' : 'extend ' ) . $rule['from'] . '..' . $rule['until'];
+				$out[] = Delivery_Exceptions::from_until_mode( $rule ) . ' ' . $rule['from'] . '..' . $rule['until'];
 			}
 		}
 		sort( $out );
