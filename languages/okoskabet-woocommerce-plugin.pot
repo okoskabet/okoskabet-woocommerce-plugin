@@ -1,372 +1,2250 @@
-# Danish translations for Økoskabet WooCommerce Plugin.
+# Translation template for Økoskabet WooCommerce Plugin.
 # Copyright (C) 2026 HeyRobot.AI / Økoskabet
 # This file is distributed under the same license as the plugin.
 #
+# Regenerated with xgettext; the old template had fallen to 99 strings
+# while the Danish catalogue had grown past 440, so it was no use to
+# anyone starting a new language.
+#
 msgid ""
 msgstr ""
-"Project-Id-Version: Økoskabet WooCommerce Plugin 1.2.16\n"
+"Project-Id-Version: Økoskabet WooCommerce Plugin 1.5.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-06 21:00+0000\n"
-"PO-Revision-Date: 2026-05-06 21:00+0000\n"
-"Last-Translator: \n"
-"Language-Team: Danish\n"
+"POT-Creation-Date: 2026-10-11 16:53+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.18.0\n"
 
-# ----------------------------------------------------------------------
-# backend/views/settings.php
+#: backend/ImpExp.php:102
+msgid "Please upload a valid .json file"
+msgstr ""
+
+#: backend/ImpExp.php:108
+msgid "Please upload a file to import"
+msgstr ""
+
+#: backend/ImpExp.php:128
+msgid "Failed to import the settings."
+msgstr ""
+
+#: backend/Settings_Page.php:54
+msgid "Extra features"
+msgstr ""
+
+#: backend/Settings_Page.php:56
+msgid "Features beyond the basics. Each one is switched on and off on its own."
+msgstr ""
+
+#: backend/Settings_Page.php:82
+msgid "okoskabet-woocommerce-plugin Settings"
+msgstr ""
+
+#: backend/Settings_Page.php:105
+msgid "Settings"
+msgstr ""
+
+#: backend/views/admin.php:23
+msgid "Export Settings"
+msgstr ""
+
+#: backend/views/admin.php:25
+msgid ""
+"Export the plugin's settings for this site as a .json file. This will allows "
+"you to easily import the configuration to another installation."
+msgstr ""
+
+#: backend/views/admin.php:30
+msgid "Export"
+msgstr ""
+
+#: backend/views/admin.php:37
+msgid "Import Settings"
+msgstr ""
+
+#: backend/views/admin.php:39
+msgid ""
+"Import the plugin's settings from a .json file. This file can be retrieved "
+"by exporting the settings from another installation."
+msgstr ""
+
+#: backend/views/admin.php:47
+msgid "Import"
+msgstr ""
+
+#: backend/views/settings.php:34
+msgid "Standard settings"
+msgstr ""
+
+#: backend/views/settings.php:35
+msgid ""
+"What every shop needs: the connection to Økoskabet, the texts at checkout "
+"and the webhooks. The extras your shop can choose come further down."
+msgstr ""
+
+#: backend/views/settings.php:49
 msgid "API Key"
 msgstr ""
 
-msgid "Økoskabet API Key"
+#: backend/views/settings.php:50
+msgid ""
+"The merchant's API key from Økoskabet's back office, under \"API & "
+"Webhooks\" (NOT the WooCommerce \"Access token\"). Used for all API calls."
 msgstr ""
 
+#: backend/views/settings.php:63
 msgid "Display option"
 msgstr ""
 
+#: backend/views/settings.php:64
 msgid "Shipping method display option"
 msgstr ""
 
+#: backend/views/settings.php:68
 msgid "Inline"
 msgstr ""
 
+#: backend/views/settings.php:69
 msgid "Modal"
 msgstr ""
 
+#: backend/views/settings.php:80 integrations/Merchants.php:986
 msgid "Standard display window (days)"
 msgstr ""
 
-msgid ""
-"How many days into the future delivery dates are shown by default. Date-"
-"based exceptions (\"only on a specific day\" and \"from/until\") can "
-"extend the display to specific dates outside this window. Recommended: "
-"3-7 for normal operation, higher if you have many exceptions."
+#: backend/views/settings.php:81
+msgid "How many days into the future delivery dates are shown by default."
 msgstr ""
 
+#: backend/views/settings.php:104
 msgid "Staging API"
 msgstr ""
 
+#: backend/views/settings.php:105
 msgid "Check this to use staging API"
 msgstr ""
 
+#: backend/views/settings.php:113
 msgid "Økoskabet Description (Optional)"
 msgstr ""
 
+#: backend/views/settings.php:114
 msgid "Økoskabet shipping method description, overwrites default description"
 msgstr ""
 
+#: backend/views/settings.php:122
 msgid "Økoskabet Home Delivery Description (Optional)"
 msgstr ""
 
+#: backend/views/settings.php:123
 msgid ""
 "Økoskabet Home Delivery shipping method description, overwrites default "
 "description"
 msgstr ""
 
+#: backend/views/settings.php:133
 msgid "Home Delivery: Delivery Location"
 msgstr ""
 
+#: backend/views/settings.php:134
 msgid "Settings for delivery location on home delivery"
 msgstr ""
 
+#: backend/views/settings.php:142
 msgid "Show delivery location dropdown"
 msgstr ""
 
+#: backend/views/settings.php:143
 msgid ""
-"Show a dropdown with delivery locations from Økoskabet's API (e.g. \"By "
-"the stairs\", \"By the front door\"). Disable to show only the free-text "
-"field."
+"Show a dropdown with delivery locations from Økoskabet's API (e.g. \"By the "
+"stairs\", \"By the front door\"). Disable to show only the free-text field."
 msgstr ""
 
+#: backend/views/settings.php:152
 msgid "Label: Dropdown"
 msgstr ""
 
+#: backend/views/settings.php:153
 msgid "Label on the dropdown field at checkout"
 msgstr ""
 
+#: backend/views/settings.php:163
 msgid "Descriptive text"
 msgstr ""
 
+#: backend/views/settings.php:164
 msgid ""
 "Text shown above the delivery info dropdown at checkout. Leave empty to "
-"hide. Example: \"Your order is delivered overnight to your delivery "
-"day\"."
+"hide. Example: \"Your order is delivered overnight to your delivery day\"."
 msgstr ""
 
+#: backend/views/settings.php:174
 msgid "Hide WooCommerce order note"
 msgstr ""
 
+#: backend/views/settings.php:175
 msgid ""
-"Hide WooCommerce's standard \"Add order note\" field at checkout. Enable "
-"if you use Økoskabet's delivery info and want only one note field for the"
-" customer."
+"Hide WooCommerce's standard \"Add order note\" field at checkout. Enable if "
+"you use Økoskabet's delivery info and want only one note field for the "
+"customer."
 msgstr ""
 
+#: backend/views/settings.php:183
+msgid "Shipping in a row of its own"
+msgstr ""
+
+#: backend/views/settings.php:184
+msgid ""
+"Shipping methods shown in their own row under Shipping at checkout, e.g. an "
+"add-on to an earlier order."
+msgstr ""
+
+#: backend/views/settings.php:193
+msgid "Heading of that row"
+msgstr ""
+
+#: backend/views/settings.php:197 functions/functions.php:1031
+msgid "Other options"
+msgstr ""
+
+#: backend/views/settings.php:205
 msgid "Webhook Secret"
 msgstr ""
 
-msgid ""
-"Secret key from your webhook configuration in Økoskabet's backoffice "
-"(under API & Webhooks). Used to verify that incoming webhooks really come"
-" from Økoskabet. Required if webhook functionality is enabled."
+#: backend/views/settings.php:206
+msgid "Secret key from your webhook configuration."
 msgstr ""
 
+#: backend/views/settings.php:218
 msgid "Webhook & Payment"
 msgstr ""
 
-msgid "Configure webhook events and payment handling"
+#: backend/views/settings.php:220
+msgid "Master switches that apply across all merchants."
 msgstr ""
 
+#: backend/views/settings.php:221
+msgid "Webhook and payment settings."
+msgstr ""
+
+#: backend/views/settings.php:229
 msgid "Webhook Status"
 msgstr ""
 
-msgid "Enable or disable webhook functionality"
+#: backend/views/settings.php:231
+msgid "Enable or disable webhook functionality (applies to ALL merchants)."
 msgstr ""
 
+#: backend/views/settings.php:232
+msgid "Enable or disable webhook functionality."
+msgstr ""
+
+#: backend/views/settings.php:244 integrations/Merchants.php:1034
+msgid "Label printed"
+msgstr ""
+
+#: backend/views/settings.php:249
 msgid "Payment Gateway"
 msgstr ""
 
+#: backend/views/settings.php:250
 msgid ""
-"Choose which payment gateway is used. \"Automatic\" attempts to detect it"
-" from the order."
+"Choose which payment gateway is used. \"Automatic\" attempts to detect it "
+"from the order."
 msgstr ""
 
+#: backend/views/settings.php:254 integrations/Merchants.php:1010
 msgid "Automatic (detect from order)"
 msgstr ""
 
+#: backend/views/settings.php:255 integrations/Merchants.php:1011
+msgid "Quickpay"
+msgstr ""
+
+#: backend/views/settings.php:256 integrations/Merchants.php:1012
+msgid "Stripe"
+msgstr ""
+
+#: backend/views/settings.php:257 integrations/Merchants.php:1013
+msgid "Nets Easy / DIBS Easy"
+msgstr ""
+
+#: backend/views/settings.php:258 integrations/Merchants.php:1014
+msgid "Pensopay"
+msgstr ""
+
+#: backend/views/settings.php:259 integrations/Merchants.php:1015
 msgid "Other (change status to \"processing\")"
 msgstr ""
 
+#: backend/views/settings.php:276 backend/views/settings.php:289
+#: integrations/Merchants.php:1045 integrations/Merchants.php:1065
 msgid "Capture events"
 msgstr ""
 
+#: backend/views/settings.php:277
+msgid "Choose which events from Økoskabet should capture the payment."
+msgstr ""
+
+#: backend/views/settings.php:290 integrations/Merchants.php:1048
 msgid ""
-"Choose which events from Økoskabet should capture the payment (delayed "
-"capture). \"Label Printed\" happens earliest — typically when the webshop"
-" prints the label. \"In Shed\" happens when Økoskabet has placed the "
-"package in the shed. \"Order Delivered\" happens when the customer has "
-"collected the package."
+"Your payment gateway takes the money when the order is marked completed, and "
+"not before. Choose below which event should complete the order — that is "
+"also the moment the customer is charged."
 msgstr ""
 
-msgid "Label Printed"
-msgstr ""
-
-msgid "In Shed"
-msgstr ""
-
-msgid "Order Delivered"
-msgstr ""
-
+#: backend/views/settings.php:299 integrations/Merchants.php:1076
 msgid "Completion events"
 msgstr ""
 
-msgid ""
-"Choose which events from Økoskabet should mark the order as completed. "
-"Typically you would choose \"Order Delivered\" so the order only closes "
-"when the customer has collected."
+#: backend/views/settings.php:300
+msgid "Choose which events from Økoskabet should mark the order as completed."
 msgstr ""
 
+#: backend/views/settings.php:314
+msgid "Legacy Webhook URL"
+msgstr ""
+
+#: backend/views/settings.php:315 integrations/Merchants.php:769
+#: integrations/Merchants.php:949
 msgid "Webhook URL"
 msgstr ""
 
+#: backend/views/settings.php:317
+msgid ""
+"Legacy URL — still works and routes to the default merchant. Each merchant "
+"has its own dedicated webhook URL listed under \"Økoskabet merchants\" "
+"below, which we recommend you configure at Økoskabet instead."
+msgstr ""
+
+#: backend/views/settings.php:318
 msgid "Copy this URL and configure it in your Økoskabet webhook settings"
 msgstr ""
 
-# ----------------------------------------------------------------------
-# integrations/Delivery_Exceptions.php — admin UI
+#: backend/views/settings.php:340
+msgid "Webhook reference & response codes"
+msgstr ""
+
+#: backend/views/settings.php:343
+msgid "How to configure webhooks at Økoskabet"
+msgstr ""
+
+#: backend/views/settings.php:345
+msgid "Log in to Økoskabet's dashboard."
+msgstr ""
+
+#: backend/views/settings.php:346
+msgid "Navigate to webhook settings."
+msgstr ""
+
+#: backend/views/settings.php:349
+msgid ""
+"For EACH merchant configured here, register a separate webhook in Økoskabet "
+"with its merchant-specific URL (shown next to each merchant in the table "
+"above) and the matching webhook secret you saved on the merchant record. "
+"Each merchant has its own signing secret — never share a secret across "
+"merchants."
+msgstr ""
+
+#. translators: %s = full webhook URL
+#: backend/views/settings.php:357
+#, php-format
+msgid ""
+"Register a webhook in Økoskabet pointing at <code>%s</code> with Method "
+"<code>POST</code>, Content-Type <code>application/json</code>, and the "
+"signing secret you set in the Webhook Secret field above."
+msgstr ""
+
+#: backend/views/settings.php:366
+msgid "Select the events you want Økoskabet to send — typically:"
+msgstr ""
+
+#: backend/views/settings.php:368
+msgid "In Shed"
+msgstr ""
+
+#: backend/views/settings.php:369
+msgid "Order Delivered"
+msgstr ""
+
+#: backend/views/settings.php:372
+msgid ""
+"Only events you have ticked under \"Capture events\" or \"Completion "
+"events\" trigger any action — the rest are accepted and ignored."
+msgstr ""
+
+#: backend/views/settings.php:377
+msgid "Expected payload format"
+msgstr ""
+
+#: backend/views/settings.php:386
+msgid ""
+"The plugin maps Økoskabet's \"reservation_updated\" event into the internal "
+"events shown in the settings above (in_shed, order_delivered) by inspecting "
+"the \"changes\" payload."
+msgstr ""
+
+#: backend/views/settings.php:389
+msgid "Authentication"
+msgstr ""
+
+#: backend/views/settings.php:391
+msgid ""
+"Each webhook is verified by an HMAC-SHA256 signature of the raw request "
+"body, using the merchant's webhook secret. Økoskabet computes the signature "
+"on its side and sends it as the lowercase hex value of this header:"
+msgstr ""
+
+#: backend/views/settings.php:397
+msgid ""
+"If the header is missing, malformed, or does not match, the request is "
+"rejected with HTTP 401. The <strong>API key</strong> field is NOT used to "
+"authenticate webhooks — it's only used for outbound API calls to Økoskabet."
+msgstr ""
+
+#: backend/views/settings.php:403
+msgid "Test a webhook locally with curl"
+msgstr ""
+
+#: backend/views/settings.php:419
+msgid "Response codes"
+msgstr ""
+
+#: backend/views/settings.php:422
+msgid "webhook processed."
+msgstr ""
+
+#: backend/views/settings.php:423
+msgid "invalid or missing HMAC signature."
+msgstr ""
+
+#: backend/views/settings.php:424
+msgid ""
+"webhook functionality is disabled in plugin settings, OR the order belongs "
+"to a different merchant than the one in the webhook URL."
+msgstr ""
+
+#: backend/views/settings.php:425
+msgid ""
+"the merchant ID in the URL is unknown, OR the order referenced by "
+"shipment_reference does not exist."
+msgstr ""
+
+#: backend/views/settings.php:426
+msgid ""
+"the merchant has no webhook secret configured. Edit the merchant and paste a "
+"value."
+msgstr ""
+
+#: backend/views/settings.php:427
+msgid "WooCommerce is not loaded."
+msgstr ""
+
+#: backend/views/settings.php:430
+msgid "Success response example"
+msgstr ""
+
+#: engine/Initialize.php:168
+msgid ""
+"okoskabet-woocommerce-plugin is on production environment with missing "
+"`composer dumpautoload -o` that will improve the performance on autoloading "
+"itself."
+msgstr ""
+
+#: functions/functions.php:51 integrations/Merchants.php:521
+#: integrations/Merchants.php:713 integrations/Merchants.php:720
+#: integrations/Merchants.php:802 integrations/Upgrades.php:327
+msgid "Default merchant"
+msgstr ""
+
+#: functions/functions.php:224
+msgid "Registered"
+msgstr ""
+
+#: functions/functions.php:225
+msgid "Ready for dispatch"
+msgstr ""
+
+#: functions/functions.php:226
+msgid "Received"
+msgstr ""
+
+#: functions/functions.php:227
+msgid "In shed"
+msgstr ""
+
+#: functions/functions.php:228
+msgid "Fulfilled"
+msgstr ""
+
+#: functions/functions.php:229
+msgid "Removed"
+msgstr ""
+
+#: functions/functions.php:341
+msgid ""
+"Chilled pickup location where you can collect your goods around the clock "
+"using a code."
+msgstr ""
+
+#: functions/functions.php:342
+msgid "Økoskabet delivers your goods to your door."
+msgstr ""
+
+#: functions/functions.php:364 functions/functions.php:2049
+msgid "Delivery location"
+msgstr ""
+
+#: functions/functions.php:367 functions/functions.php:2057
+msgid "Note to the driver (optional)"
+msgstr ""
+
+#: functions/functions.php:387
+msgid ""
+"You can remove one or more of the marked items from your cart to get more "
+"delivery options, or contact us for help."
+msgstr ""
+
+#: functions/functions.php:398
+msgid "No delivery dates available right now"
+msgstr ""
+
+#: functions/functions.php:399
+msgid ""
+"We can't find a delivery date for the products in your cart at this time. "
+"Please contact the shop so we can help you complete the order — sometimes "
+"it's a temporary configuration issue we can resolve quickly."
+msgstr ""
+
+#: functions/functions.php:421 functions/functions.php:2041
+msgid "Pickup location"
+msgstr ""
+
+#: functions/functions.php:422
+msgid "Pickup date"
+msgstr ""
+
+#: functions/functions.php:423
+msgid "— choose —"
+msgstr ""
+
+#: functions/functions.php:424
+msgid "No pickup locations have been set up. Please contact the shop."
+msgstr ""
+
+#: functions/functions.php:425
+msgid "No pickup dates are available right now. Please contact the shop."
+msgstr ""
+
+#: functions/functions.php:701
+msgid "Økoskabet: the delivery picker is not showing in your checkout"
+msgstr ""
+
+#: functions/functions.php:702
+msgid ""
+"Your checkout offers Økoskabet delivery, but the date and locker picker was "
+"not drawn on the last checkout a customer opened. They can choose a delivery "
+"method and still have no way to choose a day — and the checkout gives them "
+"no sign that anything is missing."
+msgstr ""
+
+#: functions/functions.php:703
+msgid ""
+"This happens when the checkout is built with something other than "
+"WooCommerce's own checkout — a page builder, or the block checkout. Place "
+"[okoskabet_levering] where the delivery options belong, or in Bricks a text "
+"element holding {do_action:okoskabet_levering}, and this notice disappears "
+"by itself."
+msgstr ""
+
+#: functions/functions.php:732
+msgid "Method Title"
+msgstr ""
+
+#: functions/functions.php:734
+msgid "Enter the method title"
+msgstr ""
+
+#: functions/functions.php:739
+msgid "Description"
+msgstr ""
+
+#: functions/functions.php:741
+msgid "Enter the Description"
+msgstr ""
+
+#: functions/functions.php:746
+msgid "Fee ladder"
+msgstr ""
+
+#: functions/functions.php:748
+msgid ""
+"One tier per line as \"from amount = price\". The highest tier whose "
+"\"from\" is not above the cart subtotal wins; price 0 means free. Example: 0 "
+"= 99 / 500 = 69 / 1000 = 49 / 2000 = 0. Leave empty to use the single-tier "
+"fields below."
+msgstr ""
+
+#: functions/functions.php:753
+msgid "VAT"
+msgstr ""
+
+#: functions/functions.php:755
+msgid ""
+"Ladder thresholds and prices are incl. VAT (what the customer sees and pays)"
+msgstr ""
+
+#: functions/functions.php:759
+msgid "Shipping price (fallback)"
+msgstr ""
+
+#: functions/functions.php:761
+msgid "Used only when the fee ladder above is empty."
+msgstr ""
+
+#: functions/functions.php:768
+msgid "Discounted shipping order minimum (fallback)"
+msgstr ""
+
+#: functions/functions.php:774
+msgid "Discounted shipping price (fallback)"
+msgstr ""
+
+#: functions/functions.php:780
+msgid "Free shipping order minimum (fallback)"
+msgstr ""
+
+#: functions/functions.php:807
+msgid "Postcodes without delivery days"
+msgstr ""
+
+#: functions/functions.php:809
+msgid ""
+"Can still be ordered — without a date, landing among unprocessed orders at "
+"Økoskabet"
+msgstr ""
+
+#: functions/functions.php:810
+msgid ""
+"For island deliveries. Areas Økoskabet delivers to are booked on their days "
+"as usual."
+msgstr ""
+
+#: functions/functions.php:906
+msgid ""
+"Pre-order: customers choose between a normal order and a pre-order at "
+"checkout, with its own days, note and fee."
+msgstr ""
+
+#: functions/functions.php:907
+msgid "Packaging fee by product category and delivery method."
+msgstr ""
+
+#: functions/functions.php:908
+msgid "Store pickup as a delivery method."
+msgstr ""
+
+#: functions/functions.php:909
+msgid ""
+"Island delivery: postcodes without delivery days can still be ordered and "
+"land among unprocessed orders."
+msgstr ""
+
+#: functions/functions.php:910
+msgid "Shipping methods in a row of their own at checkout."
+msgstr ""
+
+#: functions/functions.php:911
+msgid ""
+"Split delivery: a basket that needs more than one delivery day offers the "
+"customer two buttons — split it into one order per day, or see exactly which "
+"items to take out so the rest arrives together. The button wording is yours "
+"to set."
+msgstr ""
+
+#: functions/functions.php:912
+msgid ""
+"Delivery exceptions: each rule can be turned around to cover every product "
+"OTHER than the categories and tags you picked."
+msgstr ""
+
+#: functions/functions.php:918
+msgid ""
+"New in this version. You don't need to do anything — everything new stays "
+"off until you turn it on."
+msgstr ""
+
+#: functions/functions.php:926
+msgid "See the settings"
+msgstr ""
+
+#: functions/functions.php:927 integrations/Delivery_Exceptions.php:145
+msgid "Got it, dismiss"
+msgstr ""
+
+#: functions/functions.php:1306 functions/functions.php:1406
+#: functions/functions.php:1416 functions/functions.php:1507
+#: functions/functions.php:1517 functions/functions.php:1603
+msgid "Free"
+msgstr ""
+
+#: functions/functions.php:1366 integrations/Packaging_Fee.php:67
+msgid "Økoskabet"
+msgstr ""
+
+#: functions/functions.php:1367
+msgid "Delivery to Økoskabet"
+msgstr ""
+
+#: functions/functions.php:1425 functions/functions.php:1526
+msgid "Discounted shipping rate"
+msgstr ""
+
+#: functions/functions.php:1466 functions/functions.php:2526
+#: integrations/Packaging_Fee.php:68
+msgid "Home delivery"
+msgstr ""
+
+#: functions/functions.php:1467
+msgid "Delivery to your home"
+msgstr ""
+
+#: functions/functions.php:1572 functions/functions.php:2524
+#: integrations/Packaging_Fee.php:69
+msgid "Store pickup"
+msgstr ""
+
+#: functions/functions.php:1573
+msgid "The customer collects the order in your shop"
+msgstr ""
+
+#: functions/functions.php:2025
+msgid "Økoskabet ID"
+msgstr ""
+
+#: functions/functions.php:2033
+msgid "Økoskabet Delivery Date"
+msgstr ""
+
+#: functions/functions.php:2068 integrations/Delivery_Exceptions.php:856
+#: integrations/Delivery_Exceptions.php:942
+#: integrations/Delivery_Exceptions.php:2246
+msgid "Pre-order"
+msgstr ""
+
+#: functions/functions.php:2107
+msgid "Økoskabet merchant"
+msgstr ""
+
+#: functions/functions.php:2125
+msgid "Økoskabet pickup location"
+msgstr ""
+
+#: functions/functions.php:2128
+msgid "Økoskabet Delivery location"
+msgstr ""
+
+#: functions/functions.php:2131
+msgid "Note to driver"
+msgstr ""
+
+#: functions/functions.php:2513
+msgid "The order could not be completed"
+msgstr ""
+
+#. translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup".
+#: functions/functions.php:2537
+#, php-format
+msgid "Sent to Økoskabet — %1$s, %2$s"
+msgstr ""
+
+#: functions/functions.php:2538
+msgid "without delivery date"
+msgstr ""
+
+#: functions/functions.php:2892
+msgid "Please select an Økoskab and Delivery date before submitting the order."
+msgstr ""
+
+#: functions/functions.php:2897
+msgid "Please select a Delivery date before submitting the order."
+msgstr ""
+
+#: functions/functions.php:2904
+msgid ""
+"Please select a pickup location and a pickup date before submitting the "
+"order."
+msgstr ""
+
+#: functions/functions.php:3069 functions/functions.php:3107
+msgid "Delivery date"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:138
+msgid ""
+"The delivery-day logic has been updated. Please review your delivery-day "
+"setup so dates show correctly in checkout — settings now need to match in "
+"BOTH the Økoskabet plugin and the Økoskabet back office."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:142
+msgid "Open delivery settings"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:471
 msgid "Delivery Exceptions"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:474
 msgid ""
-"Define exceptions for delivery dates based on categories and tags. The "
-"rules are exceptions — products not associated with a rule have no "
-"restriction."
+"Define exceptions for delivery dates based on categories and tags. The rules "
+"are exceptions — products not associated with a rule have no restriction."
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:476
 msgid ""
-"If a product matches multiple rules, ALL rules must be satisfied for a "
-"date to be shown."
+"If a product matches multiple rules, ALL rules must be satisfied for a date "
+"to be shown."
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:478
+msgid ""
+"Every rule has an \"Applies to all products other than the chosen ones\" "
+"tick. Ticked, the rule covers exactly the products that carry none of the "
+"categories and tags you picked — so \"everything but frost\" needs one rule "
+"rather than a list of every other category. A rule with nothing picked "
+"covers nothing, ticked or not."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:483
 msgid "Delivery exceptions saved."
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:500
 msgid "Save delivery exceptions"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:610
+msgid "Enable: Earlier cutoff rules"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:613
+msgid ""
+"Each rule closes ordering for the chosen categories and/or tags a number of "
+"days before delivery, at a set time — so e.g. fresh produce and dairy can "
+"each have their own deadline. If several rules apply to the cart, the "
+"earliest deadline wins."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:622
+msgid "Add cutoff rule"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:633
+#: integrations/Delivery_Exceptions.php:927
+msgid "Navn"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:634
+msgid "e.g. Fresh produce"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:636
+msgid "Days before delivery"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:639
+msgid "Cutoff time"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:644
+#: integrations/Delivery_Exceptions.php:938
+msgid "Aktiv"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:648
+#: integrations/Delivery_Exceptions.php:955
+msgid "Fjern"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:653
+#: integrations/Delivery_Exceptions.php:830
+#: integrations/Delivery_Exceptions.php:960
+msgid "Kategorier"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:657
+#: integrations/Delivery_Exceptions.php:768
+#: integrations/Delivery_Exceptions.php:834
+#: integrations/Delivery_Exceptions.php:964 integrations/Packaging_Fee.php:891
+msgid "Tags"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:674
+msgid "Delivery days shown in checkout"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:676
+msgid ""
+"Choose how many delivery days the customer sees. Leave the number at 0 to "
+"keep the existing behaviour (the merchant's \"maximum days in future\" "
+"setting)."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:681
+msgid "Number of delivery days"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:685
+msgid "Number of calendar days ahead"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:688
+#: integrations/Delivery_Exceptions.php:714
+msgid "Value"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:711
+msgid "Show a special number of delivery days for products in this section"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:719
+msgid ""
+"Uses the same mode (number of days / calendar days) as the global setting. "
+"When a cart mixes limits, the smallest wins."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:731
+msgid "Monday"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:732
+msgid "Tuesday"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:733
+msgid "Wednesday"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:734
+msgid "Thursday"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:735
+msgid "Friday"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:736
+msgid "Saturday"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:737
+msgid "Sunday"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:743
 msgid "Enable: Delivery only on fixed weekdays"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:746
 msgid ""
 "Under each weekday, choose which categories and/or tags may ONLY be "
-"delivered on that day. Products without an association have no "
-"restriction."
+"delivered on that day. Products without an association have no restriction."
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:764 integrations/Packaging_Fee.php:886
+msgid "Categories"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:786
 msgid "Enable: Delivery only on a specific day"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:789
 msgid ""
 "Create one or more exceptions where specific categories/tags can ONLY be "
 "delivered on a specific date. Each exception can be enabled/disabled "
 "individually."
 msgstr ""
 
-msgid "Enable: Delivery from (and optionally until) a specific day"
-msgstr ""
-
+#: integrations/Delivery_Exceptions.php:793
 msgid ""
-"Create exceptions where specific categories/tags can only be delivered "
-"between two dates. The end date is optional — leave it out if the product"
-" should be deliverable indefinitely after the start date."
+"A date further ahead than your normal number of delivery days is treated as "
+"a pre-order: it is not offered in the normal checkout, and the customer "
+"reaches it with the pre-order button under Shipping. A date within the "
+"normal days is simply the only day offered."
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:802
+#: integrations/Delivery_Exceptions.php:916
 msgid "Add exception"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:813 integrations/Packaging_Fee.php:863
 msgid "Name"
 msgstr ""
 
-msgid "Date"
-msgstr ""
-
-msgid "Active"
-msgstr ""
-
-msgid "Remove"
-msgstr ""
-
-msgid "From"
-msgstr ""
-
-msgid "Until (optional)"
-msgstr ""
-
-msgid "Categories"
-msgstr ""
-
-msgid "Tags"
-msgstr ""
-
+#: integrations/Delivery_Exceptions.php:814
 msgid "e.g. Christmas delivery"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:816
+msgid "Date"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:821 integrations/Packaging_Fee.php:875
+msgid "Active"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:825 integrations/Packaging_Fee.php:880
+msgid "Remove"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:858
+msgid ""
+"These apply wherever a pre-order day comes from — a fixed date, or a from/"
+"until window set to be pre-ordered."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:862
+msgid "Pre-order button"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:865
+msgid "Back to normal order"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:872
+msgid "Show a note above the buttons while a pre-order is chosen"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:874
+msgid "e.g. Fresh vegetables and dairy cannot be pre-ordered."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:878
+msgid ""
+"Goods you will not hold for a later date — fresh produce and the like. They "
+"are never offered a pre-order day, whichever rule opens one. A basket "
+"holding them is offered the split instead: the rest as a pre-order, these on "
+"an ordinary delivery."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:882
+msgid "Cannot be pre-ordered: categories"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:886
+msgid "Cannot be pre-ordered: tags"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:903
+msgid "Enable: Delivery from (and optionally until) a specific day"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:906
+msgid ""
+"Create exceptions where specific categories/tags can only be delivered "
+"between two dates. The end date is optional — leave it out if the product "
+"should be deliverable indefinitely after the start date."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:928
 msgid "e.g. Summer products"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:930
+msgid "From"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:933
+msgid "Until (optional)"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:941
+msgid ""
+"Whether the window only restricts, restricts and lets the days further ahead "
+"be pre-ordered, or is offered on top of the normal days without restricting "
+"at all."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:944
+msgid "No — the goods can only be delivered in the period"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:945
+msgid "Only in the period, and the days further ahead can be pre-ordered"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:946
+msgid "On top of the normal days — no restriction"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:949
+msgid ""
+"The window covers the whole catalogue. What cannot wait is named once, under "
+"the pre-order settings, rather than category by category here."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:951
+msgid "Applies to every product"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:988
+msgid ""
+"Turns the rule around: it then covers every product that carries NONE of the "
+"categories and tags chosen below. A rule with nothing chosen still covers "
+"nothing."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:990
+msgid "Applies to all products other than the chosen ones"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:999 integrations/Packaging_Fee.php:950
 msgid "(none created)"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:1016 integrations/Merchants.php:1225
+#: integrations/Merchants.php:1242 integrations/Merchants.php:1297
+#: integrations/Merchants.php:1314 integrations/Packaging_Fee.php:968
+#: integrations/Split_Checkout.php:1402
 msgid "You do not have access."
 msgstr ""
 
-#, python-format
+#: integrations/Delivery_Exceptions.php:1504
+#, php-format
 msgid "Item #%d"
 msgstr ""
 
-# Weekday names — singular (used in admin section headers)
-msgid "Monday"
-msgstr ""
-
-msgid "Tuesday"
-msgstr ""
-
-msgid "Wednesday"
-msgstr ""
-
-msgid "Thursday"
-msgstr ""
-
-msgid "Friday"
-msgstr ""
-
-msgid "Saturday"
-msgstr ""
-
-msgid "Sunday"
-msgstr ""
-
-# Weekday names — plural lowercase (used in customer-facing rule descriptions
-# such as "can only be delivered on Mondays")
-msgid "Mondays"
-msgstr ""
-
-msgid "Tuesdays"
-msgstr ""
-
-msgid "Wednesdays"
-msgstr ""
-
-msgid "Thursdays"
-msgstr ""
-
-msgid "Fridays"
-msgstr ""
-
-msgid "Saturdays"
-msgstr ""
-
-msgid "Sundays"
-msgstr ""
-
-# Customer-facing exception explanations
-msgid ""
-"The items in your cart have conflicting delivery rules, so no single date"
-" works for all of them. See below."
-msgstr ""
-
-#, python-format
+#: integrations/Delivery_Exceptions.php:1526
+#: integrations/Delivery_Exceptions.php:1538
+#, php-format
 msgid "can only be delivered on %s"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:1552
+#, php-format
 msgid "can only be delivered between %1$s and %2$s"
 msgstr ""
 
-#, python-format
+#: integrations/Delivery_Exceptions.php:1558
+#, php-format
 msgid "can be delivered no earlier than %s"
 msgstr ""
 
+#: integrations/Delivery_Exceptions.php:1589
+msgid ""
+"The items in your cart have conflicting delivery rules, so no single date "
+"works for all of them. See below."
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1676
+msgid "Sundays"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1677
+msgid "Mondays"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1678
+msgid "Tuesdays"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1679
+msgid "Wednesdays"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1680
+msgid "Thursdays"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1681
+msgid "Fridays"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1682
+msgid "Saturdays"
+msgstr ""
+
+#: integrations/Delivery_Exceptions.php:1698
 msgid "or"
 msgstr ""
 
-# ----------------------------------------------------------------------
-# functions/functions.php
-msgid "Økoskabet ID"
+#: integrations/Delivery_Exceptions.php:2200
+msgid "These items can only be pre-ordered"
 msgstr ""
 
-msgid "Økoskabet Delivery Date"
-msgstr ""
-
-msgid "Delivery location"
-msgstr ""
-
-msgid "Note to the driver (optional)"
-msgstr ""
-
-msgid "Økoskabet Delivery location"
-msgstr ""
-
-msgid "Note to driver"
-msgstr ""
-
+#. translators: %s: the shop's wording for the pre-order button, e.g. "Pre-order".
+#: integrations/Delivery_Exceptions.php:2203
+#, php-format
 msgid ""
-"Chilled pickup location where you can collect your goods around the clock"
-" using a code."
+"They are delivered on a fixed day further ahead than the ordinary delivery "
+"days. Press \"%s\" above to see the date."
 msgstr ""
 
-msgid "Økoskabet delivers your goods to your door."
+#: integrations/Delivery_Exceptions.php:2258
+msgid "Normal order"
 msgstr ""
 
-msgid "Delivery to Økoskabet"
+#. translators: %s = a quantity, e.g. "101"
+#: integrations/Feature_Pricing.php:240
+#, php-format
+msgid "%s and above"
 msgstr ""
 
-msgid "Please select an Økoskab and Delivery date before submitting the order."
+#. translators: 1: lower bound, 2: upper bound
+#: integrations/Feature_Pricing.php:245
+#, php-format
+msgid "%1$s–%2$s"
 msgstr ""
 
+#: integrations/Feature_Pricing.php:269
+msgid "per label"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:270
+msgid "per shipment"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:271
+msgid "per order"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:272
+msgid "per month"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:446
+msgid "Your Økoskabet features and prices"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:449
 msgid ""
-"You can remove one or more of the marked items from your cart to get more"
-" delivery options, or contact us for help."
+"What Økoskabet charges you for the features you use. This is not the "
+"shipping your customers pay — it is your own agreement, and it is managed in "
+"Økoskabet's back office."
 msgstr ""
 
+#: integrations/Feature_Pricing.php:456
+msgid ""
+"Prices could not be fetched from Økoskabet right now, so none are shown. "
+"This does not affect your deliveries."
+msgstr ""
+
+#: integrations/Feature_Pricing.php:463
+msgid "Økoskabet has not set up any priced features for you yet."
+msgstr ""
+
+#. translators: %s = a human-readable time difference, e.g. "2 hours"
+#: integrations/Feature_Pricing.php:474
+#, php-format
+msgid ""
+"Økoskabet could not be reached, so these prices are the last ones we saw, %s "
+"ago. They may have changed since."
+msgstr ""
+
+#: integrations/Feature_Pricing.php:487
+msgid "Feature"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:488
+msgid "Status"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:489
+msgid "Your price (excl. VAT)"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:507
+msgid "All prices are excluding VAT. VAT is added on your invoice."
+msgstr ""
+
+#: integrations/Feature_Pricing.php:512
+msgid ""
+"To switch a feature on or off, do it in Økoskabet's back office — that way "
+"it applies wherever you sell, not just in this shop."
+msgstr ""
+
+#: integrations/Feature_Pricing.php:530
+msgid "Weekly"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:531
+msgid "Every two weeks"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:532
+msgid "Monthly"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:536
+msgid "Billing"
+msgstr ""
+
+#. translators: 1: period start date, 2: period end date
+#: integrations/Feature_Pricing.php:542
+#, php-format
+msgid "current period %1$s to %2$s"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:575
+msgid "What your setup costs in total"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:580
+msgid "Nothing. None of the features you have switched on carry a price."
+msgstr ""
+
+#: integrations/Feature_Pricing.php:595
+msgid ""
+"Counted once per thing you are billed for, not once per feature — switching "
+"on more delivery methods does not raise the price of a label."
+msgstr ""
+
+#: integrations/Feature_Pricing.php:615
+msgid "On"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:617
+msgid "Off"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:629
+msgid "Locked by Økoskabet"
+msgstr ""
+
+#: integrations/Feature_Pricing.php:637
+msgid "No extra charge"
+msgstr ""
+
+#: integrations/Merchants.php:588
+#, php-format
+msgid "Zone #%d"
+msgstr ""
+
+#: integrations/Merchants.php:595
+msgid "Locations not covered by your other zones"
+msgstr ""
+
+#: integrations/Merchants.php:620
+msgid "Add another Økoskabet merchant"
+msgstr ""
+
+#: integrations/Merchants.php:646
+msgid "Økoskabet merchants"
+msgstr ""
+
+#: integrations/Merchants.php:648
+msgid ""
+"Configure one or more Økoskabet merchant accounts and decide which one "
+"fulfils each cart. The plugin reads cart contents at checkout and routes the "
+"order to the matching merchant — including its API credentials, webhook "
+"secret, delivery options and shipment submission endpoint."
+msgstr ""
+
+#: integrations/Merchants.php:652
+msgid "Merchant configuration saved."
+msgstr ""
+
+#: integrations/Merchants.php:655
+msgid "Merchant deleted."
+msgstr ""
+
+#: integrations/Merchants.php:658
+msgid "Connection test succeeded."
+msgstr ""
+
+#. translators: %s = short error reason
+#: integrations/Merchants.php:664
+#, php-format
+msgid "Connection test failed: %s"
+msgstr ""
+
+#: integrations/Merchants.php:730
+msgid ""
+"Used for any cart that isn't handled cleanly by another merchant. Additional "
+"merchants ONLY handle carts where every item matches that merchant's product "
+"categories, tags or per-product override. The moment a cart contains items "
+"from more than one merchant — for any reason — the cart routes to the "
+"default merchant. Mixed carts are never blocked and never split across "
+"merchants."
+msgstr ""
+
+#: integrations/Merchants.php:733
+msgid ""
+"Heads up: changing the default merchant also changes which merchant's "
+"webhook secret backs the legacy webhook URL (…/okoskabet/webhook without a "
+"merchant ID). Any pre-existing Økoskabet webhook still pointing at the "
+"legacy URL will start failing HMAC verification unless you also update "
+"Økoskabet's webhook secret to match the new default merchant — or, better, "
+"switch the webhook to the per-merchant URL listed for each merchant below."
+msgstr ""
+
+#: integrations/Merchants.php:738
+msgid "Save default merchant"
+msgstr ""
+
+#: integrations/Merchants.php:758
+msgid "Configured merchants"
+msgstr ""
+
+#: integrations/Merchants.php:761
+msgid "No merchants configured yet."
+msgstr ""
+
+#: integrations/Merchants.php:767
+msgid "Merchant"
+msgstr ""
+
+#: integrations/Merchants.php:768 integrations/Merchants.php:980
+msgid "Environment"
+msgstr ""
+
+#: integrations/Merchants.php:770
+msgid "Routes products with"
+msgstr ""
+
+#: integrations/Merchants.php:771
+msgid "Shipping zones"
+msgstr ""
+
+#: integrations/Merchants.php:772
+msgid "Actions"
+msgstr ""
+
+#: integrations/Merchants.php:807
+msgid "Staging"
+msgstr ""
+
+#: integrations/Merchants.php:808
+msgid "Production"
+msgstr ""
+
+#: integrations/Merchants.php:815
+msgid "Categories:"
+msgstr ""
+
+#: integrations/Merchants.php:818
+msgid "Tags:"
+msgstr ""
+
+#: integrations/Merchants.php:821
+msgid ""
+"No category or tag rules — only routed to via default or per-product "
+"override."
+msgstr ""
+
+#: integrations/Merchants.php:826
+msgid "All zones (catch-all)"
+msgstr ""
+
+#: integrations/Merchants.php:830
+msgid "All zones"
+msgstr ""
+
+#: integrations/Merchants.php:835
+msgid "Edit"
+msgstr ""
+
+#: integrations/Merchants.php:841
+msgid "Test connection"
+msgstr ""
+
+#: integrations/Merchants.php:844
+msgid ""
+"Delete this merchant? Existing orders will keep working but new carts routed "
+"here will fall back to the default merchant."
+msgstr ""
+
+#: integrations/Merchants.php:848
+msgid "Delete"
+msgstr ""
+
+#: integrations/Merchants.php:860 integrations/Merchants.php:899
+msgid "Add merchant"
+msgstr ""
+
+#: integrations/Merchants.php:891
+msgid "<your-identifier>"
+msgstr ""
+
+#: integrations/Merchants.php:900
+msgid "Edit merchant"
+msgstr ""
+
+#: integrations/Merchants.php:911
+msgid "Display name"
+msgstr ""
+
+#: integrations/Merchants.php:914
+msgid ""
+"A human-readable name shown only inside this admin. Customers never see it "
+"directly."
+msgstr ""
+
+#: integrations/Merchants.php:918
+msgid "Identifier (slug)"
+msgstr ""
+
+#: integrations/Merchants.php:921
+msgid ""
+"Lowercase letters, digits, dashes and underscores. Appears in the webhook "
+"URL — choose carefully because changing it later breaks any webhook URL "
+"already configured at Økoskabet."
+msgstr ""
+
+#: integrations/Merchants.php:925
+msgid "API key"
+msgstr ""
+
+#: integrations/Merchants.php:929
+msgid "Show/hide API key"
+msgstr ""
+
+#. translators: 1 = first three characters of the stored key, 2 = total character length
+#. translators: 1 = first three characters of the stored secret, 2 = total character length
+#: integrations/Merchants.php:938 integrations/Merchants.php:969
+#, php-format
+msgid "Currently configured: %1$s… (%2$d characters)"
+msgstr ""
+
+#: integrations/Merchants.php:945
+msgid ""
+"The merchant's API key from Økoskabet's back office, under \"API & "
+"Webhooks\" (NOT the WooCommerce \"Access token\"). Used for all API calls "
+"(sheds, dates, shipment creation)."
+msgstr ""
+
+#: integrations/Merchants.php:952
+msgid ""
+"Configure this URL in Økoskabet's webhook settings for this merchant first — "
+"Økoskabet then gives you the webhook secret to paste below. Each merchant "
+"has its own URL so signatures can be verified against the correct secret."
+msgstr ""
+
+#: integrations/Merchants.php:956
+msgid "Webhook secret"
+msgstr ""
+
+#: integrations/Merchants.php:960
+msgid "Show/hide webhook secret"
+msgstr ""
+
+#: integrations/Merchants.php:976
+msgid ""
+"From Økoskabet's webhook configuration (generated when you register the "
+"webhook URL above). Used to verify incoming webhooks for this merchant only."
+msgstr ""
+
+#: integrations/Merchants.php:982
+msgid "Use staging API"
+msgstr ""
+
+#: integrations/Merchants.php:989
+msgid ""
+"How far into the future delivery dates are fetched from Økoskabet by "
+"default, in days. The plugin auto-extends this window (up to a hard cap of "
+"365 days) when a product has a specific-date \"Delivery exception\" rule "
+"(only_on / from_until), so customers always see their applicable delivery "
+"date even if it falls outside the default window. For weekday-restriction "
+"rules (e.g. \"only Mondays\"), however, this default must be large enough to "
+"contain at least one matching weekday — otherwise the customer's dropdown "
+"will look empty. The default of 3 is fine for most setups; raise it to 7–14 "
+"if your products have weekday-restriction rules. Range 1–60."
+msgstr ""
+
+#: integrations/Merchants.php:993
+msgid "Shed shipping description"
+msgstr ""
+
+#: integrations/Merchants.php:999
+msgid "Home-delivery shipping description"
+msgstr ""
+
+#: integrations/Merchants.php:1005
+msgid "Payment gateway"
+msgstr ""
+
+#: integrations/Merchants.php:1086
+msgid "Route products in these categories"
+msgstr ""
+
+#: integrations/Merchants.php:1097
+msgid ""
+"Any product in any of these categories is routed to this merchant (unless a "
+"more specific per-product override is set)."
+msgstr ""
+
+#: integrations/Merchants.php:1101
+msgid "Route products with these tags"
+msgstr ""
+
+#: integrations/Merchants.php:1115
+msgid "Restrict to shipping zones"
+msgstr ""
+
+#: integrations/Merchants.php:1123
+msgid ""
+"No WooCommerce shipping zones found. Set up shipping zones under WooCommerce "
+"→ Settings → Shipping first."
+msgstr ""
+
+#: integrations/Merchants.php:1136
+msgid ""
+"The default merchant must handle every cart by definition, so this field is "
+"disabled — the default merchant always operates in every shipping zone."
+msgstr ""
+
+#: integrations/Merchants.php:1138
+msgid ""
+"Leave empty to let this merchant handle carts shipping anywhere. Pick one or "
+"more zones to restrict it (e.g. an Express merchant that only covers "
+"Copenhagen). Carts shipping outside the selected zones fall back to the "
+"default merchant."
+msgstr ""
+
+#: integrations/Merchants.php:1146
+msgid "Priority"
+msgstr ""
+
+#: integrations/Merchants.php:1149
+msgid ""
+"When a product matches multiple merchants (e.g. via both category and tag), "
+"the HIGHEST priority wins. Default 10. Use 50+ for \"express\" merchants "
+"that should always take precedence."
+msgstr ""
+
+#: integrations/Merchants.php:1155
+msgid "Save merchant"
+msgstr ""
+
+#: integrations/Merchants.php:1156
+msgid "Cancel"
+msgstr ""
+
+#: integrations/Merchants.php:1271
+msgid "Invalid merchant ID."
+msgstr ""
+
+#: integrations/Merchants.php:1325
+msgid "Unknown merchant"
+msgstr ""
+
+#: integrations/Merchants.php:1329
+msgid "API key not configured"
+msgstr ""
+
+#. translators: %s = a delivery method, e.g. "Home delivery"
+#: integrations/Packaging_Fee.php:94
+#, php-format
+msgid "%s — everywhere"
+msgstr ""
+
+#. translators: 1: shipping zone, 2: the method's own title, 3: which kind of method it is
+#: integrations/Packaging_Fee.php:120
+#, php-format
+msgid "%1$s — %2$s (%3$s)"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:267
+msgid "Packaging"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:626
+msgid "Free packaging"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:627
+msgid "Waive Økoskabet's packaging fee for orders using this coupon."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:672
+msgid "Packaging fee"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:675
+msgid ""
+"An extra fee added to the order at checkout, for packaging, cool packs, "
+"boxes and the like. It is a cart fee, not shipping — a free-shipping coupon "
+"does not remove it, and it is charged once per order."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:677
+msgid ""
+"The rules are read from the top down and the FIRST one that fits the cart "
+"wins — only ever one fee. Put your specific rules first and leave a rule "
+"with nothing selected at the bottom as the catch-all."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:682
+msgid "Packaging fee saved."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:693
+msgid "Add a packaging fee"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:700
+msgid "Amounts are excl. VAT"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:703
+msgid "VAT class"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:708
+msgid ""
+"Leave \"excl. VAT\" off if you typed the amount the customer should actually "
+"pay — the normal case. These two settings apply to every rule below."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:717
+msgid "Add fee rule"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:722
+msgid "Save packaging fee"
+msgstr ""
+
+#. translators: %s = the internal id of a delivery method that no longer exists
+#: integrations/Packaging_Fee.php:841
+#, php-format
+msgid "Removed delivery method (%s)"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:864
+msgid "e.g. Packaging (frozen)"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:866
+msgid "Amount"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:869
+msgid ""
+"Charged only when the customer has pressed the pre-order button at checkout."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:871
+msgid "Pre-orders only"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:877
+msgid "Move up"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:878
+msgid "Move down"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:888
+msgid "Sub-categories count too. Leave empty for any product."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:893
+msgid "One match in either list is enough."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:896
+msgid "Delivery methods"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:904
+msgid "Leave empty for any delivery method."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:909
+msgid "Fee ladder (optional)"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:911
+msgid ""
+"Same format as the shipping fee ladder: one tier per line as \"from amount = "
+"fee\". The highest tier at or below the cart subtotal wins, and 0 means no "
+"fee. Leave empty to use the fixed amount above."
+msgstr ""
+
+#: integrations/Packaging_Fee.php:921
+msgid "Not taxed"
+msgstr ""
+
+#: integrations/Packaging_Fee.php:922
+msgid "Standard rate"
+msgstr ""
+
+#: integrations/Payment_Capture.php:245 integrations/Payment_Capture.php:388
+msgid "Payment capture triggered by Økoskabet webhook."
+msgstr ""
+
+#: integrations/Payment_Capture.php:285
+msgid "Payment capture triggered by Økoskabet webhook (Stripe)."
+msgstr ""
+
+#: integrations/Payment_Capture.php:325
+msgid "Payment capture triggered by Økoskabet webhook (Nets Easy)."
+msgstr ""
+
+#: integrations/Payment_Capture.php:356
+msgid "Payment capture triggered by Økoskabet webhook (Pensopay)."
+msgstr ""
+
+#: integrations/Product_Merchant_Meta.php:60
+msgid "Økoskabet routing"
+msgstr ""
+
+#: integrations/Product_Merchant_Meta.php:76
+msgid "Use Økoskabet merchant"
+msgstr ""
+
+#: integrations/Product_Merchant_Meta.php:78
+msgid "Auto (use category/tag rules)"
+msgstr ""
+
+#: integrations/Product_Merchant_Meta.php:91
+msgid "because of this product's override"
+msgstr ""
+
+#: integrations/Product_Merchant_Meta.php:92
+msgid "because of this product's category/tag"
+msgstr ""
+
+#: integrations/Product_Merchant_Meta.php:93
+msgid "as the fallback default merchant"
+msgstr ""
+
+#. translators: 1 = merchant label, 2 = explanation
+#: integrations/Product_Merchant_Meta.php:100
+#, php-format
+msgid "Currently routed to %1$s %2$s."
+msgstr ""
+
+#. translators: %s = product names ("Mælk og Brød")
+#: integrations/Split_Checkout.php:1129
+#, php-format
+msgid "Remove %s, and the rest can be pre-ordered together"
+msgstr ""
+
+#. translators: %s = product names ("Mælk og Brød")
+#: integrations/Split_Checkout.php:1131
+#, php-format
+msgid "Remove %s, and the rest can be delivered together"
+msgstr ""
+
+#. translators: 1 = product names ("Mælk og Brød"), 2 = date ("den 10. december 2026")
+#: integrations/Split_Checkout.php:1138
+#, php-format
+msgid "Remove %1$s, and the rest can be pre-ordered together for %2$s"
+msgstr ""
+
+#. translators: 1 = product names ("Mælk og Brød"), 2 = date ("den 22. september 2026")
+#: integrations/Split_Checkout.php:1144
+#, php-format
+msgid "Remove %1$s, and the rest can be delivered together on %2$s"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1191
+msgid "and"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1221
+msgid "Split the delivery in two"
+msgstr ""
+
+#. translators: %d = number of separate deliveries
+#: integrations/Split_Checkout.php:1227
+#, php-format
+msgid "Split into %d deliveries"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1243
+msgid "Keep only this one"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1261
+msgid "Only part of your basket can be pre-ordered"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1264
+msgid "Your items cannot all be delivered on the same day"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1276
+msgid ""
+"You can split the order into a pre-order for the items that can be held, and "
+"an ordinary delivery for the rest — each with its own date and its own fee. "
+"Or take the items that cannot be pre-ordered out of the basket. Choose below."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1277
+msgid ""
+"You can split the order so each part is delivered on its own day, or take a "
+"few items out of the basket so everything else arrives together. Choose "
+"below."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1283
+msgid "Empty from the basket"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1312
+msgid "Button: split the delivery"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1313
+msgid ""
+"What the first button says when the basket needs exactly two delivery days. "
+"The customer orders the first delivery now and the rest straight after. "
+"Leave empty for \"Opdel levering i to\"."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1317
+msgid "Button: split into more than two"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1318
+#, php-format
+msgid ""
+"What that button says when the basket needs three or more delivery days, "
+"where \"i to\" would not be true. Write %d where the number belongs. Leave "
+"empty for \"Opdel levering i 3 leveringer\"."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1322
+msgid "Button: keep only this delivery"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1323
+msgid ""
+"What the small button beside each delivery says. It keeps that delivery and "
+"takes the other items out of the basket. Leave empty for \"Behold kun "
+"denne\"."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1327
+msgid "Headline: the basket needs more than one day"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1328
+msgid ""
+"The headline above the two buttons when the items in the basket cannot be "
+"delivered on the same day. Leave empty for \"Varerne i din kurv kan ikke "
+"leveres på samme dag\"."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1332 integrations/Split_Checkout.php:1343
+msgid "Text under that headline"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1333
+msgid ""
+"What the customer is being offered, in your own words. Leave empty for the "
+"built-in wording."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1338
+msgid "Headline: only part of the basket can be pre-ordered"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1339
+msgid ""
+"The headline when the basket crosses a pre-order and an ordinary delivery. "
+"Leave empty for \"Kun en del af din kurv kan forudbestilles\"."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1344
+msgid "The same, for the pre-order case. Leave empty for the built-in wording."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1349
+msgid "Button: take items out of the basket"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1350
+msgid ""
+"What the second button says. It shows the customer which items to give up "
+"for the rest of the basket to be delivered on one day, with the date, and "
+"removes them when they choose. Leave empty for \"Tøm fra kurven\"."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1356
+msgid "Split delivery"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1360
+msgid "Split delivery saved."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1370
+msgid "Allow split checkout"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1374
+msgid ""
+"When ON: a basket that cannot be delivered on one day gets two buttons at "
+"checkout — split it into one order per delivery day, or take the items in "
+"the way out of the basket so the rest is delivered together. Each part-order "
+"is an ordinary order and pays its own shipping and packaging fee. When OFF: "
+"a notice tells the customer to remove items so they all share at least one "
+"delivery date."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1394
+msgid "Save split delivery"
+msgstr ""
+
+#. translators: 1 = product name, 2 = the delivery it would move to, as its heading reads
+#: integrations/Split_Checkout.php:1642
+#, php-format
+msgid "Move %1$s to %2$s"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1698
+msgid "Choose an ordinary order instead"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1729 integrations/Split_Checkout.php:2833
+msgid "Working…"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1730
+msgid "Could not start split checkout. Please try again."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1731
+msgid "Could not remove the items. Please try again."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1732
+msgid "Choose one of the options first."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1733
+msgid "Could not move that item. Please try again."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1908
+msgid ""
+"Choose what you would rather do without this time. We take those items out "
+"of the basket, and everything else is delivered on the same day."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1922
+msgid "Remove the items and continue"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1937
+msgid "We cannot find a delivery day for your basket"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1939
+msgid ""
+"One or more items in the basket cannot be delivered at the moment. Please go "
+"back to the basket and remove them, or contact the shop."
+msgstr ""
+
+#: integrations/Split_Checkout.php:1944
+msgid "Back to the basket"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1963
+msgid "Cancel split delivery and start over"
+msgstr ""
+
+#. translators: 1 = current step, 2 = total steps
+#: integrations/Split_Checkout.php:1969
+#, php-format
+msgid "You're ordering delivery %1$d of %2$d"
+msgstr ""
+
+#: integrations/Split_Checkout.php:1974
+msgid "After you complete this order, we'll guide you to the next delivery."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2079
+msgid "No split needed"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2087
+msgid ""
+"Some items have no delivery day, so the order cannot be split. Remove them "
+"instead."
+msgstr ""
+
+#. translators: %s = coupon code
+#: integrations/Split_Checkout.php:2355
+#, php-format
+msgid ""
+"The coupon \"%s\" does not apply to what is in your basket now, so it has "
+"been taken off."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2425
+msgid "The split delivery is cancelled, and your basket is back as it was."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2452 integrations/Split_Checkout.php:2517
+msgid "WooCommerce cart not available"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2455 integrations/Split_Checkout.php:2520
+msgid "A split is already in progress"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2461
+msgid "Nothing to move"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2476
+msgid "That item cannot go in that delivery."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2525
+msgid "No option chosen"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2544
+msgid ""
+"Your basket has changed, so we have worked the options out again. Please "
+"choose once more."
+msgstr ""
+
+#. translators: %s = product names ("Mælk og Brød")
+#: integrations/Split_Checkout.php:2565
+#, php-format
+msgid "We took %s out of your basket. The rest is pre-ordered together."
+msgstr ""
+
+#. translators: %s = product names ("Mælk og Brød")
+#: integrations/Split_Checkout.php:2567
+#, php-format
+msgid "We took %s out of your basket. The rest is delivered together."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2638
+msgid ""
+"Your basket needs more than one delivery day. Please choose one of the "
+"options above before you order."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2699
+msgid "All deliveries booked!"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2700
+msgid "You've completed all the orders for your split delivery."
+msgstr ""
+
+#. translators: 1 = current step (just completed), 2 = total
+#: integrations/Split_Checkout.php:2786
+#, php-format
+msgid "Step %1$d of %2$d completed"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2792
+msgid "You have more deliveries to book"
+msgstr ""
+
+#. translators: 1 = next step, 2 = total steps
+#: integrations/Split_Checkout.php:2797
+#, php-format
+msgid "Thanks for your order. You still need to book delivery %1$d of %2$d."
+msgstr ""
+
+#. translators: %d = step number
+#: integrations/Split_Checkout.php:2806
+#, php-format
+msgid "Next: delivery %d"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2817
+msgid "Book next delivery now"
+msgstr ""
+
+#: integrations/Split_Checkout.php:2821
+msgid "You can also scroll down to see your order confirmation first."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2845
+msgid ""
+"Could not resume split checkout. Please add the items to your cart manually."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2849
+msgid "Could not resume split checkout."
+msgstr ""
+
+#: integrations/Split_Checkout.php:2876
+msgid "No delivery day available"
+msgstr ""
+
+#. translators: %d = its number in the list
+#: integrations/Split_Checkout.php:2893
+#, php-format
+msgid "Pre-order %d"
+msgstr ""
+
+#. translators: %d = its number in the list
+#: integrations/Split_Checkout.php:2895
+#, php-format
+msgid "Delivery %d"
+msgstr ""
+
+#. translators: 1 = its number in the list, 2 = formatted date
+#: integrations/Split_Checkout.php:2903
+#, php-format
+msgid "Pre-order %1$d (%2$s)"
+msgstr ""
+
+#. translators: 1 = its number in the list, 2 = formatted date
+#: integrations/Split_Checkout.php:2911
+#, php-format
+msgid "Delivery %1$d (%2$s)"
+msgstr ""
+
+#. translators: 1 = required PHP version, 2 = currently running PHP version
+#: okoskabet-woocommerce-plugin.php:86
+#, php-format
+msgid ""
+"requires PHP %1$s or newer. You are running PHP %2$s. Ask your hosting "
+"provider to upgrade PHP, then re-activate the plugin."
+msgstr ""
+
+#. translators: 1 = required WP version, 2 = currently running WP version
+#: okoskabet-woocommerce-plugin.php:98
+#, php-format
+msgid ""
+"requires WordPress %1$s or newer. You are running WordPress %2$s. Update "
+"WordPress, then re-activate the plugin."
+msgstr ""
+
+#: okoskabet-woocommerce-plugin.php:113
+msgid ""
+"requires the <a href=\"https://wordpress.org/plugins/woocommerce/"
+"\">WooCommerce</a> plugin to be installed and active. Install WooCommerce, "
+"then re-activate Økoskabet."
+msgstr ""
+
+#. translators: 1 = required WC version, 2 = currently running WC version
+#: okoskabet-woocommerce-plugin.php:124
+#, php-format
+msgid ""
+"requires WooCommerce %1$s or newer. You are running WooCommerce %2$s. Update "
+"WooCommerce, then re-activate Økoskabet."
+msgstr ""
+
+#. translators: %1$s = internal event name, %2$s = capture result message
+#: rest/OkoRest.php:1112
+#, php-format
+msgid ""
+"Økoskabet webhook: betalingshåndtering via event \"%1$s\". Resultat: %2$s"
+msgstr ""
+
+#. translators: %s = internal event name
+#: rest/OkoRest.php:1141
+#, php-format
+msgid "Ordre markeret som afsluttet via Økoskabet webhook. Event: %s"
+msgstr ""
