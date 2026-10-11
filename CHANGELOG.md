@@ -2,6 +2,62 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.5.1 - 2026-10-11
+
+Forudbestilling fra en periode, og dansk hele vejen rundt i indstillingerne.
+
+= Et vindue kan nu forudbestilles =
+
+"Levering fra (og evt. indtil) en bestemt dag" havde før kun et flueben:
+enten begrænsede reglen, eller også lagde den dage oven i de normale. Nu er
+der tre valg:
+
+  - **Nej — varerne kan kun leveres i perioden.** Som før.
+  - **Kun i perioden, og dagene længere ude kan forudbestilles.** Nyt. Varen
+    kan sælges i dag og leveres i perioden, også når den ligger uger ude. En
+    juleand, der skal afsted mellem 1. november og 18. december, kan sælges
+    fra i dag.
+  - **Oven på de normale dage — ingen begrænsning.** Det gamle flueben,
+    uændret. Rækker, butikken allerede har gemt, læses som denne, så ingen
+    opsætning skifter opførsel ved opdateringen.
+
+Når vinduets dage rykker ind i det normale vindue, bliver de almindelige
+leveringsdage af sig selv. Ingen dag optræder både som normal og som
+forudbestilling.
+
+**Bemærk:** "Gælder alle varer" på de to første valg begrænser hele
+sortimentet til perioden — også varer, der aldrig kan forudbestilles, og som
+dermed slet ikke kan købes. Vil du gøre alt forudbestilleligt uden at
+begrænse noget, er det det tredje valg, du skal bruge.
+
+**Vil du både kunne forudbestille almindelige varer og binde en enkelt vare
+til perioden**, kræver det to regler for samme periode: en bred "oven på de
+normale dage" på alle varer, og en "kun i perioden" på den vare, der skal
+bindes.
+
+= Kassen ved nu, hvornår der ikke er en almindelig ordre =
+
+  - "Normal bestilling" skjules, når hele kurven er bundet til et vindue
+    længere ude. Før blev knappen stående og svarede "Ingen leveringsdage
+    tilgængelige lige nu — kontakt venligst shoppen".
+  - Står der både noget, der kun kan forudbestilles, og noget, der slet ikke
+    kan leveres, kom knappen "Tag en vare ud i stedet" frem over et tomt
+    panel, som nægtede at gå videre. Den vises nu kun, når der er noget at
+    vælge.
+  - Listen under knappen viser begge veje ud, ikke kun den, der passer til
+    den kasse, kunden står i: både "fjern anden, så kan resten leveres
+    sammen" og "fjern grøntsagerne, så kan resten forudbestilles samlet".
+
+= Indstillingerne =
+
+  - Forudbestillingens knaptekster, noten og listen "Kan ikke forudbestilles"
+    har fået deres egen boks. De lå inde i "Levering kun på en bestemt dag",
+    og slog man den sektion fra, kunne de ikke længere redigeres — selvom de
+    blev ved med at gælde.
+  - 55 tekster, der stod på engelsk, er oversat: forsendelseszoner,
+    funktionspriser, emballagegebyret, fragtmetodens indstillinger, import og
+    eksport.
+
 ## 1.5.0 - 2026-10-08
 
 Første udgivelse efter 1.4.2. Den indeholder også alt fra 1.4.3 til 1.4.7
