@@ -222,6 +222,69 @@ it( 'never offers a pre-order day to goods the shop will not hold', function () 
 	assert_true( count( oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), false ) ) > 1, 'the milk still travels now' );
 } );
 
+it( 'keeps goods the shop will not hold out of a from/until window too', function () {
+	// "Kan ikke forudbestilles" is one list for the whole shop, not a setting
+	// on each rule: the cut sits before the pre-order days are worked out, so
+	// it catches every rule type. The single-date rule is covered above; this
+	// is the same thing for a window in the new pre-order mode, which is what
+	// Gaardmester sells the Christmas duck from.
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	$from  = oko_test_date( 20 );
+	$until = oko_test_date( 60 );
+	oko_test_set_exceptions( array(
+		'from_until_enabled'      => true,
+		'no_pre_order_categories' => array( OKO_ONLY_CAT_FRESH ),
+		'from_until'              => array(
+			array( 'label' => 'Jul', 'from' => $from, 'until' => $until, 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_true( count( oko_only_dates( array( OKO_ONLY_PRODUCT_BOX ), true ) ) > 1, 'the box is held' );
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), true ), 'the milk waits for nothing' );
+
+	// And one of them in the basket is enough: no day the whole of it shares,
+	// which is what hands the customer the split instead of quietly sending
+	// fresh milk out in December.
+	assert_same(
+		array(),
+		oko_only_dates( array( OKO_ONLY_PRODUCT_BOX, OKO_ONLY_PRODUCT_MILK ), true ),
+		'nor does a basket holding it'
+	);
+} );
+
+it( 'shuts the whole shop when a pre-order window is set to every product', function () {
+	// The trap in the mode picker. "Can be pre-ordered in the period" also
+	// RESTRICTS what it covers, so on every product it closes the ordinary
+	// checkout until the window opens — including the goods that can never
+	// be pre-ordered, which are then left unbuyable. Only the old "on top of
+	// the normal days" is harmless with every product.
+	//
+	// Written down because the setting reads like it only adds something.
+	oko_only_catalogue();
+	oko_test_set_merchant_days( 7 );
+	oko_test_set_exceptions( array(
+		'from_until_enabled'      => true,
+		'no_pre_order_categories' => array( OKO_ONLY_CAT_FRESH ),
+		'from_until'              => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 20 ), 'until' => oko_test_date( 60 ), 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_same( array(), oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), false ), 'the milk has no ordinary day left' );
+
+	// On top of the normal days, the same window leaves it alone.
+	oko_test_set_exceptions( array(
+		'from_until_enabled'      => true,
+		'no_pre_order_categories' => array( OKO_ONLY_CAT_FRESH ),
+		'from_until'              => array(
+			array( 'label' => 'Jul', 'from' => oko_test_date( 20 ), 'until' => oko_test_date( 60 ), 'enabled' => true, 'pre_order_mode' => 'extend', 'flip' => false, 'all' => true, 'categories' => array(), 'tags' => array() ),
+		),
+	) );
+
+	assert_true( count( oko_only_dates( array( OKO_ONLY_PRODUCT_MILK ), false ) ) > 1, 'and this one still travels now' );
+} );
+
 it( 'leaves the pre-order alone when the shop has listed nothing', function () {
 	oko_only_catalogue();
 	oko_test_set_merchant_days( 7 );
