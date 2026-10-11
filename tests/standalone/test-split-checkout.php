@@ -888,6 +888,61 @@ it( 'tells the handlers it is a pre-order, because only the banner knows', funct
 	);
 } );
 
+it( 'never puts up "take items out" over a panel with nothing in it', function () {
+	// Gaardmester, 11 October. A Christmas duck that can only be delivered in
+	// a window five weeks out, and vegetables that have no delivery day at
+	// all. The customer is in an ordinary checkout, so the single offer that
+	// exists — drop the vegetables and pre-order the duck — belongs to the
+	// other kind of order, and the list deliberately leaves it out.
+	//
+	// The button that opens that list was decided on the unfiltered offers,
+	// so it appeared over an empty panel: the customer pressed it, had nothing
+	// to choose, pressed "remove the items and continue", and was told to pick
+	// one of the options first. Forever.
+	$december = oko_test_date( 40 );
+
+	oko_test_add_product( OKO_SPLIT_ICE, 'Juleand', array( OKO_SPLIT_CAT_ICE ) );
+	oko_test_add_product( OKO_SPLIT_PAK_CHOI, 'Guleroedder', array( OKO_SPLIT_CAT_WED ) );
+
+	oko_test_set_exceptions( array(
+		'from_until_enabled' => true,
+		'from_until'         => array(
+			array( 'label' => 'Juleforudbestilling', 'from' => $december, 'until' => $december, 'enabled' => true, 'pre_order_mode' => 'pre_order', 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_ICE ), 'tags' => array() ),
+		),
+		// The vegetables travel on Wednesdays, and there is no Wednesday on
+		// the list, so they have no day at all.
+		'weekdays_enabled' => true,
+		'weekdays'         => array(
+			3 => array( 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_WED ), 'tags' => array() ),
+		),
+	) );
+
+	oko_test_set_delivery_days( array( oko_test_weekday_next_week( 2 ), $december ) );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_ICE, 'b' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( false );
+
+	ob_start();
+	oko_split()->maybe_render_banner();
+	$html = (string) ob_get_clean();
+
+	// Matched on the markup, not on the names: the inline script mentions
+	// every one of these ids, so a plain substring finds them whether or not
+	// anything was rendered.
+	$button = strpos( $html, '<button type="button" id="oko-split-reduce-toggle"' ) !== false;
+	$panel  = strpos( $html, '<div class="oko-split-remove-panel"' ) !== false;
+	$choice = strpos( $html, '<input type="radio" name="oko_split_remove_option"' ) !== false;
+
+	assert_false( $panel && ! $choice, 'the panel is never shown with nothing in it' );
+	assert_false( $button && ! $choice, 'nor the button that opens it' );
+
+	// And the customer is not stranded: the pre-order delivery still carries
+	// its own way of having just that one.
+	assert_true(
+		strpos( $html, 'class="oko-split-keep"' ) !== false,
+		'the delivery keeps its own "keep only this"'
+	);
+} );
+
 it( 'says nothing about pre-orders when the split is an ordinary one', function () {
 	oko_split_weekday_shop();
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_MILK, 'b' => OKO_SPLIT_BREAD ) );
