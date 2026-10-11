@@ -387,7 +387,8 @@ class Delivery_Exceptions extends Base {
 					// existed are restrictions, and turning every one of them
 					// into an extension would, for a year-round rule, put a
 					// year of dates in front of that merchant's customers.
-					'extend'     => (bool) ( $item['extend'] ?? false ),
+					'extend'         => (bool) ( $item['extend'] ?? false ),
+					'pre_order_mode' => self::sanitize_from_until_mode( $item ),
 					'flip'       => (bool) ( $item['flip']   ?? false ),
 					'all'        => (bool) ( $item['all']    ?? false ),
 					'categories' => array_map( 'intval', (array) ( $item['categories'] ?? array() ) ),
@@ -586,7 +587,7 @@ class Delivery_Exceptions extends Base {
 		echo '</script>';
 
 		echo '<script type="text/template" id="oko-template-from-until">';
-		$this->render_from_until_row( '__INDEX__', array( 'label' => '', 'from' => '', 'until' => '', 'enabled' => true, 'extend' => false, 'categories' => array(), 'tags' => array() ), $categories, $tags );
+		$this->render_from_until_row( '__INDEX__', array( 'label' => '', 'from' => '', 'until' => '', 'enabled' => true, 'pre_order_mode' => 'none', 'categories' => array(), 'tags' => array() ), $categories, $tags );
 		echo '</script>';
 
 		echo '<script type="text/template" id="oko-template-cutoff">';
@@ -911,9 +912,14 @@ class Delivery_Exceptions extends Base {
 					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][enabled]" value="1" <?php checked( ! empty( $row['enabled'] ) ); ?> />
 					<?php esc_html_e( 'Aktiv', O_TEXTDOMAIN ); ?>
 				</label>
-				<label title="<?php esc_attr_e( 'Shows these products every date up to the until date, even past the normal number of days. For pre-orders: the soonest days as usual, and Christmas as well.', O_TEXTDOMAIN ); ?>">
-					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][extend]" value="1" <?php checked( ! empty( $row['extend'] ) ); ?> />
-					<?php esc_html_e( 'Pre-order: offer these dates on top of the normal ones', O_TEXTDOMAIN ); ?>
+				<?php $mode = self::from_until_mode( $row ); ?>
+				<label title="<?php esc_attr_e( 'Whether the window only restricts, restricts and lets the days further ahead be pre-ordered, or is offered on top of the normal days without restricting at all.', O_TEXTDOMAIN ); ?>">
+					<?php esc_html_e( 'Pre-order', O_TEXTDOMAIN ); ?>:
+					<select name="from_until[<?php echo esc_attr( $index ); ?>][pre_order_mode]">
+						<option value="none" <?php selected( $mode, 'none' ); ?>><?php esc_html_e( 'No — the goods can only be delivered in the period', O_TEXTDOMAIN ); ?></option>
+						<option value="preorder" <?php selected( $mode, 'preorder' ); ?>><?php esc_html_e( 'Only in the period, and the days further ahead can be pre-ordered', O_TEXTDOMAIN ); ?></option>
+						<option value="extend" <?php selected( $mode, 'extend' ); ?>><?php esc_html_e( 'On top of the normal days — no restriction', O_TEXTDOMAIN ); ?></option>
+					</select>
 				</label>
 				<label title="<?php esc_attr_e( 'The window covers the whole catalogue. What cannot wait is named once, under the pre-order settings, rather than category by category here.', O_TEXTDOMAIN ); ?>">
 					<input type="checkbox" name="from_until[<?php echo esc_attr( $index ); ?>][all]" value="1" <?php checked( ! empty( $row['all'] ) ); ?> />
@@ -1067,7 +1073,10 @@ class Delivery_Exceptions extends Base {
 				'from'       => $from,
 				'until'      => $until,
 				'enabled'    => ! empty( $row['enabled'] ),
-				'extend'     => ! empty( $row['extend'] ),
+				// Both, so a downgrade to a version that only knows the tick
+				// still reads the rule the way the shop meant it.
+				'pre_order_mode' => self::sanitize_from_until_mode( $row ),
+				'extend'     => self::sanitize_from_until_mode( $row ) === 'extend',
 				'flip'       => ! empty( $row['flip'] ),
 				'all'        => ! empty( $row['all'] ),
 				'categories' => $this->sanitize_id_list( $row['categories'] ?? array() ),
@@ -1212,8 +1221,9 @@ class Delivery_Exceptions extends Base {
 		} else {
 			// A far-off only-on date is never offered in the normal checkout,
 			// however wide a display window the section is allowed. A from/until
-			// pre-order window is left alone: it opens days without closing the
-			// normal ones, so its range may well cover next week too.
+			// window needs no such cut: what it restricts to is already all the
+			// product has, and how far ahead each of those days lies is what
+			// decides whether the customer meets it here or behind the button.
 			$far    = self::far_only_on_ranges( $applicable_rules, $config, $dates, $product_ids );
 			$result = array_values( array_filter( $result, function ( string $date ) use ( $far ): bool {
 				return ! self::date_in_ranges( $date, $far );
@@ -1513,7 +1523,7 @@ class Delivery_Exceptions extends Base {
 			// from_until
 			if ( ! empty( $config['from_until_enabled'] ) ) {
 				foreach ( $config['from_until'] as $row ) {
-					if ( empty( $row['enabled'] ) || empty( $row['from'] ) || ! empty( $row['extend'] ) ) { continue; }
+					if ( empty( $row['enabled'] ) || empty( $row['from'] ) || self::from_until_mode( $row ) === 'extend' ) { continue; }
 					if ( self::rule_matches_terms( $row, $cat_ids, $tag_ids ) ) {
 						if ( ! empty( $row['until'] ) ) {
 							$descriptions[] = sprintf(
@@ -1712,6 +1722,40 @@ class Delivery_Exceptions extends Base {
 		} ) );
 	}
 
+	/**
+	 * How a from/until rule treats its window.
+	 *
+	 * - `none`   the rule only restricts: these goods travel between the two
+	 *            dates and on no other day.
+	 * - `extend` the window is offered on top of the normal days, so the same
+	 *            ice cream is still for sale next week.
+	 * - `preorder` the window still restricts, and the days in it that lie
+	 *            past the normal ones are offered behind the pre-order button
+	 *            — the way a single far-off date already behaves, over a
+	 *            period. A day inside the normal window is an ordinary
+	 *            delivery day, because by then it is one.
+	 *
+	 * Rules saved before the third state existed carry a boolean instead.
+	 */
+	public static function from_until_mode( array $rule ): string {
+		$mode = (string) ( $rule['pre_order_mode'] ?? '' );
+		if ( in_array( $mode, array( 'none', 'extend', 'preorder' ), true ) ) {
+			return $mode;
+		}
+
+		return ! empty( $rule['extend'] ) ? 'extend' : 'none';
+	}
+
+	/** The three states a saved row may name, falling back to the old tick. */
+	private static function sanitize_from_until_mode( array $row ): string {
+		$posted = (string) ( $row['pre_order_mode'] ?? '' );
+		if ( in_array( $posted, array( 'none', 'extend', 'preorder' ), true ) ) {
+			return $posted;
+		}
+
+		return ! empty( $row['extend'] ) ? 'extend' : 'none';
+	}
+
 	/** Format a Y-m-d date as a Danish "den d. F YYYY" string. */
 	public static function format_date_human( string $date ): string {
 		try {
@@ -1740,7 +1784,7 @@ class Delivery_Exceptions extends Base {
 				return ! empty( $rule['date'] ) ? array( $rule['date'] ) : array();
 			case 'from_until':
 				$candidates = ! empty( $rule['from'] ) ? array( $rule['from'] ) : array();
-				if ( ! empty( $rule['extend'] ) && ! empty( $rule['until'] ) ) {
+				if ( self::from_until_mode( $rule ) !== 'none' && ! empty( $rule['until'] ) ) {
 					$candidates[] = $rule['until'];
 				}
 				return $candidates;
@@ -1774,7 +1818,7 @@ class Delivery_Exceptions extends Base {
 		$known   = self::horizon_is_knowable( $config, $dates );
 
 		foreach ( $applicable_rules as $rule ) {
-			if ( empty( $rule['extend'] ) ) {
+			if ( self::from_until_mode( $rule ) === 'none' ) {
 				continue;
 			}
 			if ( ( $rule['type'] ?? '' ) !== 'from_until' || empty( $rule['until'] ) ) {
@@ -2213,7 +2257,7 @@ class Delivery_Exceptions extends Base {
 		// day, not from today).
 		foreach ( $rules as $rule ) {
 			// A normal order never shows pre-order days, so it needn't fetch them.
-			if ( ! empty( $rule['extend'] ) && ! $pre_order ) {
+			if ( self::from_until_mode( $rule ) !== 'none' && ! $pre_order ) {
 				continue;
 			}
 			$candidates = self::extension_candidates_for_rule( $rule );
@@ -2380,10 +2424,11 @@ class Delivery_Exceptions extends Base {
 					continue;
 				}
 				$applicable[] = array(
-					'type'   => 'from_until',
-					'from'   => $row['from'],
-					'until'  => $row['until'] ?? '',
-					'extend' => ! empty( $row['extend'] ),
+					'type'           => 'from_until',
+					'from'           => $row['from'],
+					'until'          => $row['until'] ?? '',
+					'extend'         => ! empty( $row['extend'] ),
+					'pre_order_mode' => self::from_until_mode( $row ),
 				);
 			}
 		}
@@ -2451,7 +2496,7 @@ class Delivery_Exceptions extends Base {
 				// A pre-order opens days, it never closes them: the same ice
 				// cream is still for sale next week. Which far-off days it
 				// opens is decided by apply_display_limit().
-				if ( ! empty( $rule['extend'] ) ) {
+				if ( self::from_until_mode( $rule ) === 'extend' ) {
 					return true;
 				}
 				$from  = $rule['from'] ?? '';
