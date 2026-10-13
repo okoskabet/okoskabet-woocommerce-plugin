@@ -274,6 +274,11 @@ function enqueue_checkout_scripts(): void
 
 		wp_enqueue_script('okoskabet-shipping', oko_build_asset_url('plugin-public', 'js'), array(), O_VERSION, true);
 		wp_enqueue_style('okoskabet-shipping', oko_build_asset_url('plugin-public', 'css'), array(), O_VERSION);
+
+		// The bundle above is useless without its configuration, and this is
+		// the only point in the request where inline script can still be
+		// added. Do it here rather than leaving it to whoever draws the row.
+		oko_enqueue_checkout_runtime();
 	}
 }
 add_action('wp_enqueue_scripts', 'enqueue_checkout_scripts');
@@ -318,10 +323,32 @@ function custom_content_for_custom_shipping_checkout(): void
  * Renders once per request. A shop that both leaves the hook on and places
  * the shortcode gets one UI, not two.
  */
-function oko_render_delivery_ui(string $context = 'table'): void
+/**
+ * The script the picker is, its configuration, and the strings it shows.
+ *
+ * This has to happen during the page's own enqueue pass, because
+ * `wp_enqueue_script` and `wp_add_inline_script` do nothing in an AJAX
+ * request. The markup below may well be drawn in one: WooCommerce refreshes
+ * the review-order table over AJAX whenever the basket or the shipping
+ * choice changes, and the hook that draws the delivery row runs again there.
+ *
+ * It used to be bundled with that markup, so a checkout whose first render
+ * did not draw the row — a brand-new session, before WooCommerce has settled
+ * the customer — ended up with the Svelte bundle on the page and no
+ * configuration for it to start on. The refresh then drew the buttons, since
+ * markup in an AJAX fragment arrives fine, and the customer was left with a
+ * delivery section that had every control except the date. No console error,
+ * no request: nothing had anything to start. Reloading fixed it, which is
+ * exactly what made it look like a caching problem.
+ *
+ * Runs once per request and says whether there is a merchant to draw for.
+ */
+function oko_enqueue_checkout_runtime(): bool
 {
-	if (did_action(OKO_UI_DRAWN_ACTION)) {
-		return;
+	// WordPress already remembers whether this ran; a static here would only
+	// be a second, less truthful copy of that.
+	if (wp_script_is('okoskabet-checkout-helpers', 'enqueued')) {
+		return true;
 	}
 
 	$settings = o_get_settings();
@@ -330,13 +357,8 @@ function oko_render_delivery_ui(string $context = 'table'): void
 	$merchant = $resolved['merchant'];
 
 	if (empty($merchant['api_key'])) {
-		return;
+		return false;
 	}
-
-	// Latched only once we are certain we are drawing. A shop without a key
-	// renders nothing and stays free to render later in the same request, if
-	// a key arrives — which is what a settings save inside checkout does.
-	do_action(OKO_UI_DRAWN_ACTION);
 
 	$shed_description  = ! empty($merchant['description_shipping_okoskabet']) ? $merchant['description_shipping_okoskabet'] : __('Chilled pickup location where you can collect your goods around the clock using a code.', O_TEXTDOMAIN);
 	$local_description = ! empty($merchant['description_shipping_private'])   ? $merchant['description_shipping_private']   : __('Økoskabet delivers your goods to your door.', O_TEXTDOMAIN);
@@ -433,6 +455,32 @@ function oko_render_delivery_ui(string $context = 'table'): void
 		'before'
 	);
 	wp_enqueue_script('okoskabet-checkout-helpers');
+
+	return true;
+}
+
+function oko_render_delivery_ui(string $context = 'table'): void
+{
+	if (did_action(OKO_UI_DRAWN_ACTION)) {
+		return;
+	}
+
+	// The configuration is normally already on the page by now; this is what
+	// makes a checkout that calls the shortcode late still work.
+	if (! oko_enqueue_checkout_runtime()) {
+		return;
+	}
+
+	$settings = o_get_settings();
+
+	$resolved = oko_resolve_checkout_merchant();
+	$merchant = $resolved['merchant'];
+
+	// Latched only once we are certain we are drawing. A shop without a key
+	// renders nothing and stays free to render later in the same request, if
+	// a key arrives — which is what a settings save inside checkout does.
+	do_action(OKO_UI_DRAWN_ACTION);
+
 
 	// Emit a hidden input listing the product IDs currently in the cart, so
 	// the Svelte frontend can pass them to the home_delivery / sheds REST
@@ -584,7 +632,12 @@ function oko_resolve_checkout_merchant(): array
 		? \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_cart()
 		: array('merchant_id' => '', 'merchant' => null, 'is_mixed' => false, 'fell_back_to_default' => false, 'merchant_ids' => array(), 'per_product' => array());
 
-	if (empty($resolved['merchant'])) {
+	// A merchant without a key is as useless to the checkout as no merchant
+	// at all — the delivery UI refuses to draw for either. The router can
+	// hand one back when the cart routes to a merchant that has not been
+	// given its key yet, so test what the caller actually needs rather than
+	// whether the slot is filled.
+	if (empty($resolved['merchant']) || empty($resolved['merchant']['api_key'])) {
 		$resolved['merchant'] = o_get_merchant();
 	}
 
