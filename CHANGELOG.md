@@ -2,6 +2,32 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.5.2 - 2026-10-13
+
+Hastefejl: leveringsdatoen manglede for nye kunder.
+
+= Datovælgeren kom ikke frem =
+
+En kunde, der lagde en vare i kurven og gik til kassen, kunne se
+leveringsmåderne og knapperne Normal bestilling og Forudbestilling — men
+ingen leveringsdato, og dermed ingen mulighed for at bestille. Opdaterede
+man siden, kom datoen frem, og derfra blev den. Kunder, der var logget ind,
+mærkede det aldrig.
+
+Opsætningen til datovælgeren blev lagt på siden sammen med selve
+leveringsrækken. Den række tegnes også, når WooCommerce genberegner
+ordreoversigten undervejs — og i det øjeblik kan der ikke længere lægges
+scripts på siden. En kasse, hvis første visning ikke nåede at tegne rækken,
+endte derfor med en vælger, der ikke havde noget at starte på.
+
+Opsætningen lægges nu på siden med det samme, uafhængigt af hvornår rækken
+tegnes.
+
+= Forhandler uden API-nøgle =
+
+Ruter kurven til en forhandler, der endnu ikke har fået sin API-nøgle, falder
+kassen nu tilbage til standardforhandleren. Før blev der ikke tegnet noget.
+
 ## 1.5.1 - 2026-10-11
 
 Forudbestilling fra en periode, og dansk hele vejen rundt i indstillingerne.
