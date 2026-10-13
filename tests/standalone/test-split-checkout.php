@@ -654,27 +654,30 @@ it( 'offers to remove exactly the items that cannot be pre-ordered', function ()
 	assert_contains( $option['date_label'], $option['text'] );
 } );
 
-it( 'does not offer to quietly drop the customer out of the pre-order', function () {
+it( 'lists every way out, and says which order each one leaves behind', function () {
 	oko_split_pre_order_shop();
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
 	oko_test_set_pre_order( true );
 
-	// "Remove the ice and the rest can be delivered on Wednesday" would be true
-	// and would take the customer back out of the pre-order they asked for. The
-	// list they read is kept to the kind of order they asked for; the way out
-	// is the button, or the ordinary delivery's own "keep only this".
+	// This list used to keep to the kind of order the customer stood in, for
+	// fear of quietly taking their pre-order away. It does not: each line
+	// says which it leads to, and the handler sends them on to that checkout.
+	// Marc, 11 October: "jeg skal kunne have mulighed for at fjerne alle
+	// varer og ikke kun fra den ene kurv."
 	$GLOBALS['oko_test_settings']['_split_checkout_enabled'] = 'on';
 	$banner = oko_split_render_banner();
 
+	$modes = array();
 	foreach ( oko_split()->compute_removal_options() as $option ) {
-		$offered_in_list = strpos( $banner, 'value="' . $option['date'] . '"' ) !== false;
-		if ( $option['mode'] === 'normal' ) {
-			assert_false( $offered_in_list, 'the ordinary way out is not a line in the list' );
-			continue;
-		}
-		assert_true( $offered_in_list, 'the pre-order way out is' );
-		assert_false( in_array( 'Nougat ispinde', $option['remove_names'], true ), 'and it never gives up the pre-orderable item' );
+		$modes[ $option['mode'] ] = true;
+		assert_true(
+			strpos( $banner, 'value="' . $option['date'] . '"' ) !== false,
+			'every offer is a line in the list'
+		);
 	}
+
+	assert_true( isset( $modes['pre_order'] ), 'keeping the pre-order is one of them' );
+	assert_true( isset( $modes['normal'] ), 'and keeping the ordinary delivery is the other' );
 } );
 
 it( 'names which part is a pre-order and which is an ordinary delivery', function () {
