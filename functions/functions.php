@@ -2213,7 +2213,7 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
  * Shopify has always sent them apart; now so do we.
  *
  * @param \WC_Order $order
- * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,variant_title:string|null,sku:string,quantity:int}>
+ * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,variant_title:string|null,sku:string,quantity:int,tags:string[],properties:array,image:string}>
  */
 function oko_order_line_items(\WC_Order $order): array
 {
@@ -2247,6 +2247,9 @@ function oko_order_line_items(\WC_Order $order): array
 		$sku           = '';
 		$name          = (string) $item->get_name();
 		$variant_title = null;
+		$tags          = array();
+		$properties    = array();
+		$image         = '';
 
 		if ($item instanceof \WC_Order_Item_Product) {
 			$product_id = (int) $item->get_product_id();
@@ -2257,6 +2260,23 @@ function oko_order_line_items(\WC_Order $order): array
 			$product = $item->get_product();
 			if ($product instanceof \WC_Product) {
 				$sku = (string) $product->get_sku();
+
+				// What the packing room needs to know about the goods, sent
+				// with the order instead of fetched back afterwards.
+				//
+				// Økoskabet used to ask the shop for this once the packing
+				// room opened the day. That call goes the other way — in to
+				// the shop — and it can be stopped before WordPress ever sees
+				// it, as it is at Gaardmester. Then there is no producer, no
+				// country of origin and no zone to sort the dispatch notes by,
+				// and nothing anywhere says why. Sent on the line it cannot be
+				// stopped: the order is already on its way out.
+				//
+				// Same keys and same shapes as the lookup answers with, so
+				// nothing has to be translated at the other end.
+				$tags       = oko_product_tags($product);
+				$properties = oko_product_properties($product);
+				$image      = oko_product_image_url($product);
 			}
 
 			// A variation line: the goods are the parent product, and what the
@@ -2302,6 +2322,9 @@ function oko_order_line_items(\WC_Order $order): array
 			'variant_title' => $variant_title,
 			'sku'           => $sku,
 			'quantity'      => $quantity,
+			'tags'          => $tags,
+			'properties'    => $properties,
+			'image'         => $image,
 		);
 	}
 
@@ -3248,6 +3271,48 @@ function oko_status_events_as_chosen(array $events): array
  * @param \WC_Product $product
  * @return array<int,array{key:string,label:string,values:array<int,string>}>
  */
+/**
+ * The shop's own tags on a product, the way the lookup answers them.
+ *
+ * Tags are what Økoskabet splits dispatch notes into zones by, so they are
+ * the one field that must not go missing. They live on the product, never on
+ * the variation, so a variation is asked on its parent's behalf — otherwise a
+ * line for a variation would come back with no tags and fall out of its zone.
+ */
+function oko_product_tags(\WC_Product $product): array
+{
+	$id = $product instanceof \WC_Product_Variation
+		? (int) $product->get_parent_id()
+		: (int) $product->get_id();
+
+	return array_values(array_map('strval', (array) get_terms(array(
+		'taxonomy'   => 'product_tag',
+		'object_ids' => $id,
+		'fields'     => 'names',
+		'hide_empty' => false,
+	))));
+}
+
+/**
+ * The picture of the goods, the way the lookup answers it.
+ *
+ * A variation without its own picture answers the parent's: WooCommerce does
+ * that itself in `WC_Product_Variation::get_image_id()`, so the packing room
+ * sees what the customer saw without us arranging it. We wrote that fallback
+ * out by hand first; a mutation check showed the test passed without it, and
+ * WooCommerce's source said why. The test stays — it is the parent's picture
+ * we depend on arriving, whoever fetches it.
+ *
+ * An empty string, never null: the other end reads it as "no picture", and a
+ * missing picture is not an error.
+ */
+function oko_product_image_url(\WC_Product $product): string
+{
+	$image_id = (int) $product->get_image_id();
+
+	return $image_id > 0 ? (string) \wp_get_attachment_url($image_id) : '';
+}
+
 function oko_product_properties(\WC_Product $product): array
 {
 	// A variation is one choice out of the parent's list. Answering with the
@@ -3470,6 +3535,72 @@ function oko_variation_properties(\WC_Product_Variation $variation): array
 	}
 
 	return $properties;
+}
+
+/** When Økoskabet last reached this shop, per kind of call. */
+const OKO_INBOUND_SEEN_OPTION = 'okoskabet_inbound_last_seen';
+
+/**
+ * Remember that a call from Økoskabet arrived.
+ *
+ * Two roads run into the shop: the status messages that finish an order, and
+ * the product lookup the packing room needs for producer, country of origin
+ * and the tags it sorts dispatch notes by. Either can be stopped before
+ * WordPress ever sees it — a firewall in front of the site is enough, and at
+ * Gaardmester one is. Nothing breaks loudly when that happens: the packing
+ * room simply has nothing to sort by, and the shop has no way of telling that
+ * from a quiet day.
+ *
+ * The plugin cannot see a call that never arrives. What it can do is say when
+ * one last did, and let the shop draw the conclusion from "never".
+ *
+ * @param string $kind 'webhook' or 'products'.
+ */
+function oko_note_inbound_call(string $kind): void
+{
+	$seen = get_option(OKO_INBOUND_SEEN_OPTION, array());
+	$seen = is_array($seen) ? $seen : array();
+
+	// To the minute is plenty for "has anything come through lately", and it
+	// keeps a busy shop from writing this option on every single call.
+	if (isset($seen[$kind]) && (time() - (int) $seen[$kind]) < MINUTE_IN_SECONDS) {
+		return;
+	}
+
+	$seen[$kind] = time();
+
+	// Not autoloaded: read on one settings screen, never on the front end.
+	update_option(OKO_INBOUND_SEEN_OPTION, $seen, false);
+}
+
+/**
+ * When Økoskabet last reached this shop with a call of this kind, or null.
+ *
+ * @param string $kind 'webhook' or 'products'.
+ */
+function oko_inbound_last_seen(string $kind): ?int
+{
+	$seen = get_option(OKO_INBOUND_SEEN_OPTION, array());
+	$when = is_array($seen) && isset($seen[$kind]) ? (int) $seen[$kind] : 0;
+
+	return $when > 0 ? $when : null;
+}
+
+/**
+ * "2 hours ago", or "never" — for the shop, not for a log.
+ *
+ * A shop owner reading the settings page needs one of two answers: something
+ * came through recently, or nothing ever has. An exact timestamp invites them
+ * to work out the difference themselves.
+ */
+function oko_inbound_seen_label(?int $when): string
+{
+	if ($when === null) {
+		return __('never', O_TEXTDOMAIN);
+	}
+
+	/* translators: %s: human-readable time difference, e.g. "2 hours". */
+	return sprintf(__('%s ago', O_TEXTDOMAIN), human_time_diff($when, time()));
 }
 
 /** Set once the shop has saved the plugin settings at least once. */

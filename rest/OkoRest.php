@@ -859,13 +859,14 @@ class OkoRest extends Base
 				continue;
 			}
 
-			$image_id = (int) $product->get_image_id();
-
 			$products[] = array(
 				'id'    => $id,
 				'name'  => (string) $product->get_name(),
-				'image' => $image_id > 0 ? (string) \wp_get_attachment_url($image_id) : '',
-				'tags'  => array_values(array_map('strval', (array) \wp_get_post_terms($id, 'product_tag', array('fields' => 'names')))),
+				// Read through the same helpers the order lines use, so the
+				// two answers cannot drift apart. Økoskabet now gets these on
+				// the line as well, and fills from the lookup only to refresh.
+				'image' => \oko_product_image_url($product),
+				'tags'  => \oko_product_tags($product),
 				// Everything else the shop files this product under. A packing
 				// slip has to name the producer and the country of origin, and
 				// no two shops keep those in the same field — so the shop picks
@@ -873,6 +874,8 @@ class OkoRest extends Base
 				'properties' => \oko_product_properties($product),
 			);
 		}
+
+		\oko_note_inbound_call('products');
 
 		return new \WP_REST_Response($products, 200);
 	}
@@ -977,6 +980,11 @@ class OkoRest extends Base
 			}
 			return new \WP_Error('signature_invalid', 'Invalid HMAC signature', array('status' => 401));
 		}
+
+		// Økoskabet reached us and proved who it was. Noted here rather than at
+		// the end: what the shop needs to know is whether the road is open,
+		// and an event this shop does nothing with still came down it.
+		\oko_note_inbound_call('webhook');
 
 		// --- Step 3: Map Økoskabet's event semantics to internal names ---
 		// Read out of the signed body and nothing else. `get_params()` merges
