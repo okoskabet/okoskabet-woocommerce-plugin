@@ -1729,3 +1729,9 @@ msgstr "Varerne kunne ikke lægges til ordre %1$s (%2$s). Økoskabet har ikke f�
 
 msgid "The goods were added to order %s. No separate delivery."
 msgstr "Varerne er lagt til ordre %s. Ingen selvstændig levering."
+
+msgid "ADDITION — %s"
+msgstr "TILLÆG — %s"
+
+msgid "ADDITION: order %1$s was added %2$s. Its goods are at the bottom of the list."
+msgstr "TILLÆG: ordre %1$s er lagt til %2$s. Dens varer står nederst på listen."

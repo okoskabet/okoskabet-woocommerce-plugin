@@ -83,6 +83,71 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		delete_transient(o_configuration_transient_key($merchant['id']));
 	}
 
+	/**
+	 * The addition's goods go last and say what they are, and the shipment's
+	 * own note says one arrived — a packer who picked this order yesterday has
+	 * to be told, or the extra goods never leave the room.
+	 */
+	public function test_the_addition_is_marked_and_goes_last(): void
+	{
+		$sent = null;
+		remove_all_filters('pre_http_request');
+		add_filter('pre_http_request', static function ($preempt, $args, $url) use (&$sent) {
+			if (strpos($url, '/api/v1/shipments/') === false) {
+				return $preempt;
+			}
+			if (($args['method'] ?? 'GET') === 'PUT') {
+				$sent = json_decode($args['body'], true);
+			}
+
+			return array(
+				'response' => array('code' => 200),
+				'body'     => wp_json_encode(array('shipment' => array(
+					'status' => 'registered',
+					'notes'  => 'Stil den ved carporten',
+				))),
+			);
+		}, 10, 3);
+
+		$parent = new \WC_Order();
+		$parent->add_product(wc_get_product($this->a_product('Økologiske æg')), 2);
+		$parent->save();
+
+		$addition = new \WC_Order();
+		$addition->add_product(wc_get_product($this->a_product('Rugbrød')), 1);
+		$addition->save();
+
+		oko_send_addition_to_its_order($addition, (string) $parent->get_id(), array(
+			'id' => self::MERCHANT,
+			'api_key' => 'test-key',
+			'staging' => false,
+		));
+
+		$this->assertNotNull($sent, 'The shipment should have been updated.');
+
+		$names = array_column($sent['line_items'], 'name');
+		$this->assertSame('Økologiske æg', $names[0], "The earlier order's goods come first, untouched.");
+		$this->assertStringContainsString('Rugbrød', (string) end($names));
+		$this->assertStringStartsWith('ADDITION', (string) end($names), 'The addition has to announce itself on the line.');
+
+		$this->assertStringContainsString(
+			'Stil den ved carporten',
+			(string) $sent['notes'],
+			"The customer's own message must survive."
+		);
+		$this->assertStringContainsString('ADDITION', (string) $sent['notes']);
+	}
+
+	private function a_product(string $name): int
+	{
+		$product = new \WC_Product_Simple();
+		$product->set_name($name);
+		$product->set_regular_price('10');
+		$product->save();
+
+		return $product->get_id();
+	}
+
 	private function can_take_more(string $delivery_date): bool
 	{
 		$order = new \WC_Order();

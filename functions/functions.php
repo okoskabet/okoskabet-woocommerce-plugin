@@ -1848,7 +1848,12 @@ function oko_fee_tax_ratio(string $tax_class): float
 	return oko_tax_ratio(static fn(): array => WC_Tax::get_rates($tax_class));
 }
 
-add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
+// Late, so the fields are the ones the customer will actually see. Whether we
+// add a field of our own depends on whether the shop has one, and a shop that
+// removes its second address line at a later priority than ours would leave
+// the customer with neither: we would see it there, add nothing, and it would
+// then be taken away.
+add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields', 1000);
 add_filter('woocommerce_checkout_get_value', 'oko_checkout_starts_without_last_orders_choice', 10, 2);
 
 /**
@@ -2115,22 +2120,51 @@ function oko_send_addition_to_its_order($order, string $reference, array $mercha
 		return;
 	}
 
+	$url = o_merchant_api_url($merchant) . '/api/v1/shipments/' . rawurlencode($reference);
+
 	$parent = wc_get_order(absint($reference));
 	$lines  = $parent instanceof \WC_Order ? oko_order_line_items($parent) : array();
-	$lines  = array_merge($lines, oko_order_line_items($order));
 
-	$response = wp_remote_request(
-		o_merchant_api_url($merchant) . '/api/v1/shipments/' . rawurlencode($reference),
-		array(
-			'method'  => 'PUT',
-			'timeout' => 15,
-			'headers' => array(
-				'Content-Type'  => 'application/json',
-				'Authorization' => (string) $merchant['api_key'],
-			),
-			'body' => wp_json_encode(array('line_items' => $lines)),
-		)
+	// The addition's own goods last, and each one named as an addition. A
+	// packer who has already picked this order will not pick it again, so the
+	// extra goods have to announce themselves on the line itself — the slip
+	// prints the order's own title, and that is the one thing we decide. The
+	// product is found by its id, so this is what the paper says and nothing
+	// more.
+	foreach (oko_order_line_items($order) as $line) {
+		$line['name'] = sprintf(
+			/* translators: %s: the product's name. */
+			__('ADDITION — %s', O_TEXTDOMAIN),
+			(string) ($line['name'] ?? '')
+		);
+		$lines[] = $line;
+	}
+
+	$body = array('line_items' => $lines);
+
+	// And on the shipment itself, where someone looking at the delivery sees
+	// it. Added to what is already there: `notes` is replaced by a PUT, and the
+	// customer's own message is in it.
+	$notes = oko_shipment_notes($url, $merchant);
+	$added = sprintf(
+		/* translators: 1: the addition's order number, 2: the date it was placed. */
+		__('ADDITION: order %1$s was added %2$s. Its goods are at the bottom of the list.', O_TEXTDOMAIN),
+		$order->get_order_number(),
+		date_i18n(get_option('date_format'))
 	);
+	if ($notes !== null) {
+		$body['notes'] = $notes !== '' ? $notes . "\n" . $added : $added;
+	}
+
+	$response = wp_remote_request($url, array(
+		'method'  => 'PUT',
+		'timeout' => 15,
+		'headers' => array(
+			'Content-Type'  => 'application/json',
+			'Authorization' => (string) $merchant['api_key'],
+		),
+		'body' => wp_json_encode($body),
+	));
 
 	$code = is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response);
 
@@ -2151,6 +2185,37 @@ function oko_send_addition_to_its_order($order, string $reference, array $mercha
 		$reference
 	));
 	$order->save();
+}
+
+/**
+ * The note a shipment already carries.
+ *
+ * A `PUT` replaces it, and the customer's own message to the driver is in
+ * there — so it is read before anything is added to it. `null` says we could
+ * not read it, and the caller then leaves the note alone rather than writing
+ * over a message it never saw.
+ *
+ * @param string              $url      The shipment's own URL.
+ * @param array<string,mixed> $merchant The merchant record.
+ * @return string|null
+ */
+function oko_shipment_notes(string $url, array $merchant): ?string
+{
+	$response = wp_remote_get($url, array(
+		'timeout' => 10,
+		'headers' => array('Authorization' => (string) $merchant['api_key']),
+	));
+
+	if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+		return null;
+	}
+
+	$body = json_decode(wp_remote_retrieve_body($response), true);
+	if (! is_array($body) || ! isset($body['shipment'])) {
+		return null;
+	}
+
+	return (string) ($body['shipment']['notes'] ?? '');
 }
 
 /**
