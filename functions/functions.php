@@ -2869,11 +2869,7 @@ function custom_override_checkout_fields(array $fields): array
 			'label'       => __('Adding to an earlier order? Write its order number here', O_TEXTDOMAIN),
 			'placeholder' => '',
 			'required'    => false,
-			// `update_totals_on_change` is what makes WooCommerce recalculate
-			// when this is filled in. Without it the freight only changes when
-			// something else does, and a customer who typed the number saw the
-			// full price and was charged the free one — or the other way about.
-			'class'       => array('okoskabet-addon-order form-row-wide update_totals_on_change'),
+			'class'       => array('okoskabet-addon-order', 'form-row-wide'),
 			'clear'       => true,
 		);
 	}
@@ -2912,6 +2908,24 @@ function custom_override_checkout_fields(array $fields): array
 		'class'       => array('okoskabet-pre-order form-row-wide'),
 		'clear'       => true,
 	);
+
+
+	// Filling this in has to recalculate the freight, whosever field it is.
+	// WooCommerce listens on `.update_totals_on_change input.input-text`, so
+	// the class belongs on the row around the field — measured in its own
+	// checkout.min.js. Without it a customer typed the order number, saw the
+	// full freight, and was charged the free one at submit.
+	foreach (OKO_ADDON_FIELDS as $field) {
+		if (! isset($fields['billing'][$field])) {
+			continue;
+		}
+
+		$classes = (array) ($fields['billing'][$field]['class'] ?? array());
+		if (! in_array('update_totals_on_change', $classes, true)) {
+			$classes[] = 'update_totals_on_change';
+		}
+		$fields['billing'][$field]['class'] = $classes;
+	}
 
 	return $fields;
 }

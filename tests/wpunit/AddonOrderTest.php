@@ -58,6 +58,39 @@ class AddonOrderTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * Filling the field in has to recalculate the freight, whosever field it is.
+	 *
+	 * WooCommerce listens on `.update_totals_on_change input.input-text`, so
+	 * the class belongs on the row around the field. Without it a customer
+	 * typed the order number on Gaardmester's staging, saw 106 kr, and nothing
+	 * moved — the free freight would only have arrived at submit.
+	 */
+	public function test_the_shops_own_field_recalculates_the_freight(): void
+	{
+		$fields = custom_override_checkout_fields(array('billing' => array(
+			'billing_order_id' => array('label' => 'Tillægsordre', 'class' => array('form-row-wide')),
+		)));
+
+		$this->assertContains(
+			'update_totals_on_change',
+			$fields['billing']['billing_order_id']['class'],
+			"The shop's own add-on field must recalculate the totals."
+		);
+		$this->assertContains('form-row-wide', $fields['billing']['billing_order_id']['class']);
+	}
+
+	/** And ours, for the shops without one. */
+	public function test_our_own_field_recalculates_the_freight(): void
+	{
+		$fields = custom_override_checkout_fields(array('billing' => array()));
+
+		$this->assertContains(
+			'update_totals_on_change',
+			$fields['billing']['billing_okoskabet_addon_order']['class']
+		);
+	}
+
 	/** The shop's own field is read. */
 	public function test_the_shops_own_field_is_read(): void
 	{
