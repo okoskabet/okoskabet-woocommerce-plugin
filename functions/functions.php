@@ -2151,6 +2151,34 @@ function oko_checkout_starts_without_last_orders_choice($value, $input)
 }
 
 /**
+ * The order this one is an addition to, as the customer wrote it.
+ *
+ * A shop's own field first — gaardmester.dk has `billing_order_id`, labelled
+ * "Tillægsordre: Udfyld dit tidligere ordre-id her" — and our own field for the
+ * shops without one. Whatever the customer typed, unchanged: it is their word
+ * for which order this belongs to, and it is shown to a person, never resolved
+ * into anything on its own.
+ *
+ * @param \WC_Order $order Order to read.
+ * @return string The earlier order's number, or an empty string.
+ */
+function oko_order_addon_of($order): string
+{
+	if (! $order instanceof \WC_Order) {
+		return '';
+	}
+
+	foreach (array('_billing_order_id', '_billing_okoskabet_addon_order') as $key) {
+		$value = trim((string) $order->get_meta($key, true));
+		if ($value !== '') {
+			return $value;
+		}
+	}
+
+	return '';
+}
+
+/**
  * The flat, floor and door for an order, as the address line the register reads.
  *
  * WooCommerce's own second address line first: a shop that has one is where the
@@ -2217,6 +2245,19 @@ function custom_override_checkout_fields(array $fields): array
 		'class'       => array('okoskabet-delivery-note form-row-wide'),
 		'clear'       => true,
 	);
+
+	// Which order this one is an addition to. Gaardmester asks for it already,
+	// in a field of their own; this is for the shops that do not, so the
+	// question is asked the same way everywhere.
+	if (!isset($fields['billing']['billing_order_id'])) {
+		$fields['billing']['billing_okoskabet_addon_order'] = array(
+			'label'       => __('Adding to an earlier order? Write its order number here', O_TEXTDOMAIN),
+			'placeholder' => '',
+			'required'    => false,
+			'class'       => array('okoskabet-addon-order form-row-wide'),
+			'clear'       => true,
+		);
+	}
 
 	// The flat, floor and door — but only for a shop whose checkout has no
 	// second address line of its own. The register refuses a block of flats
@@ -2607,9 +2648,63 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		}
 	}
 
+	// First line of the note, above everything else: whoever reads this in the
+	// packing room or the backoffice has to know that the box belongs with
+	// another order before they read anything about where to put it down. The
+	// API's own two order fields are taken — they carry this order's own id and
+	// reference — and this is the one place a person is certain to look.
+	$addon_of = oko_order_addon_of($order);
+	if ($addon_of !== '') {
+		/* translators: %s: the earlier order's number, as the customer wrote it. */
+		$line = sprintf(__('Addition to order %s', O_TEXTDOMAIN), $addon_of);
+		$data['notes'] = $data['notes'] !== '' ? $line . "\n" . $data['notes'] : $line;
+	}
+
 	return $data;
 }
 
+
+add_action('woocommerce_checkout_order_processed', 'oko_link_addon_to_earlier_order', 20, 3);
+
+/**
+ * Write the two orders onto each other, so an addition is not a loose order.
+ *
+ * The customer tells us the earlier order's number; nothing else connects the
+ * two, and a shop looking at either one has no way to see the other. A note on
+ * both is what makes them hang together where the shop actually works, and it
+ * survives everything: no new table, no meta to migrate, visible to any plugin
+ * that reads order notes.
+ *
+ * The earlier order is looked up only to write on it. A number that matches
+ * nothing — a typo, or an order from another shop — still leaves the note on
+ * this order, because what the customer told us is worth keeping either way.
+ *
+ * @param int       $order_id    The new order's id.
+ * @param array     $posted_data Posted checkout data (unused).
+ * @param \WC_Order $order       The new order.
+ */
+function oko_link_addon_to_earlier_order(int $order_id, array $posted_data, $order): void
+{
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	$addon_of = oko_order_addon_of($order);
+	if ($addon_of === '') {
+		return;
+	}
+
+	/* translators: %s: the earlier order's number, as the customer wrote it. */
+	$order->add_order_note(sprintf(__('Addition to order %s', O_TEXTDOMAIN), $addon_of));
+
+	$earlier = wc_get_order(absint($addon_of));
+	if (! $earlier instanceof \WC_Order || $earlier->get_id() === $order->get_id()) {
+		return;
+	}
+
+	/* translators: %s: the new order's number. */
+	$earlier->add_order_note(sprintf(__('Order %s is an addition to this one', O_TEXTDOMAIN), $order->get_order_number()));
+}
 
 add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
 
