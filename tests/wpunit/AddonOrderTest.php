@@ -29,6 +29,35 @@ class AddonOrderTest extends \Codeception\TestCase\WPTestCase
 		$this->assertArrayHasKey('billing_okoskabet_addon_order', $fields['billing']);
 	}
 
+	/**
+	 * A fresh checkout starts without the last order's number.
+	 *
+	 * WooCommerce gives a custom checkout field back on the customer's next
+	 * visit, which for an address is a kindness and for this one is a trap: the
+	 * next ordinary order would open with the last one's number already in it
+	 * and ride along with a delivery nobody meant to add to, for no freight.
+	 * Seen on Gaardmester's staging, where a fresh checkout opened with 87893.
+	 */
+	public function test_a_fresh_checkout_does_not_remember_the_last_addition(): void
+	{
+		foreach (array('billing_order_id', 'billing_okoskabet_addon_order') as $field) {
+			$this->assertSame(
+				'',
+				apply_filters('woocommerce_checkout_get_value', '87893', $field),
+				$field . ' should not come back on the next checkout.'
+			);
+		}
+	}
+
+	/** An address, though, is worth remembering. */
+	public function test_a_fresh_checkout_still_remembers_the_address(): void
+	{
+		$this->assertSame(
+			'Korsløkkevej 51',
+			apply_filters('woocommerce_checkout_get_value', 'Korsløkkevej 51', 'billing_address_1')
+		);
+	}
+
 	/** The shop's own field is read. */
 	public function test_the_shops_own_field_is_read(): void
 	{

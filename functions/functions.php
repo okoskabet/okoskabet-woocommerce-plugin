@@ -2690,6 +2690,13 @@ function oko_checkout_starts_without_last_orders_choice($value, $input)
 		'billing_okoskabet_shed_id',
 		'billing_okoskabet_pickup_location_id',
 		'billing_okoskabet_pre_order',
+		// Which order an addition belongs to, in either shop's field. Left to
+		// come back, the next ordinary order opens with the last one's number
+		// still in it — and rides along with a delivery the customer never
+		// meant to add to, for no freight. Seen on Gaardmester's staging: a
+		// fresh checkout opened with 87893 already there.
+		'billing_order_id',
+		'billing_okoskabet_addon_order',
 	);
 	// A pre-order the customer asked for on this page is not a leftover. The
 	// field has to say so, or the banner would render as a pre-order while the
