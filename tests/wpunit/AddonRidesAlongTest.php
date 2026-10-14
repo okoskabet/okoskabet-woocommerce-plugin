@@ -118,7 +118,7 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		$addition->add_product(wc_get_product($this->a_product('Rugbrød')), 1);
 		$addition->save();
 
-		oko_send_addition_to_its_order($addition, (string) $parent->get_id(), array(
+		oko_send_addition_to_its_order($addition, (string) $parent->get_id(), (string) $parent->get_id(), array(
 			'id' => self::MERCHANT,
 			'api_key' => 'test-key',
 			'staging' => false,

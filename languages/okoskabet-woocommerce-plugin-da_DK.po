@@ -1718,8 +1718,6 @@ msgstr "Tillæg til ordre %s"
 msgid "Order %s is an addition to this one"
 msgstr "Ordre %s er et tillæg til denne"
 
-msgid "That order has already been sent, so this cannot be added to it. It is ordered on its own, with its own delivery."
-msgstr "Den ordre er allerede sendt afsted, så dette kan ikke lægges til den. Det bestilles for sig, med sin egen levering."
 
 msgid "We cannot find that order number on your email address. This is ordered on its own, with its own delivery."
 msgstr "Vi kan ikke finde det ordrenummer på din mailadresse. Dette bestilles for sig, med sin egen levering."
@@ -1738,3 +1736,9 @@ msgstr "TILLÆG: ordre %1$s er lagt til %2$s. Dens varer står nederst på liste
 
 msgid "That order can no longer take anything more. This is ordered on its own, with its own delivery."
 msgstr "Den ordre kan ikke tage imod mere. Dette bestilles for sig, med sin egen levering."
+
+msgid "Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order."
+msgstr "Ordre %s kunne ikke læses, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
+
+msgid "The goods for order %s could not be encoded, so nothing was sent. Økoskabet has not been told about this order."
+msgstr "Varerne til ordre %s kunne ikke pakkes til afsendelse, så intet blev sendt. Økoskabet har ikke fået besked om denne ordre."
