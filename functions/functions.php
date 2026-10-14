@@ -2150,6 +2150,32 @@ function oko_checkout_starts_without_last_orders_choice($value, $input)
 	return $value;
 }
 
+/**
+ * The flat, floor and door for an order, as the address line the register reads.
+ *
+ * WooCommerce's own second address line first: a shop that has one is where the
+ * customer wrote it, and `billing_okoskabet_floor` is not even on that checkout.
+ * Our own field answers for the shops that removed theirs — gaardmester.dk among
+ * them, where a customer typing "3. th" had nowhere to put it and every address
+ * in a block of flats was refused by the register.
+ *
+ * @param \WC_Order $order Order to read.
+ * @return string The flat, floor and door, or an empty string.
+ */
+function oko_order_floor($order): string
+{
+	if (! $order instanceof \WC_Order) {
+		return '';
+	}
+
+	$address_2 = trim((string) $order->get_shipping_address_2());
+	if ($address_2 !== '') {
+		return $address_2;
+	}
+
+	return trim((string) $order->get_meta('_billing_okoskabet_floor', true));
+}
+
 function custom_override_checkout_fields(array $fields): array
 {
 	$fields['billing']['billing_okoskabet_shed_id'] = array(
@@ -2191,6 +2217,26 @@ function custom_override_checkout_fields(array $fields): array
 		'class'       => array('okoskabet-delivery-note form-row-wide'),
 		'clear'       => true,
 	);
+
+	// The flat, floor and door — but only for a shop whose checkout has no
+	// second address line of its own. The register refuses a block of flats
+	// given without a floor ("Etage findes ikke på adresse på husnummer"), and
+	// the order lands among the unprocessable ones; a customer who has nowhere
+	// to write "3. th" cannot be delivered to. A shop that already asks keeps
+	// its own field, and nobody is asked the same thing twice.
+	if (!isset($fields['billing']['billing_address_2'])) {
+		$fields['billing']['billing_okoskabet_floor'] = array(
+			'label'       => __('Flat, floor and door', O_TEXTDOMAIN),
+			'placeholder' => __('e.g. 3. th', O_TEXTDOMAIN),
+			'required'    => false,
+			'class'       => array('okoskabet-floor form-row-wide'),
+			'clear'       => true,
+			// Straight after the street, where the line it stands in for would
+			// have been. WooCommerce orders the billing form by priority, and
+			// the address is 50.
+			'priority'    => 55,
+		);
+	}
 
 	// "1" while the customer is placing a pre-order. Kept in the billing form
 	// rather than the order review, which WooCommerce rebuilds on every
@@ -2257,6 +2303,12 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 	}
 	if (!empty($delivery_location)) {
 		echo esc_html__('Økoskabet Delivery location', O_TEXTDOMAIN) . ': ' . esc_html($delivery_location) . "\n";
+	}
+	// Only our own field here: a second address line of the shop's own is
+	// already on the order's address, right above this box.
+	$floor = (string) $order->get_meta('_billing_okoskabet_floor', true);
+	if ($floor !== '') {
+		echo esc_html__('Flat, floor and door', O_TEXTDOMAIN) . ': ' . esc_html($floor) . "\n";
 	}
 	if (!empty($delivery_note)) {
 		echo esc_html__('Note to driver', O_TEXTDOMAIN) . ': ' . esc_html($delivery_note);
@@ -2536,7 +2588,7 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		$data['home_delivery'] = array_filter([
 			'recipient_name' => $recipient_name,
 			'address_1'      => $order->get_shipping_address_1(),
-			'address_2'      => $order->get_shipping_address_2(),
+			'address_2'      => oko_order_floor($order),
 			'city'           => $order->get_shipping_city(),
 			'postal_code'    => $order->get_shipping_postcode(),
 			// Combined English location + free-text note, or null if empty.
