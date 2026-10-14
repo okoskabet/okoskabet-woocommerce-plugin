@@ -1109,10 +1109,36 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		// Filling the cell: the two buttons side by side in equal halves, one
 		// under the other when the cell is too narrow, and the note spanning
 		// the same width above them. Never wider than the cell it sits in.
-		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;';
+		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:grid;gap:8px;';
 		var bs=choice.querySelectorAll('.okoskabet-pre-order-toggle');
 		for(var j=0;j<bs.length;j++){bs[j].style.margin='0';bs[j].style.whiteSpace='normal';}
 		th.appendChild(choice);
+
+		// How narrow a column may get before the two buttons go one above the
+		// other. A fixed figure cannot know the shop's own wording or the
+		// theme's type size: "FORUDBESTILLING" is one word, so where it does
+		// not fit it does not wrap either — it runs out of its own button, as
+		// it did on a phone. So measure the widest label on one line and let
+		// that be the floor.
+		//
+		// After the move into the shipping cell, not before: until then the
+		// buttons sit in their own row, which is served hidden, and a hidden
+		// element measures zero. Measuring first answered 0 for both buttons
+		// and quietly left the old fixed figure in force.
+		//
+		// And measured at max-content, because a button in the grid is already
+		// stretched to the full cell: read as it stands, the widest label came
+		// back as the whole cell, which would have put the two buttons under
+		// each other at every width.
+		var floor=0;
+		for(j=0;j<bs.length;j++){
+			bs[j].style.whiteSpace='nowrap';
+			bs[j].style.width='max-content';
+			floor=Math.max(floor,Math.ceil(bs[j].getBoundingClientRect().width));
+			bs[j].style.width='';
+			bs[j].style.whiteSpace='normal';
+		}
+		choice.style.gridTemplateColumns='repeat(auto-fit,minmax(min(100%,'+(floor||150)+'px),1fr))';
 		th.style.paddingBottom=(choice.offsetHeight+32)+'px';
 
 		// In line with the date picker next to it, once there is one: the
@@ -1171,6 +1197,58 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		shipping.parentNode.insertBefore(row,shipping.nextSibling);
 	}
 
+	// What the customer has typed, carried across the reload above.
+	//
+	// Pressing Forudbestilling in the middle of filling the form used to empty
+	// it: the page came back from the server, and a name, an address and a
+	// phone number went with it. WooCommerce remembers some of the address in
+	// the session, but not the name, the e-mail or the phone, and the customer
+	// had no way of knowing which. So the form is written down just before the
+	// reload and put back when the page returns.
+	//
+	// sessionStorage, not a cookie: it stays in this tab, never goes to the
+	// server, and is gone when the tab closes. Only what the customer typed
+	// into this very form, and only to hand it straight back to them.
+	var KEEP='okoskabet_typed';
+	function okoskabetFields(){
+		var form=document.querySelector('form.checkout, form[name="checkout"]');
+		return form?form.querySelectorAll('input[type=text],input[type=email],input[type=tel],input[type=number],textarea'):[];
+	}
+	function okoskabetKeepTyped(){
+		try{
+			var out={},fs=okoskabetFields();
+			for(var i=0;i<fs.length;i++){
+				// Our own fields are decided by the choice being made, not by
+				// the customer, and the server fills them in again.
+				if(!fs[i].name||fs[i].name.indexOf('okoskabet')>-1||!fs[i].value){continue;}
+				out[fs[i].name]=fs[i].value;
+			}
+			sessionStorage.setItem(KEEP,JSON.stringify(out));
+		}catch(err){}
+	}
+	function okoskabetRestoreTyped(){
+		var saved;
+		try{
+			saved=sessionStorage.getItem(KEEP);
+			sessionStorage.removeItem(KEEP);
+		}catch(err){return;}
+		if(!saved){return;}
+		try{saved=JSON.parse(saved);}catch(err){return;}
+		var fs=okoskabetFields(),touched=false;
+		for(var i=0;i<fs.length;i++){
+			// Never over the server's own answer: it knows things the customer
+			// does not type, and a field it filled is a field it meant.
+			if(!fs[i].name||fs[i].value||!saved[fs[i].name]){continue;}
+			fs[i].value=saved[fs[i].name];
+			touched=true;
+		}
+		// The address decides the shipping and the days, so the recalculation
+		// has to see it. Without this the customer gets their address back and
+		// prices worked out for the one before it.
+		if(touched&&window.jQuery){window.jQuery(document.body).trigger('update_checkout');}
+	}
+	okoskabetRestoreTyped();
+
 	if(window.okoskabetPreOrderBound){return;}
 	window.okoskabetPreOrderBound=true;
 	document.addEventListener('click',function(e){
@@ -1189,7 +1267,7 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		// that banner sits above the form, which WooCommerce does not rebuild
 		// on a recalculation. Reload carrying the choice, so the whole page
 		// agrees about which kind of order this is.
-		if(SPLIT_ON){window.location.href=wanted==='1'?PRE_ORDER_URL:NORMAL_URL;return;}
+		if(SPLIT_ON){okoskabetKeepTyped();window.location.href=wanted==='1'?PRE_ORDER_URL:NORMAL_URL;return;}
 		if(window.okoskabetWarmDeliveryDates){window.okoskabetWarmDeliveryDates();}
 		if(window.jQuery){window.jQuery(document.body).trigger('update_checkout');}
 	},true);
