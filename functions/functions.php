@@ -2079,8 +2079,11 @@ function oko_addon_say_if_it_is_too_late(): void
 		return;
 	}
 
+	// "Already sent" is not always true — the order may be cancelled, or past
+	// the day's cutoff — and a shop should not tell a customer something that
+	// is not so. What they need is the same either way: it cannot take more.
 	$message = $answer['reason'] === 'too_late'
-		? __('That order has already been sent, so this cannot be added to it. It is ordered on its own, with its own delivery.', O_TEXTDOMAIN)
+		? __('That order can no longer take anything more. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN)
 		: __('We cannot find that order number on your email address. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN);
 
 	echo '<tr class="okoskabet-addon-notice"><td colspan="2">' . esc_html($message) . '</td></tr>';
