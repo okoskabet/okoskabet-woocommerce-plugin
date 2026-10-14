@@ -1717,3 +1717,15 @@ msgstr "Tillæg til ordre %s"
 
 msgid "Order %s is an addition to this one"
 msgstr "Ordre %s er et tillæg til denne"
+
+msgid "That order has already been sent, so this cannot be added to it. It is ordered on its own, with its own delivery."
+msgstr "Den ordre er allerede sendt afsted, så dette kan ikke lægges til den. Det bestilles for sig, med sin egen levering."
+
+msgid "We cannot find that order number on your email address. This is ordered on its own, with its own delivery."
+msgstr "Vi kan ikke finde det ordrenummer på din mailadresse. Dette bestilles for sig, med sin egen levering."
+
+msgid "The goods could not be added to order %1$s (%2$s). Økoskabet has not been told about this order."
+msgstr "Varerne kunne ikke lægges til ordre %1$s (%2$s). Økoskabet har ikke fået besked om denne ordre."
+
+msgid "The goods were added to order %s. No separate delivery."
+msgstr "Varerne er lagt til ordre %s. Ingen selvstændig levering."

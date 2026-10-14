@@ -95,45 +95,6 @@ class AddonOrderTest extends \Codeception\TestCase\WPTestCase
 		$this->assertNotEmpty($this->notes_matching($addition, '99999999'));
 	}
 
-	/**
-	 * And Økoskabet is told, on the first line of the note: the packing room
-	 * has to know the box belongs with another order before anything else.
-	 */
-	public function test_okoskabet_is_told_on_the_first_line(): void
-	{
-		$order = new \WC_Order();
-		$order->set_shipping_address_1('Lysbrolysningen 8');
-		$order->set_shipping_postcode('8600');
-		$order->set_shipping_city('Silkeborg');
-		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-11-05');
-		$order->update_meta_data('_billing_order_id', '88311');
-		$order->save();
-
-		$payload = oko_shipment_payload($order, array('api_key' => 'x', 'merchant_id' => 'gaardmester'));
-
-		$this->assertNotNull($payload, 'An order with a delivery date should produce a payload.');
-		$this->assertStringStartsWith(
-			'Addition to order 88311',
-			(string) $payload['notes'],
-			'The addition must be the first thing read in the note.'
-		);
-	}
-
-	/** An ordinary order carries no such line. */
-	public function test_an_ordinary_order_carries_no_addition_line(): void
-	{
-		$order = new \WC_Order();
-		$order->set_shipping_address_1('Lysbrolysningen 8');
-		$order->set_shipping_postcode('8600');
-		$order->set_shipping_city('Silkeborg');
-		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-11-05');
-		$order->save();
-
-		$payload = oko_shipment_payload($order, array('api_key' => 'x', 'merchant_id' => 'gaardmester'));
-
-		$this->assertStringNotContainsString('Addition to order', (string) $payload['notes']);
-	}
-
 	/** @return array<int,\WP_Comment> */
 	private function notes_matching(\WC_Order $order, string $needle): array
 	{
