@@ -1708,3 +1708,12 @@ msgstr "Lejlighed, etage og dør"
 
 msgid "e.g. 3. th"
 msgstr "f.eks. 3. th"
+
+msgid "Adding to an earlier order? Write its order number here"
+msgstr "Tillæg til en tidligere ordre? Skriv ordrenummeret her"
+
+msgid "Addition to order %s"
+msgstr "Tillæg til ordre %s"
+
+msgid "Order %s is an addition to this one"
+msgstr "Ordre %s er et tillæg til denne"
