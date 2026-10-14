@@ -102,10 +102,11 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 
 			return array(
 				'response' => array('code' => 200),
-				'body'     => wp_json_encode(array('shipment' => array(
-					'status' => 'registered',
-					'notes'  => 'Stil den ved carporten',
-				))),
+				'body'     => wp_json_encode(array(
+					'shipment_reference' => '87893',
+					'status'             => 'registered',
+					'notes'              => 'Stil den ved carporten',
+				)),
 			);
 		}, 10, 3);
 
@@ -176,6 +177,13 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * As `GET /shipments/{reference}` really answers: the shipment itself, not
+	 * wrapped. Only `POST` and `PUT` put it under `shipment`. Reading only the
+	 * wrapped shape made every lookup look like a shipment with no status, and
+	 * every addition was refused as "already sent" — on Gaardmester's staging,
+	 * against an order that was plainly registered.
+	 */
 	private function given_shipment_status(string $status): void
 	{
 		remove_all_filters('pre_http_request');
@@ -186,7 +194,11 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 
 			return array(
 				'response' => array('code' => 200),
-				'body'     => wp_json_encode(array('shipment' => array('status' => $status))),
+				'body'     => wp_json_encode(array(
+					'shipment_reference' => '87893',
+					'status'             => $status,
+					'notes'              => 'Stil den ved carporten',
+				)),
 			);
 		}, 10, 3);
 	}

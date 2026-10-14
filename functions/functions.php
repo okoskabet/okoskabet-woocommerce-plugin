@@ -2188,6 +2188,32 @@ function oko_send_addition_to_its_order($order, string $reference, array $mercha
 }
 
 /**
+ * The shipment in an answer from Økoskabet, whichever way it is wrapped.
+ *
+ * `GET /shipments/{reference}` answers with the shipment itself, while `POST`
+ * and `PUT` answer with it under `shipment` beside the errors. Reading only the
+ * wrapped shape made every `GET` look like a shipment with no status at all —
+ * which, on an addition, read as "that order has already been sent" and
+ * refused every one of them.
+ *
+ * @param string $body The response body.
+ * @return array<string,mixed>|null The shipment, or null when there is none.
+ */
+function oko_shipment_from_body(string $body): ?array
+{
+	$decoded = json_decode($body, true);
+	if (! is_array($decoded)) {
+		return null;
+	}
+
+	if (isset($decoded['shipment']) && is_array($decoded['shipment'])) {
+		return $decoded['shipment'];
+	}
+
+	return isset($decoded['shipment_reference']) ? $decoded : null;
+}
+
+/**
  * The note a shipment already carries.
  *
  * A `PUT` replaces it, and the customer's own message to the driver is in
@@ -2210,12 +2236,12 @@ function oko_shipment_notes(string $url, array $merchant): ?string
 		return null;
 	}
 
-	$body = json_decode(wp_remote_retrieve_body($response), true);
-	if (! is_array($body) || ! isset($body['shipment'])) {
+	$shipment = oko_shipment_from_body(wp_remote_retrieve_body($response));
+	if ($shipment === null) {
 		return null;
 	}
 
-	return (string) ($body['shipment']['notes'] ?? '');
+	return (string) ($shipment['notes'] ?? '');
 }
 
 /**
@@ -2352,8 +2378,7 @@ function oko_shipment_still_with_merchant($order, array $merchant): bool
 		return false;
 	}
 
-	$body = json_decode(wp_remote_retrieve_body($response), true);
-	$shipment = (array) ($body['shipment'] ?? array());
+	$shipment = oko_shipment_from_body(wp_remote_retrieve_body($response));
 
 	return (string) ($shipment['status'] ?? '') === 'registered';
 }
