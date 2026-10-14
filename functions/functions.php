@@ -1112,12 +1112,19 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:grid;gap:8px;';
 		var bs=choice.querySelectorAll('.okoskabet-pre-order-toggle');
 		for(var j=0;j<bs.length;j++){bs[j].style.margin='0';bs[j].style.whiteSpace='normal';}
+		th.appendChild(choice);
+
 		// How narrow a column may get before the two buttons go one above the
 		// other. A fixed figure cannot know the shop's own wording or the
 		// theme's type size: "FORUDBESTILLING" is one word, so where it does
 		// not fit it does not wrap either — it runs out of its own button, as
-		// it did on a phone. Measure the widest label on one line and let that
-		// be the floor.
+		// it did on a phone. So measure the widest label on one line and let
+		// that be the floor.
+		//
+		// After the move into the shipping cell, not before: until then the
+		// buttons sit in their own row, which is served hidden, and a hidden
+		// element measures zero. Measuring first answered 0 for both buttons
+		// and quietly left the old fixed figure in force.
 		var floor=0;
 		for(j=0;j<bs.length;j++){
 			bs[j].style.whiteSpace='nowrap';
@@ -1125,7 +1132,6 @@ function oko_print_checkout_layout_script(string $separate_label): void
 			bs[j].style.whiteSpace='normal';
 		}
 		choice.style.gridTemplateColumns='repeat(auto-fit,minmax(min(100%,'+(floor||150)+'px),1fr))';
-		th.appendChild(choice);
 		th.style.paddingBottom=(choice.offsetHeight+32)+'px';
 
 		// In line with the date picker next to it, once there is one: the
