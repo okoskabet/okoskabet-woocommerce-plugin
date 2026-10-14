@@ -2004,6 +2004,34 @@ function oko_addon_in_checkout(): array
 	return $answer;
 }
 
+add_filter('woocommerce_cart_shipping_packages', 'oko_addon_in_the_package');
+
+/**
+ * Put the addition into the package, so the rates are worked out again.
+ *
+ * WooCommerce keeps a package's rates in the session under a hash of the
+ * package, and a checkout that recalculates reuses them unless that hash
+ * changes. Our field is not part of a package, so zeroing the freight had no
+ * effect until something else — an address, an item — happened to change: the
+ * customer saw the full freight on an order that rides along for nothing.
+ *
+ * @param array<int,array<string,mixed>> $packages The shipping packages.
+ * @return array<int,array<string,mixed>>
+ */
+function oko_addon_in_the_package(array $packages): array
+{
+	$number = oko_addon_number_in_checkout();
+	if ($number === '') {
+		return $packages;
+	}
+
+	foreach ($packages as $i => $package) {
+		$packages[$i]['okoskabet_addon_of'] = $number;
+	}
+
+	return $packages;
+}
+
 add_filter('woocommerce_package_rates', 'oko_addon_rides_along_for_free', 20, 2);
 
 /**
