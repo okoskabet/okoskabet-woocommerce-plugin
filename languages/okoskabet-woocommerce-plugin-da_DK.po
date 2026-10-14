@@ -1683,3 +1683,22 @@ msgstr "Importér"
 
 msgid "okoskabet-woocommerce-plugin is on production environment with missing `composer dumpautoload -o` that will improve the performance on autoloading itself."
 msgstr "okoskabet-woocommerce-plugin kører i produktionsmiljø uden `composer dumpautoload -o`, som ville gøre dets egen autoloading hurtigere."
+
+msgid "Contact from Økoskabet"
+msgstr "Kontakt fra Økoskabet"
+
+msgid "Last status message received: %s"
+msgstr "Seneste statusbesked modtaget: %s"
+
+msgid "Last product lookup received: %s"
+msgstr "Seneste vareopslag modtaget: %s"
+
+msgid "Both are calls from Økoskabet into this shop. \"Never\" means they are not getting through — usually a firewall or a security plugin in front of the site, not a setting here."
+msgstr "Begge er kald fra Økoskabet ind i denne butik. »Aldrig« betyder, at de ikke kommer igennem — oftest en firewall eller et sikkerhedsplugin foran siden, ikke en indstilling her."
+
+msgid "never"
+msgstr "aldrig"
+
+#. translators: %s: human-readable time difference, e.g. "2 hours".
+msgid "%s ago"
+msgstr "for %s siden"
