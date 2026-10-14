@@ -1702,3 +1702,9 @@ msgstr "aldrig"
 #. translators: %s: human-readable time difference, e.g. "2 hours".
 msgid "%s ago"
 msgstr "for %s siden"
+
+msgid "Flat, floor and door"
+msgstr "Lejlighed, etage og dør"
+
+msgid "e.g. 3. th"
+msgstr "f.eks. 3. th"
