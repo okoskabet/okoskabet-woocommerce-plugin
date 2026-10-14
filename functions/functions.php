@@ -1125,10 +1125,17 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		// buttons sit in their own row, which is served hidden, and a hidden
 		// element measures zero. Measuring first answered 0 for both buttons
 		// and quietly left the old fixed figure in force.
+		//
+		// And measured at max-content, because a button in the grid is already
+		// stretched to the full cell: read as it stands, the widest label came
+		// back as the whole cell, which would have put the two buttons under
+		// each other at every width.
 		var floor=0;
 		for(j=0;j<bs.length;j++){
 			bs[j].style.whiteSpace='nowrap';
+			bs[j].style.width='max-content';
 			floor=Math.max(floor,Math.ceil(bs[j].getBoundingClientRect().width));
+			bs[j].style.width='';
 			bs[j].style.whiteSpace='normal';
 		}
 		choice.style.gridTemplateColumns='repeat(auto-fit,minmax(min(100%,'+(floor||150)+'px),1fr))';
