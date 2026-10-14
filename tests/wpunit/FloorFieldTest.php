@@ -40,6 +40,34 @@ class FloorFieldTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * Decided on the fields the customer will actually see.
+	 *
+	 * A shop that takes its second address line away at a later priority than
+	 * ours used to leave the customer with neither: we saw it there, added
+	 * nothing, and it was then removed. Run through the real filter, with such
+	 * a shop, so the priority is what is being tested and not our own call.
+	 */
+	public function test_a_shop_that_removes_its_line_after_us_still_gets_ours(): void
+	{
+		add_filter('woocommerce_checkout_fields', static function (array $fields): array {
+			unset($fields['billing']['billing_address_2']);
+			return $fields;
+		}, 20);
+
+		$fields = apply_filters('woocommerce_checkout_fields', array('billing' => array(
+			'billing_address_1' => array('label' => 'Gadenavn og nr'),
+			'billing_address_2' => array('label' => 'Lejlighed, etage og dør'),
+		)));
+
+		$this->assertArrayNotHasKey('billing_address_2', $fields['billing'], 'The shop still removes its own.');
+		$this->assertArrayHasKey(
+			'billing_okoskabet_floor',
+			$fields['billing'],
+			'And ours takes its place, instead of the customer having neither.'
+		);
+	}
+
 	/** The shop's own second line is where the customer wrote it. */
 	public function test_the_shops_own_address_line_2_is_what_is_sent(): void
 	{
