@@ -2356,6 +2356,30 @@ function oko_shipment_at_okoskabet(string $reference, array $merchant): ?array
 }
 
 /**
+ * The second address line for the delivery, wherever the customer wrote it.
+ *
+ * The shipping address first, as it should be. But a shop whose checkout has
+ * no second shipping line never gets one: WooCommerce copies billing to
+ * shipping only for the fields the shipping form has, so the floor sits on the
+ * invoice address and the delivery address goes to the register without it —
+ * which is what it refuses a block of flats for. A customer who is not having
+ * it sent somewhere else wrote one floor, and it is theirs either way.
+ *
+ * @param \WC_Order $order The order.
+ * @return string
+ */
+function oko_second_address_line($order): string
+{
+	if (! $order instanceof \WC_Order) {
+		return '';
+	}
+
+	$shipping = trim((string) $order->get_shipping_address_2());
+
+	return $shipping !== '' ? $shipping : trim((string) $order->get_billing_address_2());
+}
+
+/**
  * The Økoskabet account an order belongs to.
  *
  * The same resolution the order itself was sent with — the stamp written at
@@ -2885,17 +2909,27 @@ function custom_override_checkout_fields(array $fields): array
 	// the only place it is read from, WooCommerce copies it to the shipping
 	// address by itself, and it is not among the fields our own checkout
 	// script leaves behind when the customer switches order type.
-	if (!isset($fields['billing']['billing_address_2'])) {
-		$fields['billing']['billing_address_2'] = array(
-			'label'       => __('Flat, floor and door', O_TEXTDOMAIN),
-			'placeholder' => __('e.g. 3. th', O_TEXTDOMAIN),
-			'required'    => false,
-			'class'       => array('form-row-wide'),
-			'autocomplete' => 'address-line2',
-			// Straight after the street, where WooCommerce itself puts it: the
-			// billing form is ordered by priority and the address is 50.
-			'priority'    => 55,
-		);
+	$second_line = array(
+		'label'        => __('Flat, floor and door', O_TEXTDOMAIN),
+		'placeholder'  => __('e.g. 3. th', O_TEXTDOMAIN),
+		'required'     => false,
+		'class'        => array('form-row-wide'),
+		'autocomplete' => 'address-line2',
+		// Straight after the street, where WooCommerce itself puts it: the
+		// billing form is ordered by priority and the address is 50.
+		'priority'     => 55,
+	);
+
+	// Both forms, not only the billing one. WooCommerce copies billing to
+	// shipping for the fields the shipping form has, so a shop that removed it
+	// from both — gaardmester.dk does — would carry the floor on the invoice
+	// and nowhere else, and the delivery address would reach the register
+	// without it again. Measured on their staging: billing "3 th", shipping
+	// empty, and the order refused.
+	foreach (array('billing', 'shipping') as $form) {
+		if (isset($fields[$form]) && ! isset($fields[$form][$form . '_address_2'])) {
+			$fields[$form][$form . '_address_2'] = $second_line;
+		}
 	}
 
 	// "1" while the customer is placing a pre-order. Kept in the billing form
@@ -3260,7 +3294,7 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		$data['home_delivery'] = array_filter([
 			'recipient_name' => $recipient_name,
 			'address_1'      => $order->get_shipping_address_1(),
-			'address_2'      => $order->get_shipping_address_2(),
+			'address_2'      => oko_second_address_line($order),
 			'city'           => $order->get_shipping_city(),
 			'postal_code'    => $order->get_shipping_postcode(),
 			// Combined English location + free-text note, or null if empty.
