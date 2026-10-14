@@ -1971,8 +1971,13 @@ function oko_addon_parent_order(string $number, string $email): array
 		return $refused('');
 	}
 
+	// Looked up by id, then checked against what that order actually prints.
+	// A numbering plugin shows "#1042" where the id is something else, and
+	// absint() would quietly land on another of this customer's orders — the
+	// email check would not catch it, because it is their order too.
 	$order = wc_get_order(absint($number));
-	if (! $order instanceof \WC_Order) {
+	if (! $order instanceof \WC_Order
+		|| ltrim((string) $order->get_order_number(), '#') !== ltrim($number, '#')) {
 		return $refused('unknown');
 	}
 
@@ -2167,6 +2172,102 @@ const OKO_ADDON_PARENT_META = '_okoskabet_addon_of';
 /** And its id, which is what the goods are looked up by. */
 const OKO_ADDON_PARENT_ID_META = '_okoskabet_addon_of_id';
 
+/** The additions an order already carries, in the order they were added. */
+const OKO_ADDITIONS_META = '_okoskabet_additions';
+
+/**
+ * The additions already on an order, oldest first.
+ *
+ * Kept as a list on the order being added to, written when an addition
+ * actually reaches Økoskabet. A query over the additions' own meta would say
+ * the same thing, but it answers differently depending on order storage and
+ * status, and this is read on the path that rewrites a shipment's whole
+ * contents — it has to be the same answer every time.
+ *
+ * Only additions that got through are in it, so an addition that failed is
+ * never resurrected into a delivery the shop was told had not gone.
+ *
+ * @param \WC_Order $parent The order being added to.
+ * @param \WC_Order $except The addition being sent right now.
+ * @return array<int,\WC_Order>
+ */
+function oko_additions_to($parent, $except): array
+{
+	if (! $parent instanceof \WC_Order) {
+		return array();
+	}
+
+	$except_id = $except instanceof \WC_Order ? $except->get_id() : 0;
+	$ids       = (array) $parent->get_meta(OKO_ADDITIONS_META, true);
+
+	$orders = array();
+	foreach ($ids as $id) {
+		if ((int) $id === $except_id) {
+			continue;
+		}
+
+		$order = wc_get_order((int) $id);
+		if ($order instanceof \WC_Order) {
+			$orders[] = $order;
+		}
+	}
+
+	return $orders;
+}
+
+/**
+ * Remember that an addition made it onto the order.
+ *
+ * Written only after Økoskabet has taken it, so the list is what the shipment
+ * actually holds rather than what was attempted.
+ *
+ * @param \WC_Order $parent   The order added to.
+ * @param \WC_Order $addition The addition.
+ */
+function oko_remember_addition($parent, $addition): void
+{
+	if (! $parent instanceof \WC_Order || ! $addition instanceof \WC_Order) {
+		return;
+	}
+
+	$ids = array_map('intval', (array) $parent->get_meta(OKO_ADDITIONS_META, true));
+	if (in_array($addition->get_id(), $ids, true)) {
+		return;
+	}
+
+	$ids[] = $addition->get_id();
+	$parent->update_meta_data(OKO_ADDITIONS_META, $ids);
+	$parent->save();
+}
+
+/**
+ * An addition's goods, each line named as one.
+ *
+ * A packer who has already picked this order will not pick it again, so the
+ * extra goods have to announce themselves on the line itself — the slip prints
+ * the order's own title, and that is the one thing we decide. The product is
+ * found by its id, so this is what the paper says and nothing more.
+ *
+ * @param \WC_Order $order The addition.
+ * @return array<int,array<string,mixed>>
+ */
+function oko_addition_lines($order): array
+{
+	if (! $order instanceof \WC_Order) {
+		return array();
+	}
+
+	return array_map(static function (array $line): array {
+		$line['name'] = sprintf(
+			/* translators: %s: the product's name. */
+			__('ADDITION — %s', O_TEXTDOMAIN),
+			$line['name']
+		);
+
+		return $line;
+	}, oko_order_line_items($order));
+}
+
 /**
  * Put an addition's goods on the shipment they ride along with.
  *
@@ -2209,28 +2310,41 @@ function oko_send_addition_to_its_order($order, string $reference, string $paren
 		return;
 	}
 
-	$lines = oko_order_line_items($parent);
-
-	// The addition's own goods last, and each one named as an addition. A
-	// packer who has already picked this order will not pick it again, so the
-	// extra goods have to announce themselves on the line itself — the slip
-	// prints the order's own title, and that is the one thing we decide. The
-	// product is found by its id, so this is what the paper says and nothing
-	// more.
-	foreach (oko_order_line_items($order) as $line) {
-		$line['name'] = sprintf(
-			/* translators: %s: the product's name. */
-			__('ADDITION — %s', O_TEXTDOMAIN),
-			$line['name']
-		);
-		$lines[] = $line;
+	// Every addition this order has, not only the one being sent. A PUT
+	// replaces the lines, so building the list from the parent and this
+	// addition alone deleted the goods of any addition before it — a customer
+	// who adds twice to the same Christmas delivery paid for the first lot and
+	// would never have received it.
+	// Asked again here, not only in the checkout. A bank transfer is marked
+	// paid days after it was ordered, and by then the delivery may have left
+	// the merchant — the customer would have been charged no freight for goods
+	// with nothing left to ride along with.
+	$delivery_date = (string) $parent->get_meta('_billing_okoskabet_delivery_date', true);
+	if ($delivery_date === '' || ! oko_order_can_still_take_more($parent, $delivery_date)) {
+		$order->add_order_note(sprintf(
+			/* translators: %s: the earlier order's number. */
+			__('Order %s can no longer take anything more, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
+			$reference
+		));
+		return;
 	}
+
+	$lines = oko_order_line_items($parent);
+	foreach (oko_additions_to($parent, $order) as $earlier) {
+		$lines = array_merge($lines, oko_addition_lines($earlier));
+	}
+
+	$lines = array_merge($lines, oko_addition_lines($order));
 
 	$body = array('line_items' => $lines);
 
 	// And on the shipment itself, where someone looking at the delivery sees
 	// it. Added to what is already there: `notes` is replaced by a PUT, and the
 	// customer's own message is in it.
+	// Read fresh, not from the minute the checkout remembers it for: two
+	// additions a minute apart would otherwise both write on top of the note
+	// as it was before either of them, and the first one's line would be gone.
+	oko_forget_shipment($reference, $merchant);
 	$shipment = oko_shipment_at_okoskabet($reference, $merchant);
 	$notes    = $shipment === null ? null : (string) ($shipment['notes'] ?? '');
 	$added = sprintf(
@@ -2275,6 +2389,10 @@ function oko_send_addition_to_its_order($order, string $reference, string $paren
 		return;
 	}
 
+	// What we just wrote is not what the remembered copy says any more.
+	oko_forget_shipment($reference, $merchant);
+	oko_remember_addition($parent, $order);
+
 	$order->update_meta_data('billing_okoskabet_done', 'yes');
 	$order->add_order_note(sprintf(
 		/* translators: %s: the earlier order's number. */
@@ -2310,6 +2428,18 @@ function oko_shipment_from_body(string $body): ?array
 	return isset($decoded['shipment_reference']) ? $decoded : null;
 }
 
+/** The key the shipment is remembered under, and the way to forget it. */
+function oko_shipment_transient_key(string $reference, array $merchant): string
+{
+	return O_TEXTDOMAIN . '_shipment_' . md5(((string) ($merchant['id'] ?? '')) . '|' . $reference);
+}
+
+/** Forget a remembered shipment, when we know it has changed. */
+function oko_forget_shipment(string $reference, array $merchant): void
+{
+	delete_transient(oko_shipment_transient_key($reference, $merchant));
+}
+
 /**
  * The shipment as Økoskabet has it, asked once.
  *
@@ -2328,8 +2458,7 @@ function oko_shipment_from_body(string $body): ?array
  */
 function oko_shipment_at_okoskabet(string $reference, array $merchant): ?array
 {
-	$key = O_TEXTDOMAIN . '_shipment_' . md5(((string) ($merchant['id'] ?? '')) . '|' . $reference);
-
+	$key    = oko_shipment_transient_key($reference, $merchant);
 	$cached = get_transient($key);
 	if (is_array($cached)) {
 		return $cached;
@@ -3350,7 +3479,18 @@ function oko_link_addon_to_earlier_order(int $order_id, array $posted_data, $ord
 	/* translators: %s: the earlier order's number, as the customer wrote it. */
 	$order->add_order_note(sprintf(__('Addition to order %s', O_TEXTDOMAIN), $addon_of));
 
-	$earlier = wc_get_order(absint($addon_of));
+	// The other order is only written on when this really is an addition to
+	// it. The number the customer typed is their word; the id written at
+	// checkout is the one that was found, matched against their email and
+	// still open. Writing on the strength of the typed number alone put a note
+	// on whichever order happened to have that id — somebody else's, and even
+	// when the checkout had already refused the whole thing.
+	$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+	if ($parent_id === 0) {
+		return;
+	}
+
+	$earlier = wc_get_order($parent_id);
 	if (! $earlier instanceof \WC_Order || $earlier->get_id() === $order->get_id()) {
 		return;
 	}

@@ -133,6 +133,9 @@ class AddonOrderTest extends \Codeception\TestCase\WPTestCase
 		$addition->update_meta_data('_billing_order_id', (string) $earlier->get_id());
 		$addition->save();
 
+		$addition->update_meta_data(OKO_ADDON_PARENT_ID_META, (string) $earlier->get_id());
+		$addition->save();
+
 		oko_link_addon_to_earlier_order($addition->get_id(), array(), $addition);
 
 		$this->assertNotEmpty(
@@ -142,6 +145,31 @@ class AddonOrderTest extends \Codeception\TestCase\WPTestCase
 		$this->assertNotEmpty(
 			$this->notes_matching($earlier, (string) $addition->get_id()),
 			'The earlier order should say an addition belongs to it.'
+		);
+	}
+
+	/**
+	 * A refused addition does not write on the other order.
+	 *
+	 * The customer's typed number is their word, not a finding. Writing on the
+	 * strength of it alone put "Order X is an addition to this one" on whatever
+	 * order had that id — a stranger's, and even when the checkout had already
+	 * refused the whole thing and charged ordinary freight.
+	 */
+	public function test_a_refused_addition_leaves_the_other_order_alone(): void
+	{
+		$earlier = new \WC_Order();
+		$earlier->save();
+
+		$addition = new \WC_Order();
+		$addition->update_meta_data('_billing_order_id', (string) $earlier->get_id());
+		$addition->save();
+
+		oko_link_addon_to_earlier_order($addition->get_id(), array(), $addition);
+
+		$this->assertEmpty(
+			$this->notes_matching($earlier, (string) $addition->get_id()),
+			'Nothing may be written on an order this was not accepted onto.'
 		);
 	}
 

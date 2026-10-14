@@ -112,6 +112,9 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 
 		$parent = new \WC_Order();
 		$parent->add_product(wc_get_product($this->a_product('Økologiske æg')), 2);
+		// A delivery that is still open: the send asks the same question the
+		// checkout did, because a bank transfer may be marked paid days later.
+		$parent->update_meta_data('_billing_okoskabet_delivery_date', $this->days_ahead(5));
 		$parent->save();
 
 		$addition = new \WC_Order();
@@ -137,6 +140,89 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 			"The customer's own message must survive."
 		);
 		$this->assertStringContainsString('ADDITION', (string) $sent['notes']);
+	}
+
+	/**
+	 * A second addition does not delete the first one's goods.
+	 *
+	 * A PUT replaces the shipment's lines, so a list built from the parent and
+	 * the addition being sent alone wiped every addition before it. A customer
+	 * who adds twice to the same Christmas delivery paid for the first lot and
+	 * would never have received it.
+	 */
+	public function test_an_earlier_addition_is_not_wiped_by_a_later_one(): void
+	{
+		$sent = null;
+		$this->capture_put($sent);
+
+		$parent = new \WC_Order();
+		$parent->add_product(wc_get_product($this->a_product('Økologiske æg')), 2);
+		// A delivery that is still open: the send asks the same question the
+		// checkout did, because a bank transfer may be marked paid days later.
+		$parent->update_meta_data('_billing_okoskabet_delivery_date', $this->days_ahead(5));
+		$parent->save();
+
+		$first = new \WC_Order();
+		$first->add_product(wc_get_product($this->a_product('Rugbrød')), 1);
+		$first->save();
+		$parent->update_meta_data(OKO_ADDITIONS_META, array($first->get_id()));
+		$parent->save();
+
+		$second = new \WC_Order();
+		$second->add_product(wc_get_product($this->a_product('Smør')), 1);
+		$second->save();
+
+		oko_send_addition_to_its_order(
+			$second,
+			(string) $parent->get_id(),
+			(string) $parent->get_id(),
+			array('id' => self::MERCHANT, 'api_key' => 'test-key', 'staging' => false)
+		);
+
+		$names = array_column($sent['line_items'], 'name');
+		$this->assertSame('Økologiske æg', $names[0], "The parent's goods stay first.");
+		$this->assertContains('ADDITION — Rugbrød', $names, "The earlier addition's goods must still be there.");
+		$this->assertSame('ADDITION — Smør', end($names), 'And the newest goes last.');
+	}
+
+	/** And a successful send records the addition, so the next one finds it. */
+	public function test_a_successful_send_records_the_addition(): void
+	{
+		$parent = new \WC_Order();
+		$parent->save();
+
+		$addition = new \WC_Order();
+		$addition->save();
+
+		oko_remember_addition($parent, $addition);
+
+		$this->assertContains(
+			$addition->get_id(),
+			array_map('intval', (array) $parent->get_meta(OKO_ADDITIONS_META, true))
+		);
+	}
+
+	/** @param array<string,mixed>|null $sent */
+	private function capture_put(&$sent): void
+	{
+		remove_all_filters('pre_http_request');
+		add_filter('pre_http_request', static function ($preempt, $args, $url) use (&$sent) {
+			if (strpos($url, '/api/v1/shipments/') === false) {
+				return $preempt;
+			}
+			if (($args['method'] ?? 'GET') === 'PUT') {
+				$sent = json_decode($args['body'], true);
+			}
+
+			return array(
+				'response' => array('code' => 200),
+				'body'     => wp_json_encode(array(
+					'shipment_reference' => '87893',
+					'status'             => 'registered',
+					'notes'              => 'Stil den ved carporten',
+				)),
+			);
+		}, 10, 3);
 	}
 
 	private function a_product(string $name): int
