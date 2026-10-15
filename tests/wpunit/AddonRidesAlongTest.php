@@ -202,6 +202,47 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * A cancelled addition takes its goods off the delivery again.
+	 *
+	 * An addition has no shipment of its own, so a DELETE under its own
+	 * reference answers 404 and the goods stay on the order it rode along
+	 * with — the shop refunds the customer for things the packing room still
+	 * has on its list.
+	 */
+	public function test_a_cancelled_addition_is_taken_off_the_order(): void
+	{
+		$sent = null;
+		$this->capture_put($sent);
+
+		$parent = new \WC_Order();
+		$parent->add_product(wc_get_product($this->a_product('Økologiske æg')), 2);
+		$parent->save();
+
+		$kept = new \WC_Order();
+		$kept->add_product(wc_get_product($this->a_product('Rugbrød')), 1);
+		$kept->save();
+
+		$cancelled = new \WC_Order();
+		$cancelled->add_product(wc_get_product($this->a_product('Smør')), 1);
+		$cancelled->save();
+
+		$parent->update_meta_data(OKO_ADDITIONS_META, array($kept->get_id(), $cancelled->get_id()));
+		$parent->save();
+
+		oko_take_addition_off_its_order(
+			$cancelled,
+			$parent->get_id(),
+			array('id' => self::MERCHANT, 'api_key' => 'test-key', 'staging' => false)
+		);
+
+		$names = array_column($sent['line_items'], 'name');
+		$this->assertContains('Økologiske æg', $names, "The order's own goods stay.");
+		$this->assertContains('ADDITION — Rugbrød', $names, 'And so does the addition that was not cancelled.');
+		$this->assertNotContains('ADDITION — Smør', $names, "The cancelled addition's goods are gone.");
+
+	}
+
 	/** @param array<string,mixed>|null $sent */
 	private function capture_put(&$sent): void
 	{

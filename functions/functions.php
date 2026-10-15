@@ -2269,6 +2269,77 @@ function oko_addition_lines($order): array
 }
 
 /**
+ * Take a cancelled addition's goods off the delivery they rode along with.
+ *
+ * The addition is dropped from the order's list and the whole list is sent
+ * again — the same way it was built when the addition arrived, because a PUT
+ * replaces what a shipment contains. The note is left as it stands: it is a
+ * record of what happened to this delivery, and a line saying an addition was
+ * cancelled is worth more to the packing room than a line quietly removed.
+ *
+ * @param \WC_Order           $order     The cancelled addition.
+ * @param int                 $parent_id The order it rode along with.
+ * @param array<string,mixed> $merchant  The merchant record.
+ */
+function oko_take_addition_off_its_order($order, int $parent_id, array $merchant): void
+{
+	$parent = wc_get_order($parent_id);
+	if (! $order instanceof \WC_Order || ! $parent instanceof \WC_Order) {
+		return;
+	}
+
+	$ids = array_values(array_filter(
+		array_map('intval', (array) $parent->get_meta(OKO_ADDITIONS_META, true)),
+		static function (int $id) use ($order): bool {
+			return $id !== $order->get_id() && $id !== 0;
+		}
+	));
+
+	$parent->update_meta_data(OKO_ADDITIONS_META, $ids);
+	$parent->save();
+
+	$lines = oko_order_line_items($parent);
+	foreach ($ids as $id) {
+		$lines = array_merge($lines, oko_addition_lines(wc_get_order($id)));
+	}
+
+	$reference = (string) $parent->get_order_number();
+	$encoded   = wp_json_encode(array('line_items' => $lines));
+	if ($encoded === false) {
+		return;
+	}
+
+	$response = wp_remote_request(
+		o_merchant_api_url($merchant) . '/api/v1/shipments/' . rawurlencode($reference),
+		array(
+			'method'  => 'PUT',
+			'timeout' => 15,
+			'headers' => array(
+				'Content-Type'  => 'application/json',
+				'Authorization' => (string) ($merchant['api_key'] ?? ''),
+			),
+			'body' => $encoded,
+		)
+	);
+
+	oko_forget_shipment($reference, $merchant);
+
+	$code = is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response);
+	$order->add_order_note($code === 200
+		? sprintf(
+			/* translators: %s: the order the addition rode along with. */
+			__('The goods were taken off order %s.', O_TEXTDOMAIN),
+			$reference
+		)
+		: sprintf(
+			/* translators: 1: the order the addition rode along with, 2: the HTTP status or 0 when unreachable. */
+			__('The goods could not be taken off order %1$s (%2$s). They may still be on that delivery.', O_TEXTDOMAIN),
+			$reference,
+			(string) $code
+		));
+}
+
+/**
  * Put an addition's goods on the shipment they ride along with.
  *
  * `PUT /shipments/{reference}` replaces the lines it is given, and no endpoint
@@ -3534,6 +3605,16 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 	$api_key = (string) $merchant['api_key'];
 
 	if ($new_status === 'cancelled') {
+		// An addition has no shipment of its own — its goods are on the order
+		// it rode along with. Deleting under its own reference would answer 404
+		// and leave the goods on that delivery, so the shop would refund a
+		// customer for things the packing room still has on its list.
+		$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+		if ($parent_id !== 0) {
+			oko_take_addition_off_its_order($order, $parent_id, $merchant);
+			return;
+		}
+
 		$url = $api_url . '/api/v1/shipments/' . $order_number;
 
 		$response = wp_remote_request($url, array(
