@@ -1683,3 +1683,70 @@ msgstr "Importér"
 
 msgid "okoskabet-woocommerce-plugin is on production environment with missing `composer dumpautoload -o` that will improve the performance on autoloading itself."
 msgstr "okoskabet-woocommerce-plugin kører i produktionsmiljø uden `composer dumpautoload -o`, som ville gøre dets egen autoloading hurtigere."
+
+msgid "Contact from Økoskabet"
+msgstr "Kontakt fra Økoskabet"
+
+msgid "Last status message received: %s"
+msgstr "Seneste statusbesked modtaget: %s"
+
+msgid "Last product lookup received: %s"
+msgstr "Seneste vareopslag modtaget: %s"
+
+msgid "Both are calls from Økoskabet into this shop. \"Never\" means they are not getting through — usually a firewall or a security plugin in front of the site, not a setting here."
+msgstr "Begge er kald fra Økoskabet ind i denne butik. »Aldrig« betyder, at de ikke kommer igennem — oftest en firewall eller et sikkerhedsplugin foran siden, ikke en indstilling her."
+
+msgid "never"
+msgstr "aldrig"
+
+#. translators: %s: human-readable time difference, e.g. "2 hours".
+msgid "%s ago"
+msgstr "for %s siden"
+
+msgid "Flat, floor and door"
+msgstr "Lejlighed, etage og dør"
+
+msgid "e.g. 3. th"
+msgstr "f.eks. 3. th"
+
+msgid "Adding to an earlier order? Write its order number here"
+msgstr "Tillæg til en tidligere ordre? Skriv ordrenummeret her"
+
+msgid "Addition to order %s"
+msgstr "Tillæg til ordre %s"
+
+msgid "Order %s is an addition to this one"
+msgstr "Ordre %s er et tillæg til denne"
+
+msgid "We cannot find that order number on your email address. This is ordered on its own, with its own delivery."
+msgstr "Vi kan ikke finde det ordrenummer på din mailadresse. Dette bestilles for sig, med sin egen levering."
+
+msgid "The goods could not be added to order %1$s (%2$s). Økoskabet has not been told about this order."
+msgstr "Varerne kunne ikke lægges til ordre %1$s (%2$s). Økoskabet har ikke fået besked om denne ordre."
+
+msgid "The goods were added to order %s. No separate delivery."
+msgstr "Varerne er lagt til ordre %s. Ingen selvstændig levering."
+
+msgid "The goods were taken off order %s."
+msgstr "Varerne er taget af ordre %s."
+
+msgid "The goods could not be taken off order %1$s (%2$s). They may still be on that delivery."
+msgstr "Varerne kunne ikke tages af ordre %1$s (%2$s). De kan stadig stå på den levering."
+
+msgid "ADDITION — %s"
+msgstr "TILLÆG — %s"
+
+msgid "ADDITION: order %1$s was added %2$s. Its goods are at the bottom of the list."
+msgstr "TILLÆG: ordre %1$s er lagt til %2$s. Dens varer står nederst på listen."
+
+msgid "ADDITION: order %s was cancelled. Its goods have been taken off the list."
+msgstr "TILLÆG: ordre %s er annulleret. Dens varer er taget af listen."
+
+msgid "That order can no longer take anything more. This is ordered on its own, with its own delivery."
+msgstr "Den ordre kan ikke tage imod mere. Dette bestilles for sig, med sin egen levering."
+
+msgid "Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order."
+msgstr "Ordre %s kunne ikke læses, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
+
+msgid "Order %s can no longer take anything more, so nothing was added to it. Økoskabet has not been told about this order."
+msgstr "Ordre %s kan ikke tage imod mere, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."

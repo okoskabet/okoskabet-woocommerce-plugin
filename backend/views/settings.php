@@ -224,6 +224,32 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
+	// Whether Økoskabet can reach this shop at all. The plugin never sees a
+	// call that is stopped in front of WordPress, so it cannot report the
+	// blockage — only when something last got through. "Aldrig" is the answer
+	// that matters: it means the road has been closed the whole time.
+	$cmb->add_field(
+		array(
+			'name' => __('Contact from Økoskabet', O_TEXTDOMAIN),
+			'id'   => '_oko_inbound_seen',
+			'type' => 'title',
+			'desc' => sprintf(
+				'<p>%s<br />%s</p><p><em>%s</em></p>',
+				esc_html(sprintf(
+					/* translators: %s: how long ago, e.g. "2 hours", or "never". */
+					__('Last status message received: %s', O_TEXTDOMAIN),
+					oko_inbound_seen_label(oko_inbound_last_seen('webhook'))
+				)),
+				esc_html(sprintf(
+					/* translators: %s: how long ago, e.g. "2 hours", or "never". */
+					__('Last product lookup received: %s', O_TEXTDOMAIN),
+					oko_inbound_seen_label(oko_inbound_last_seen('products'))
+				)),
+				esc_html__('Both are calls from Økoskabet into this shop. "Never" means they are not getting through — usually a firewall or a security plugin in front of the site, not a setting here.', O_TEXTDOMAIN)
+			),
+		)
+	);
+
 	$cmb->add_field(
 		array(
 			'name' => __('Webhook Status', O_TEXTDOMAIN),
@@ -232,7 +258,14 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				: __('Enable or disable webhook functionality.', O_TEXTDOMAIN),
 			'id'   => '_webhook_enabled',
 			'type' => 'checkbox',
-			'default' => 'on',
+			// A plain 'default' would tick this again every time the shop
+			// saves it off: an unticked checkbox stores nothing, and CMB2
+			// shows the default whenever nothing is stored. So a shop could
+			// never close this door, and the page said it was open when it
+			// was not. Same remedy as the two event lists below.
+			'default_cb' => function () {
+				return get_option(OKO_SETTINGS_SAVED_OPTION) ? '' : 'on';
+			},
 		)
 	);
 
