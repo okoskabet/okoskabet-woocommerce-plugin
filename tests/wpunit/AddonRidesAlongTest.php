@@ -121,7 +121,7 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		$addition->add_product(wc_get_product($this->a_product('Rugbrød')), 1);
 		$addition->save();
 
-		oko_send_addition_to_its_order($addition, (string) $parent->get_id(), (string) $parent->get_id(), array(
+		oko_send_addition_to_its_order($addition, $parent->get_id(), array(
 			'id' => self::MERCHANT,
 			'api_key' => 'test-key',
 			'staging' => false,
@@ -174,8 +174,7 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 
 		oko_send_addition_to_its_order(
 			$second,
-			(string) $parent->get_id(),
-			(string) $parent->get_id(),
+			$parent->get_id(),
 			array('id' => self::MERCHANT, 'api_key' => 'test-key', 'staging' => false)
 		);
 
@@ -241,6 +240,83 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		$this->assertContains('ADDITION — Rugbrød', $names, 'And so does the addition that was not cancelled.');
 		$this->assertNotContains('ADDITION — Smør', $names, "The cancelled addition's goods are gone.");
 
+		// A packer may have the slip in their hand already. Goods vanishing
+		// off a list with nothing said is how the wrong box gets sent.
+		$this->assertStringContainsString('ADDITION', (string) $sent['notes']);
+		$this->assertStringContainsString(
+			'Stil den ved carporten',
+			(string) $sent['notes'],
+			"And the customer's own message survives this write too."
+		);
+
+		$this->assertNotContains(
+			$cancelled->get_id(),
+			array_map('intval', (array) wc_get_order($parent->get_id())->get_meta(OKO_ADDITIONS_META, true)),
+			'The order stops counting it, so the next addition does not put it back.'
+		);
+	}
+
+	/**
+	 * An addition the delivery never took is not written off it.
+	 *
+	 * A cancelled order that Økoskabet refused — or never reached — is not on
+	 * any shipment. Rewriting one on the strength of its own meta alone is a
+	 * call that changes nothing and a note telling the shop that goods were
+	 * removed which were never there.
+	 */
+	public function test_an_addition_the_order_never_took_is_left_alone(): void
+	{
+		$sent = null;
+		$this->capture_put($sent);
+
+		$parent = new \WC_Order();
+		$parent->add_product(wc_get_product($this->a_product('Økologiske æg')), 2);
+		$parent->save();
+
+		$refused = new \WC_Order();
+		$refused->add_product(wc_get_product($this->a_product('Smør')), 1);
+		$refused->save();
+
+		oko_take_addition_off_its_order(
+			$refused,
+			$parent->get_id(),
+			array('id' => self::MERCHANT, 'api_key' => 'test-key', 'staging' => false)
+		);
+
+		$this->assertNull($sent, 'Nothing should have been written to the shipment.');
+	}
+
+	/**
+	 * A number that is nobody's shipment is not asked about again and again.
+	 *
+	 * The checkout recalculates as the customer types, and the field they type
+	 * into holds an order number — so every keystroke used to cost a fresh
+	 * request with a ten-second timeout, because only a good answer was ever
+	 * remembered. With Økoskabet down, that is the checkout hanging on every
+	 * letter.
+	 */
+	public function test_a_number_that_answers_nothing_is_only_asked_once(): void
+	{
+		$asked = 0;
+		remove_all_filters('pre_http_request');
+		add_filter('pre_http_request', static function ($preempt, $args, $url) use (&$asked) {
+			if (strpos($url, '/api/v1/shipments/') === false) {
+				return $preempt;
+			}
+			$asked++;
+
+			return array('response' => array('code' => 404), 'body' => '');
+		}, 10, 3);
+
+		$merchant = array('id' => self::MERCHANT, 'api_key' => 'test-key', 'staging' => false);
+
+		$this->assertNull(oko_shipment_at_okoskabet('87893', $merchant));
+		$this->assertNull(oko_shipment_at_okoskabet('87893', $merchant));
+		$this->assertNull(oko_shipment_at_okoskabet('87893', $merchant));
+
+		$this->assertSame(1, $asked, 'Økoskabet should have been asked once.');
+
+		oko_forget_shipment('87893', $merchant);
 	}
 
 	/** @param array<string,mixed>|null $sent */
