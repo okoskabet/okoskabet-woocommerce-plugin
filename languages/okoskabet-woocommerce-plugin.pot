@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Okoskabet WooCommerce Plugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 01:07+0200\n"
+"POT-Creation-Date: 2026-10-15 12:00+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -204,7 +204,7 @@ msgstr ""
 msgid "Heading of that row"
 msgstr ""
 
-#: backend/views/settings.php:197 functions/functions.php:1084
+#: backend/views/settings.php:197 functions/functions.php:1122
 msgid "Other options"
 msgstr ""
 
@@ -481,90 +481,90 @@ msgstr ""
 msgid "Default merchant"
 msgstr ""
 
-#: functions/functions.php:224
+#: functions/functions.php:262
 msgid "Registered"
 msgstr ""
 
-#: functions/functions.php:225
+#: functions/functions.php:263
 msgid "Ready for dispatch"
 msgstr ""
 
-#: functions/functions.php:226
+#: functions/functions.php:264
 msgid "Received"
 msgstr ""
 
-#: functions/functions.php:227
+#: functions/functions.php:265
 msgid "In shed"
 msgstr ""
 
-#: functions/functions.php:228
+#: functions/functions.php:266
 msgid "Fulfilled"
 msgstr ""
 
-#: functions/functions.php:229
+#: functions/functions.php:267
 msgid "Removed"
 msgstr ""
 
-#: functions/functions.php:363
+#: functions/functions.php:401
 msgid ""
 "Chilled pickup location where you can collect your goods around the clock "
 "using a code."
 msgstr ""
 
-#: functions/functions.php:364
+#: functions/functions.php:402
 msgid "Økoskabet delivers your goods to your door."
 msgstr ""
 
-#: functions/functions.php:386 functions/functions.php:3002
+#: functions/functions.php:424 functions/functions.php:3124
 msgid "Delivery location"
 msgstr ""
 
-#: functions/functions.php:389 functions/functions.php:3010
+#: functions/functions.php:427 functions/functions.php:3132
 msgid "Note to the driver (optional)"
 msgstr ""
 
-#: functions/functions.php:409
+#: functions/functions.php:447
 msgid ""
 "You can remove one or more of the marked items from your cart to get more "
 "delivery options, or contact us for help."
 msgstr ""
 
-#: functions/functions.php:420
+#: functions/functions.php:458
 msgid "No delivery dates available right now"
 msgstr ""
 
-#: functions/functions.php:421
+#: functions/functions.php:459
 msgid ""
 "We can't find a delivery date for the products in your cart at this time. "
 "Please contact the shop so we can help you complete the order — sometimes "
 "it's a temporary configuration issue we can resolve quickly."
 msgstr ""
 
-#: functions/functions.php:443 functions/functions.php:2994
+#: functions/functions.php:481 functions/functions.php:3116
 msgid "Pickup location"
 msgstr ""
 
-#: functions/functions.php:444
+#: functions/functions.php:482
 msgid "Pickup date"
 msgstr ""
 
-#: functions/functions.php:445
+#: functions/functions.php:483
 msgid "— choose —"
 msgstr ""
 
-#: functions/functions.php:446
+#: functions/functions.php:484
 msgid "No pickup locations have been set up. Please contact the shop."
 msgstr ""
 
-#: functions/functions.php:447
+#: functions/functions.php:485
 msgid "No pickup dates are available right now. Please contact the shop."
 msgstr ""
 
-#: functions/functions.php:754
+#: functions/functions.php:792
 msgid "Økoskabet: the delivery picker is not showing in your checkout"
 msgstr ""
 
-#: functions/functions.php:755
+#: functions/functions.php:793
 msgid ""
 "Your checkout offers Økoskabet delivery, but the date and locker picker was "
 "not drawn on the last checkout a customer opened. They can choose a delivery "
@@ -572,7 +572,7 @@ msgid ""
 "no sign that anything is missing."
 msgstr ""
 
-#: functions/functions.php:756
+#: functions/functions.php:794
 msgid ""
 "This happens when the checkout is built with something other than "
 "WooCommerce's own checkout — a page builder, or the block checkout. Place "
@@ -581,27 +581,27 @@ msgid ""
 "by itself."
 msgstr ""
 
-#: functions/functions.php:785
+#: functions/functions.php:823
 msgid "Method Title"
 msgstr ""
 
-#: functions/functions.php:787
+#: functions/functions.php:825
 msgid "Enter the method title"
 msgstr ""
 
-#: functions/functions.php:792
+#: functions/functions.php:830
 msgid "Description"
 msgstr ""
 
-#: functions/functions.php:794
+#: functions/functions.php:832
 msgid "Enter the Description"
 msgstr ""
 
-#: functions/functions.php:799
+#: functions/functions.php:837
 msgid "Fee ladder"
 msgstr ""
 
-#: functions/functions.php:801
+#: functions/functions.php:839
 msgid ""
 "One tier per line as \"from amount = price\". The highest tier whose "
 "\"from\" is not above the cart subtotal wins; price 0 means free. Example: 0 "
@@ -609,76 +609,76 @@ msgid ""
 "fields below."
 msgstr ""
 
-#: functions/functions.php:806
+#: functions/functions.php:844
 msgid "VAT"
 msgstr ""
 
-#: functions/functions.php:808
+#: functions/functions.php:846
 msgid ""
 "Ladder thresholds and prices are incl. VAT (what the customer sees and pays)"
 msgstr ""
 
-#: functions/functions.php:812
+#: functions/functions.php:850
 msgid "Shipping price (fallback)"
 msgstr ""
 
-#: functions/functions.php:814
+#: functions/functions.php:852
 msgid "Used only when the fee ladder above is empty."
 msgstr ""
 
-#: functions/functions.php:821
+#: functions/functions.php:859
 msgid "Discounted shipping order minimum (fallback)"
 msgstr ""
 
-#: functions/functions.php:827
+#: functions/functions.php:865
 msgid "Discounted shipping price (fallback)"
 msgstr ""
 
-#: functions/functions.php:833
+#: functions/functions.php:871
 msgid "Free shipping order minimum (fallback)"
 msgstr ""
 
-#: functions/functions.php:860
+#: functions/functions.php:898
 msgid "Postcodes without delivery days"
 msgstr ""
 
-#: functions/functions.php:862
+#: functions/functions.php:900
 msgid ""
 "Can still be ordered — without a date, landing among unprocessed orders at "
 "Økoskabet"
 msgstr ""
 
-#: functions/functions.php:863
+#: functions/functions.php:901
 msgid ""
 "For island deliveries. Areas Økoskabet delivers to are booked on their days "
 "as usual."
 msgstr ""
 
-#: functions/functions.php:959
+#: functions/functions.php:997
 msgid ""
 "Pre-order: customers choose between a normal order and a pre-order at "
 "checkout, with its own days, note and fee."
 msgstr ""
 
-#: functions/functions.php:960
+#: functions/functions.php:998
 msgid "Packaging fee by product category and delivery method."
 msgstr ""
 
-#: functions/functions.php:961
+#: functions/functions.php:999
 msgid "Store pickup as a delivery method."
 msgstr ""
 
-#: functions/functions.php:962
+#: functions/functions.php:1000
 msgid ""
 "Island delivery: postcodes without delivery days can still be ordered and "
 "land among unprocessed orders."
 msgstr ""
 
-#: functions/functions.php:963
+#: functions/functions.php:1001
 msgid "Shipping methods in a row of their own at checkout."
 msgstr ""
 
-#: functions/functions.php:964
+#: functions/functions.php:1002
 msgid ""
 "Split delivery: a basket that needs more than one delivery day offers the "
 "customer two buttons — split it into one order per day, or see exactly which "
@@ -686,82 +686,103 @@ msgid ""
 "to set."
 msgstr ""
 
-#: functions/functions.php:965
+#: functions/functions.php:1003
 msgid ""
 "Delivery exceptions: each rule can be turned around to cover every product "
 "OTHER than the categories and tags you picked."
 msgstr ""
 
-#: functions/functions.php:971
+#: functions/functions.php:1009
 msgid ""
 "New in this version. You don't need to do anything — everything new stays "
 "off until you turn it on."
 msgstr ""
 
-#: functions/functions.php:979
+#: functions/functions.php:1017
 msgid "See the settings"
 msgstr ""
 
-#: functions/functions.php:980 integrations/Delivery_Exceptions.php:145
+#: functions/functions.php:1018 integrations/Delivery_Exceptions.php:145
 msgid "Got it, dismiss"
 msgstr ""
 
-#: functions/functions.php:1442 functions/functions.php:1542
-#: functions/functions.php:1552 functions/functions.php:1643
-#: functions/functions.php:1653 functions/functions.php:1739
+#: functions/functions.php:1480 functions/functions.php:1580
+#: functions/functions.php:1590 functions/functions.php:1681
+#: functions/functions.php:1691 functions/functions.php:1777
 msgid "Free"
 msgstr ""
 
-#: functions/functions.php:1502 integrations/Packaging_Fee.php:67
+#: functions/functions.php:1540 integrations/Packaging_Fee.php:67
 msgid "Økoskabet"
 msgstr ""
 
-#: functions/functions.php:1503
+#: functions/functions.php:1541
 msgid "Delivery to Økoskabet"
 msgstr ""
 
-#: functions/functions.php:1561 functions/functions.php:1662
+#: functions/functions.php:1599 functions/functions.php:1700
 msgid "Discounted shipping rate"
 msgstr ""
 
-#: functions/functions.php:1602 functions/functions.php:3635
+#: functions/functions.php:1640 functions/functions.php:3734
 #: integrations/Packaging_Fee.php:68
 msgid "Home delivery"
 msgstr ""
 
-#: functions/functions.php:1603
+#: functions/functions.php:1641
 msgid "Delivery to your home"
 msgstr ""
 
-#: functions/functions.php:1708 functions/functions.php:3633
+#: functions/functions.php:1746 functions/functions.php:3732
 #: integrations/Packaging_Fee.php:69
 msgid "Store pickup"
 msgstr ""
 
-#: functions/functions.php:1709
+#: functions/functions.php:1747
 msgid "The customer collects the order in your shop"
 msgstr ""
 
-#: functions/functions.php:2121
+#: functions/functions.php:2159
 msgid ""
 "That order can no longer take anything more. This is ordered on its own, "
 "with its own delivery."
 msgstr ""
 
-#: functions/functions.php:2122
+#: functions/functions.php:2160
 msgid ""
 "We cannot find that order number on your email address. This is ordered on "
 "its own, with its own delivery."
 msgstr ""
 
 #. translators: %s: the product's name.
-#: functions/functions.php:2263
+#: functions/functions.php:2319
 #, php-format
 msgid "ADDITION — %s"
 msgstr ""
 
-#. translators: %s: the earlier order's number.
-#: functions/functions.php:2307
+#. translators: %s: the cancelled addition's order number.
+#: functions/functions.php:2411
+#, php-format
+msgid ""
+"ADDITION: order %s was cancelled. Its goods have been taken off the list."
+msgstr ""
+
+#. translators: 1: the order the addition rode along with, 2: the HTTP status or 0 when unreachable.
+#: functions/functions.php:2419
+#, php-format
+msgid ""
+"The goods could not be taken off order %1$s (%2$s). They may still be on "
+"that delivery."
+msgstr ""
+
+#. translators: %s: the order the addition rode along with.
+#: functions/functions.php:2430
+#, php-format
+msgid "The goods were taken off order %s."
+msgstr ""
+
+#. translators: %s: the earlier order's id.
+#: functions/functions.php:2466
 #, php-format
 msgid ""
 "Order %s could not be read, so nothing was added to it. Økoskabet has not "
@@ -769,7 +790,7 @@ msgid ""
 msgstr ""
 
 #. translators: %s: the earlier order's number.
-#: functions/functions.php:2326
+#: functions/functions.php:2482
 #, php-format
 msgid ""
 "Order %s can no longer take anything more, so nothing was added to it. "
@@ -777,22 +798,14 @@ msgid ""
 msgstr ""
 
 #. translators: 1: the addition's order number, 2: the date it was placed.
-#: functions/functions.php:2352
+#: functions/functions.php:2498
 #, php-format
 msgid ""
 "ADDITION: order %1$s was added %2$s. Its goods are at the bottom of the list."
 msgstr ""
 
-#. translators: %s: the earlier order's number.
-#: functions/functions.php:2364
-#, php-format
-msgid ""
-"The goods for order %s could not be encoded, so nothing was sent. Økoskabet "
-"has not been told about this order."
-msgstr ""
-
 #. translators: 1: the earlier order's number, 2: the HTTP status or 0 when unreachable.
-#: functions/functions.php:2385
+#: functions/functions.php:2506
 #, php-format
 msgid ""
 "The goods could not be added to order %1$s (%2$s). Økoskabet has not been "
@@ -800,103 +813,103 @@ msgid ""
 msgstr ""
 
 #. translators: %s: the earlier order's number.
-#: functions/functions.php:2399
+#: functions/functions.php:2518
 #, php-format
 msgid "The goods were added to order %s. No separate delivery."
 msgstr ""
 
-#: functions/functions.php:2978
+#: functions/functions.php:3100
 msgid "Økoskabet ID"
 msgstr ""
 
-#: functions/functions.php:2986
+#: functions/functions.php:3108
 msgid "Økoskabet Delivery Date"
 msgstr ""
 
-#: functions/functions.php:3022
+#: functions/functions.php:3144
 msgid "Adding to an earlier order? Write its order number here"
 msgstr ""
 
-#: functions/functions.php:3042
+#: functions/functions.php:3164
 msgid "Flat, floor and door"
 msgstr ""
 
-#: functions/functions.php:3043
+#: functions/functions.php:3165
 msgid "e.g. 3. th"
 msgstr ""
 
-#: functions/functions.php:3068 integrations/Delivery_Exceptions.php:856
+#: functions/functions.php:3190 integrations/Delivery_Exceptions.php:856
 #: integrations/Delivery_Exceptions.php:942
 #: integrations/Delivery_Exceptions.php:2246
 msgid "Pre-order"
 msgstr ""
 
-#: functions/functions.php:3125
+#: functions/functions.php:3247
 msgid "Økoskabet merchant"
 msgstr ""
 
-#: functions/functions.php:3143
+#: functions/functions.php:3265
 msgid "Økoskabet pickup location"
 msgstr ""
 
-#: functions/functions.php:3146
+#: functions/functions.php:3268
 msgid "Økoskabet Delivery location"
 msgstr ""
 
-#: functions/functions.php:3149
+#: functions/functions.php:3271
 msgid "Note to driver"
 msgstr ""
 
 #. translators: %s: the earlier order's number, as the customer wrote it.
-#: functions/functions.php:3480
+#: functions/functions.php:3602
 #, php-format
 msgid "Addition to order %s"
 msgstr ""
 
 #. translators: %s: the new order's number.
-#: functions/functions.php:3499
+#: functions/functions.php:3621
 #, php-format
 msgid "Order %s is an addition to this one"
 msgstr ""
 
-#: functions/functions.php:3622
+#: functions/functions.php:3721
 msgid "The order could not be completed"
 msgstr ""
 
 #. translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup".
-#: functions/functions.php:3646
+#: functions/functions.php:3745
 #, php-format
 msgid "Sent to Økoskabet — %1$s, %2$s"
 msgstr ""
 
-#: functions/functions.php:3647
+#: functions/functions.php:3746
 msgid "without delivery date"
 msgstr ""
 
-#: functions/functions.php:4001
+#: functions/functions.php:4087
 msgid "Please select an Økoskab and Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4006
+#: functions/functions.php:4092
 msgid "Please select a Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4013
+#: functions/functions.php:4099
 msgid ""
 "Please select a pickup location and a pickup date before submitting the "
 "order."
 msgstr ""
 
-#: functions/functions.php:4178 functions/functions.php:4216
+#: functions/functions.php:4264 functions/functions.php:4302
 msgid "Delivery date"
 msgstr ""
 
-#: functions/functions.php:4632
+#: functions/functions.php:4728
 msgid "never"
 msgstr ""
 
 #. translators: %s: human-readable time difference, e.g. "2 hours".
-#: functions/functions.php:4636
+#: functions/functions.php:4732
 #, php-format
 msgid "%s ago"
 msgstr ""
