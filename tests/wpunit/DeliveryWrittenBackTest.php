@@ -215,30 +215,48 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	public function test_the_change_is_not_sent_back(): void
 	{
 		$order = $this->an_order_delivered_to_the_door();
-
-		oko_write_delivery_back($order, array(
-			'shipment_type' => 'home_delivery',
-			'delivery_date' => '2026-10-22',
-			'home_delivery' => array('address' => array(
+		$this->okoskabet_answers_with(array(
+			'shipment_reference' => (string) $order->get_order_number(),
+			'shipment_type'      => 'home_delivery',
+			'delivery_date'      => '2026-10-22',
+			'home_delivery'      => array('address' => array(
 				'street_name'  => 'Byagervej',
 				'house_number' => '194',
 				'city'         => 'Beder',
 				'postal_code'  => '8330',
 			)),
 		));
-		$order->update_meta_data(
-			OKO_SENT_FINGERPRINT_META,
-			oko_shipment_fingerprint(oko_shipment_payload($order, $this->merchant()))
+
+		$changed = oko_take_delivery_from_okoskabet(
+			(string) $order->get_order_number(),
+			$this->merchant()
 		);
-		$order->save();
+
+		$this->assertNotEmpty($changed, 'The delivery did move.');
 
 		$fresh = wc_get_order($order->get_id());
 
 		$this->assertSame(
-			(string) $fresh->get_meta(OKO_SENT_FINGERPRINT_META, true),
 			oko_shipment_fingerprint(oko_shipment_payload($fresh, $this->merchant())),
-			'What the order now says must be what we recorded as sent, or the resend sends it back.'
+			(string) $fresh->get_meta(OKO_SENT_FINGERPRINT_META, true),
+			'The write-back has to record what it made the order say, or the resend sends it straight back.'
 		);
+	}
+
+	/** Økoskabet, answering with this shipment and nothing else. */
+	private function okoskabet_answers_with(array $shipment): void
+	{
+		remove_all_filters('pre_http_request');
+		add_filter('pre_http_request', static function ($preempt, $args, $url) use ($shipment) {
+			if (strpos($url, '/api/v1/shipments/') === false) {
+				return $preempt;
+			}
+
+			return array(
+				'response' => array('code' => 200),
+				'body'     => wp_json_encode($shipment),
+			);
+		}, 10, 3);
 	}
 
 	/** And a shop's own edit still differs from what was sent. */
