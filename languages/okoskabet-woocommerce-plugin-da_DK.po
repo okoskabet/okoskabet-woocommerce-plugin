@@ -1703,9 +1703,6 @@ msgstr "aldrig"
 msgid "%s ago"
 msgstr "for %s siden"
 
-msgid "message for the driver: %s"
-msgstr "besked til chaufføren: %s"
-
 msgid "delivery address %s"
 msgstr "leveringsadresse %s"
 
