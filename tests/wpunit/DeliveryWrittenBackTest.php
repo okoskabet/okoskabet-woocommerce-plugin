@@ -206,26 +206,58 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	/**
 	 * Økoskabet's own change is not pushed back at Økoskabet.
 	 *
-	 * Writing the order fires the same save hook as a shop's edit. Without
-	 * this the correction would go straight back to the account it came from.
+	 * Writing the order fires the same save hook as a shop's edit. The
+	 * write-back records what it has just made the order say, so the resend
+	 * builds the same payload, finds the fingerprint already matching, and
+	 * stops. Without that, the correction goes straight back to the account it
+	 * came from.
 	 */
 	public function test_the_change_is_not_sent_back(): void
 	{
 		$order = $this->an_order_delivered_to_the_door();
-		$order->update_meta_data(OKO_WRITING_BACK_META, 'yes');
+
+		oko_write_delivery_back($order, array(
+			'shipment_type' => 'home_delivery',
+			'delivery_date' => '2026-10-22',
+			'home_delivery' => array('address' => array(
+				'street_name'  => 'Byagervej',
+				'house_number' => '194',
+				'city'         => 'Beder',
+				'postal_code'  => '8330',
+			)),
+		));
+		$order->update_meta_data(
+			OKO_SENT_FINGERPRINT_META,
+			oko_shipment_fingerprint(oko_shipment_payload($order, $this->merchant()))
+		);
 		$order->save();
 
-		$this->assertFalse(
-			apply_filters('oko_resend_shipment_on_update', true, $order),
-			'A write-back must not become a send.'
+		$fresh = wc_get_order($order->get_id());
+
+		$this->assertSame(
+			(string) $fresh->get_meta(OKO_SENT_FINGERPRINT_META, true),
+			oko_shipment_fingerprint(oko_shipment_payload($fresh, $this->merchant())),
+			'What the order now says must be what we recorded as sent, or the resend sends it back.'
 		);
 	}
 
-	/** An ordinary edit in the shop still goes to Økoskabet. */
+	/** And a shop's own edit still differs from what was sent. */
 	public function test_an_ordinary_edit_is_still_sent(): void
 	{
-		$this->assertTrue(
-			apply_filters('oko_resend_shipment_on_update', true, $this->an_order_delivered_to_the_door())
+		$order = $this->an_order_delivered_to_the_door();
+		$order->update_meta_data(
+			OKO_SENT_FINGERPRINT_META,
+			oko_shipment_fingerprint(oko_shipment_payload($order, $this->merchant()))
+		);
+		$order->set_billing_phone('+4511223344');
+		$order->save();
+
+		$fresh = wc_get_order($order->get_id());
+
+		$this->assertNotSame(
+			(string) $fresh->get_meta(OKO_SENT_FINGERPRINT_META, true),
+			oko_shipment_fingerprint(oko_shipment_payload($fresh, $this->merchant())),
+			"A shop's own edit still has to reach Økoskabet."
 		);
 	}
 
