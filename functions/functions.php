@@ -4374,8 +4374,22 @@ function oko_shipment_fingerprint(array $payload): string
 	return md5((string) wp_json_encode(oko_comparable_payload($payload)));
 }
 
-/** The parts of a payload that are an object of their own, not a value. */
-const OKO_NESTED_PAYLOAD_KEYS = array('customer', 'home_delivery', 'reservation');
+/**
+ * The parts of a payload whose fields the other end takes one at a time.
+ *
+ * Only the customer. Everything else that looks like an object is read as a
+ * whole and has to be sent as one: an address is two composed lines that
+ * Økoskabet washes into a street, a number and a flat *together*, and the
+ * wash only runs when the first line is there. Measured on Gaardmester
+ * staging on 19 October 2026 — an order whose second line alone had moved
+ * was accepted, changed nothing, and said nothing. A shed reservation is
+ * read the same way, and is two fields anyway.
+ *
+ * The customer's four fields have no such reading between them: each is
+ * written on its own, which is what lets a changed phone leave a name the
+ * backoffice corrected exactly where it is.
+ */
+const OKO_NESTED_PAYLOAD_KEYS = array('customer');
 
 /**
  * Which shape of delivery a payload describes.

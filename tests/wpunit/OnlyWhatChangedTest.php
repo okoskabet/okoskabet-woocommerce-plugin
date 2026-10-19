@@ -99,7 +99,7 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 		$this->assertArrayNotHasKey('home_delivery', $changes);
 	}
 
-	/** An address edit sends the lines that moved. */
+	/** An address edit sends the address, and only the address. */
 	public function test_an_address_edit_sends_the_address(): void
 	{
 		$before = $this->payload();
@@ -109,18 +109,35 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 		$changes = oko_payload_changes($before, $after);
 
 		$this->assertSame(array('home_delivery'), array_keys($changes));
-		$this->assertSame(array('address_1' => 'Kildeparken 99'), $changes['home_delivery']);
 	}
 
 	/**
-	 * A second address line the shop has deleted is sent as empty.
+	 * And it sends the whole address, not the line that moved.
 	 *
-	 * Inside an object a missing key reads as "unchanged", exactly as it does
-	 * at the top, so leaving it out would leave the flat on the delivery for
-	 * good. The shop builds the address with `array_filter`, so a deleted
-	 * line is a missing key and not an empty one.
+	 * Økoskabet washes the two composed lines into a street, a number and a
+	 * flat together, and only runs the wash when the first line is there.
+	 * Measured on Gaardmester staging on 19 October 2026: an order whose
+	 * second line alone had moved was accepted, changed nothing, and said
+	 * nothing. The address travels whole or not at all.
 	 */
-	public function test_a_deleted_address_line_is_sent_as_empty(): void
+	public function test_a_changed_flat_carries_the_whole_address(): void
+	{
+		$before = $this->payload();
+		$after  = $this->payload();
+		$after['home_delivery']['address_2'] = '1 tv';
+
+		$changes = oko_payload_changes($before, $after);
+
+		$this->assertSame($after['home_delivery'], $changes['home_delivery']);
+		$this->assertArrayHasKey(
+			'address_1',
+			$changes['home_delivery'],
+			'Without the first line Økoskabet does not look the address up at all.'
+		);
+	}
+
+	/** A second address line the shop has deleted still reaches Økoskabet. */
+	public function test_a_deleted_address_line_reaches_okoskabet(): void
 	{
 		$before = $this->payload();
 		$after  = $this->payload();
@@ -128,7 +145,26 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 
 		$changes = oko_payload_changes($before, $after);
 
-		$this->assertSame(array('address_2' => ''), $changes['home_delivery']);
+		$this->assertArrayHasKey('home_delivery', $changes);
+		$this->assertArrayNotHasKey('address_2', $changes['home_delivery']);
+		$this->assertSame('Kildeparken 98', $changes['home_delivery']['address_1']);
+	}
+
+	/**
+	 * A field the shop has emptied inside the customer is sent as empty.
+	 *
+	 * Inside an object a missing key reads as "unchanged", exactly as it does
+	 * at the top, so leaving it out would leave the old value standing.
+	 */
+	public function test_an_emptied_customer_field_is_sent_as_empty(): void
+	{
+		$before = $this->payload();
+		$after  = $this->payload();
+		unset($after['customer']['recipient_name']);
+
+		$changes = oko_payload_changes($before, $after);
+
+		$this->assertSame(array('recipient_name' => ''), $changes['customer']);
 	}
 
 	/**
