@@ -3147,10 +3147,19 @@ function custom_override_checkout_fields(array $fields): array
 	}
 
 	// WooCommerce's own second address line, put back for a shop that has
-	// taken it away. The register refuses a block of flats given without a
-	// floor ("Etage findes ikke på adresse på husnummer"), and the order lands
-	// among the unprocessable ones; a customer who has nowhere to write
-	// "3. th" cannot be delivered to.
+	// taken it away and asked us for it. The register refuses a block of flats
+	// given without a floor ("Etage findes ikke på adresse på husnummer"), and
+	// the order lands among the unprocessable ones.
+	//
+	// Off unless the shop turns it on, because there is a second way the floor
+	// arrives and it is already working: a customer with nowhere else to put
+	// it writes it on the street line — "Byagervej 194, 1. tv" — and
+	// Økoskabet's address client lifts the unit out of that line itself.
+	// gaardmester.dk delivers to blocks of flats that way today, with no
+	// second address line in their checkout at all. Handing such a shop one
+	// repairs nothing and adds a way to go wrong: a customer who writes the
+	// floor in both places sends "Byagervej 194, 1. tv, 1. tv", and the
+	// register refuses that outright.
 	//
 	// The shop's own field rather than one of ours, so there is one second
 	// address line and not two ideas of one: `get_shipping_address_2()` stays
@@ -3174,9 +3183,11 @@ function custom_override_checkout_fields(array $fields): array
 	// and nowhere else, and the delivery address would reach the register
 	// without it again. Measured on their staging: billing "3 th", shipping
 	// empty, and the order refused.
-	foreach (array('billing', 'shipping') as $form) {
-		if (isset($fields[$form]) && ! isset($fields[$form][$form . '_address_2'])) {
-			$fields[$form][$form . '_address_2'] = $second_line;
+	if (oko_shop_asks_for_the_floor()) {
+		foreach (array('billing', 'shipping') as $form) {
+			if (isset($fields[$form]) && ! isset($fields[$form][$form . '_address_2'])) {
+				$fields[$form][$form . '_address_2'] = $second_line;
+			}
 		}
 	}
 
@@ -3415,6 +3426,20 @@ function oko_order_line_items(\WC_Order $order): array
 	return $lines;
 }
 
+
+/**
+ * Whether this shop wants us to ask for the flat, floor and door.
+ *
+ * Off unless the shop says otherwise. A shop whose customers already write
+ * the floor on the street line has nothing to gain from a second field and
+ * something to lose — see where the field is drawn.
+ *
+ * @return bool
+ */
+function oko_shop_asks_for_the_floor(): bool
+{
+	return ! empty(o_get_settings()['_ask_for_floor']);
+}
 
 /** The shipping methods this plugin puts in a checkout. */
 const OKO_SHIPPING_METHODS = array(

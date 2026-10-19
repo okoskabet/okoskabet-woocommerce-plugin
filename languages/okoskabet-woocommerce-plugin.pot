@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Okoskabet WooCommerce Plugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 12:00+0200\n"
+"POT-Creation-Date: 2026-10-19 13:36+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -191,177 +191,190 @@ msgid ""
 msgstr ""
 
 #: backend/views/settings.php:183
-msgid "Shipping in a row of its own"
+msgid "Ask for flat, floor and door"
 msgstr ""
 
 #: backend/views/settings.php:184
+msgid ""
+"Adds a second address line at checkout, for a shop whose checkout has none. "
+"Leave it off if your customers write the floor on the street line itself "
+"(\"Byagervej 194, 1. tv\") — the address register is given it there and "
+"reads it, and two places to write one thing means some customers write it "
+"twice."
+msgstr ""
+
+#: backend/views/settings.php:192
+msgid "Shipping in a row of its own"
+msgstr ""
+
+#: backend/views/settings.php:193
 msgid ""
 "Shipping methods shown in their own row under Shipping at checkout, e.g. an "
 "add-on to an earlier order."
 msgstr ""
 
-#: backend/views/settings.php:193
+#: backend/views/settings.php:202
 msgid "Heading of that row"
 msgstr ""
 
-#: backend/views/settings.php:197 functions/functions.php:1122
+#: backend/views/settings.php:206 functions/functions.php:1119
 msgid "Other options"
 msgstr ""
 
-#: backend/views/settings.php:205
+#: backend/views/settings.php:214
 msgid "Webhook Secret"
 msgstr ""
 
-#: backend/views/settings.php:206
+#: backend/views/settings.php:215
 msgid "Secret key from your webhook configuration."
 msgstr ""
 
-#: backend/views/settings.php:218
+#: backend/views/settings.php:227
 msgid "Webhook & Payment"
 msgstr ""
 
-#: backend/views/settings.php:220
+#: backend/views/settings.php:229
 msgid "Master switches that apply across all merchants."
 msgstr ""
 
-#: backend/views/settings.php:221
+#: backend/views/settings.php:230
 msgid "Webhook and payment settings."
 msgstr ""
 
-#: backend/views/settings.php:233
+#: backend/views/settings.php:242
 msgid "Contact from Økoskabet"
 msgstr ""
 
 #. translators: %s: how long ago, e.g. "2 hours", or "never".
-#: backend/views/settings.php:240
+#: backend/views/settings.php:249
 #, php-format
 msgid "Last status message received: %s"
 msgstr ""
 
 #. translators: %s: how long ago, e.g. "2 hours", or "never".
-#: backend/views/settings.php:245
+#: backend/views/settings.php:254
 #, php-format
 msgid "Last product lookup received: %s"
 msgstr ""
 
-#: backend/views/settings.php:248
+#: backend/views/settings.php:257
 msgid ""
 "Both are calls from Økoskabet into this shop. \"Never\" means they are not "
 "getting through — usually a firewall or a security plugin in front of the "
 "site, not a setting here."
 msgstr ""
 
-#: backend/views/settings.php:255
+#: backend/views/settings.php:264
 msgid "Webhook Status"
 msgstr ""
 
-#: backend/views/settings.php:257
+#: backend/views/settings.php:266
 msgid "Enable or disable webhook functionality (applies to ALL merchants)."
 msgstr ""
 
-#: backend/views/settings.php:258
+#: backend/views/settings.php:267
 msgid "Enable or disable webhook functionality."
 msgstr ""
 
-#: backend/views/settings.php:277 integrations/Merchants.php:1034
+#: backend/views/settings.php:286 integrations/Merchants.php:1034
 msgid "Label printed"
 msgstr ""
 
-#: backend/views/settings.php:282
+#: backend/views/settings.php:291
 msgid "Payment Gateway"
 msgstr ""
 
-#: backend/views/settings.php:283
+#: backend/views/settings.php:292
 msgid ""
 "Choose which payment gateway is used. \"Automatic\" attempts to detect it "
 "from the order."
 msgstr ""
 
-#: backend/views/settings.php:287 integrations/Merchants.php:1010
+#: backend/views/settings.php:296 integrations/Merchants.php:1010
 msgid "Automatic (detect from order)"
 msgstr ""
 
-#: backend/views/settings.php:288 integrations/Merchants.php:1011
+#: backend/views/settings.php:297 integrations/Merchants.php:1011
 msgid "Quickpay"
 msgstr ""
 
-#: backend/views/settings.php:289 integrations/Merchants.php:1012
+#: backend/views/settings.php:298 integrations/Merchants.php:1012
 msgid "Stripe"
 msgstr ""
 
-#: backend/views/settings.php:290 integrations/Merchants.php:1013
+#: backend/views/settings.php:299 integrations/Merchants.php:1013
 msgid "Nets Easy / DIBS Easy"
 msgstr ""
 
-#: backend/views/settings.php:291 integrations/Merchants.php:1014
+#: backend/views/settings.php:300 integrations/Merchants.php:1014
 msgid "Pensopay"
 msgstr ""
 
-#: backend/views/settings.php:292 integrations/Merchants.php:1015
+#: backend/views/settings.php:301 integrations/Merchants.php:1015
 msgid "Other (change status to \"processing\")"
 msgstr ""
 
-#: backend/views/settings.php:309 backend/views/settings.php:322
+#: backend/views/settings.php:318 backend/views/settings.php:331
 #: integrations/Merchants.php:1045 integrations/Merchants.php:1065
 msgid "Capture events"
 msgstr ""
 
-#: backend/views/settings.php:310
+#: backend/views/settings.php:319
 msgid "Choose which events from Økoskabet should capture the payment."
 msgstr ""
 
-#: backend/views/settings.php:323 integrations/Merchants.php:1048
+#: backend/views/settings.php:332 integrations/Merchants.php:1048
 msgid ""
 "Your payment gateway takes the money when the order is marked completed, and "
 "not before. Choose below which event should complete the order — that is "
 "also the moment the customer is charged."
 msgstr ""
 
-#: backend/views/settings.php:332 integrations/Merchants.php:1076
+#: backend/views/settings.php:341 integrations/Merchants.php:1076
 msgid "Completion events"
 msgstr ""
 
-#: backend/views/settings.php:333
+#: backend/views/settings.php:342
 msgid "Choose which events from Økoskabet should mark the order as completed."
 msgstr ""
 
-#: backend/views/settings.php:347
+#: backend/views/settings.php:356
 msgid "Legacy Webhook URL"
 msgstr ""
 
-#: backend/views/settings.php:348 integrations/Merchants.php:769
+#: backend/views/settings.php:357 integrations/Merchants.php:769
 #: integrations/Merchants.php:949
 msgid "Webhook URL"
 msgstr ""
 
-#: backend/views/settings.php:350
+#: backend/views/settings.php:359
 msgid ""
 "Legacy URL — still works and routes to the default merchant. Each merchant "
 "has its own dedicated webhook URL listed under \"Økoskabet merchants\" "
 "below, which we recommend you configure at Økoskabet instead."
 msgstr ""
 
-#: backend/views/settings.php:351
+#: backend/views/settings.php:360
 msgid "Copy this URL and configure it in your Økoskabet webhook settings"
 msgstr ""
 
-#: backend/views/settings.php:373
+#: backend/views/settings.php:382
 msgid "Webhook reference & response codes"
 msgstr ""
 
-#: backend/views/settings.php:376
+#: backend/views/settings.php:385
 msgid "How to configure webhooks at Økoskabet"
 msgstr ""
 
-#: backend/views/settings.php:378
+#: backend/views/settings.php:387
 msgid "Log in to Økoskabet's dashboard."
 msgstr ""
 
-#: backend/views/settings.php:379
+#: backend/views/settings.php:388
 msgid "Navigate to webhook settings."
 msgstr ""
 
-#: backend/views/settings.php:382
+#: backend/views/settings.php:391
 msgid ""
 "For EACH merchant configured here, register a separate webhook in Økoskabet "
 "with its merchant-specific URL (shown next to each merchant in the table "
@@ -371,7 +384,7 @@ msgid ""
 msgstr ""
 
 #. translators: %s = full webhook URL
-#: backend/views/settings.php:390
+#: backend/views/settings.php:399
 #, php-format
 msgid ""
 "Register a webhook in Økoskabet pointing at <code>%s</code> with Method "
@@ -379,92 +392,92 @@ msgid ""
 "signing secret you set in the Webhook Secret field above."
 msgstr ""
 
-#: backend/views/settings.php:399
+#: backend/views/settings.php:408
 msgid "Select the events you want Økoskabet to send — typically:"
 msgstr ""
 
-#: backend/views/settings.php:401
+#: backend/views/settings.php:410
 msgid "In Shed"
 msgstr ""
 
-#: backend/views/settings.php:402
+#: backend/views/settings.php:411
 msgid "Order Delivered"
 msgstr ""
 
-#: backend/views/settings.php:405
+#: backend/views/settings.php:414
 msgid ""
 "Only events you have ticked under \"Capture events\" or \"Completion "
 "events\" trigger any action — the rest are accepted and ignored."
 msgstr ""
 
-#: backend/views/settings.php:410
+#: backend/views/settings.php:419
 msgid "Expected payload format"
 msgstr ""
 
-#: backend/views/settings.php:419
+#: backend/views/settings.php:428
 msgid ""
 "The plugin maps Økoskabet's \"reservation_updated\" event into the internal "
 "events shown in the settings above (in_shed, order_delivered) by inspecting "
 "the \"changes\" payload."
 msgstr ""
 
-#: backend/views/settings.php:422
+#: backend/views/settings.php:431
 msgid "Authentication"
 msgstr ""
 
-#: backend/views/settings.php:424
+#: backend/views/settings.php:433
 msgid ""
 "Each webhook is verified by an HMAC-SHA256 signature of the raw request "
 "body, using the merchant's webhook secret. Økoskabet computes the signature "
 "on its side and sends it as the lowercase hex value of this header:"
 msgstr ""
 
-#: backend/views/settings.php:430
+#: backend/views/settings.php:439
 msgid ""
 "If the header is missing, malformed, or does not match, the request is "
 "rejected with HTTP 401. The <strong>API key</strong> field is NOT used to "
 "authenticate webhooks — it's only used for outbound API calls to Økoskabet."
 msgstr ""
 
-#: backend/views/settings.php:436
+#: backend/views/settings.php:445
 msgid "Test a webhook locally with curl"
 msgstr ""
 
-#: backend/views/settings.php:452
+#: backend/views/settings.php:461
 msgid "Response codes"
 msgstr ""
 
-#: backend/views/settings.php:455
+#: backend/views/settings.php:464
 msgid "webhook processed."
 msgstr ""
 
-#: backend/views/settings.php:456
+#: backend/views/settings.php:465
 msgid "invalid or missing HMAC signature."
 msgstr ""
 
-#: backend/views/settings.php:457
+#: backend/views/settings.php:466
 msgid ""
 "webhook functionality is disabled in plugin settings, OR the order belongs "
 "to a different merchant than the one in the webhook URL."
 msgstr ""
 
-#: backend/views/settings.php:458
+#: backend/views/settings.php:467
 msgid ""
 "the merchant ID in the URL is unknown, OR the order referenced by "
 "shipment_reference does not exist."
 msgstr ""
 
-#: backend/views/settings.php:459
+#: backend/views/settings.php:468
 msgid ""
 "the merchant has no webhook secret configured. Edit the merchant and paste a "
 "value."
 msgstr ""
 
-#: backend/views/settings.php:460
+#: backend/views/settings.php:469
 msgid "WooCommerce is not loaded."
 msgstr ""
 
-#: backend/views/settings.php:463
+#: backend/views/settings.php:472
 msgid "Success response example"
 msgstr ""
 
@@ -515,11 +528,11 @@ msgstr ""
 msgid "Økoskabet delivers your goods to your door."
 msgstr ""
 
-#: functions/functions.php:424 functions/functions.php:3124
+#: functions/functions.php:424 functions/functions.php:3121
 msgid "Delivery location"
 msgstr ""
 
-#: functions/functions.php:427 functions/functions.php:3132
+#: functions/functions.php:427 functions/functions.php:3129
 msgid "Note to the driver (optional)"
 msgstr ""
 
@@ -540,7 +553,7 @@ msgid ""
 "it's a temporary configuration issue we can resolve quickly."
 msgstr ""
 
-#: functions/functions.php:481 functions/functions.php:3116
+#: functions/functions.php:481 functions/functions.php:3113
 msgid "Pickup location"
 msgstr ""
 
@@ -638,47 +651,47 @@ msgstr ""
 msgid "Free shipping order minimum (fallback)"
 msgstr ""
 
-#: functions/functions.php:898
+#: functions/functions.php:895
 msgid "Postcodes without delivery days"
 msgstr ""
 
-#: functions/functions.php:900
+#: functions/functions.php:897
 msgid ""
 "Can still be ordered — without a date, landing among unprocessed orders at "
 "Økoskabet"
 msgstr ""
 
-#: functions/functions.php:901
+#: functions/functions.php:898
 msgid ""
 "For island deliveries. Areas Økoskabet delivers to are booked on their days "
 "as usual."
 msgstr ""
 
-#: functions/functions.php:997
+#: functions/functions.php:994
 msgid ""
 "Pre-order: customers choose between a normal order and a pre-order at "
 "checkout, with its own days, note and fee."
 msgstr ""
 
-#: functions/functions.php:998
+#: functions/functions.php:995
 msgid "Packaging fee by product category and delivery method."
 msgstr ""
 
-#: functions/functions.php:999
+#: functions/functions.php:996
 msgid "Store pickup as a delivery method."
 msgstr ""
 
-#: functions/functions.php:1000
+#: functions/functions.php:997
 msgid ""
 "Island delivery: postcodes without delivery days can still be ordered and "
 "land among unprocessed orders."
 msgstr ""
 
-#: functions/functions.php:1001
+#: functions/functions.php:998
 msgid "Shipping methods in a row of their own at checkout."
 msgstr ""
 
-#: functions/functions.php:1002
+#: functions/functions.php:999
 msgid ""
 "Split delivery: a basket that needs more than one delivery day offers the "
 "customer two buttons — split it into one order per day, or see exactly which "
@@ -686,89 +699,89 @@ msgid ""
 "to set."
 msgstr ""
 
-#: functions/functions.php:1003
+#: functions/functions.php:1000
 msgid ""
 "Delivery exceptions: each rule can be turned around to cover every product "
 "OTHER than the categories and tags you picked."
 msgstr ""
 
-#: functions/functions.php:1009
+#: functions/functions.php:1006
 msgid ""
 "New in this version. You don't need to do anything — everything new stays "
 "off until you turn it on."
 msgstr ""
 
-#: functions/functions.php:1017
+#: functions/functions.php:1014
 msgid "See the settings"
 msgstr ""
 
-#: functions/functions.php:1018 integrations/Delivery_Exceptions.php:145
+#: functions/functions.php:1015 integrations/Delivery_Exceptions.php:145
 msgid "Got it, dismiss"
 msgstr ""
 
-#: functions/functions.php:1480 functions/functions.php:1580
-#: functions/functions.php:1590 functions/functions.php:1681
-#: functions/functions.php:1691 functions/functions.php:1777
+#: functions/functions.php:1477 functions/functions.php:1577
+#: functions/functions.php:1587 functions/functions.php:1678
+#: functions/functions.php:1688 functions/functions.php:1774
 msgid "Free"
 msgstr ""
 
-#: functions/functions.php:1540 integrations/Packaging_Fee.php:67
+#: functions/functions.php:1537 integrations/Packaging_Fee.php:67
 msgid "Økoskabet"
 msgstr ""
 
-#: functions/functions.php:1541
+#: functions/functions.php:1538
 msgid "Delivery to Økoskabet"
 msgstr ""
 
-#: functions/functions.php:1599 functions/functions.php:1700
+#: functions/functions.php:1596 functions/functions.php:1697
 msgid "Discounted shipping rate"
 msgstr ""
 
-#: functions/functions.php:1640 functions/functions.php:3734
+#: functions/functions.php:1637 functions/functions.php:3776
 #: integrations/Packaging_Fee.php:68
 msgid "Home delivery"
 msgstr ""
 
-#: functions/functions.php:1641
+#: functions/functions.php:1638
 msgid "Delivery to your home"
 msgstr ""
 
-#: functions/functions.php:1746 functions/functions.php:3732
+#: functions/functions.php:1743 functions/functions.php:3774
 #: integrations/Packaging_Fee.php:69
 msgid "Store pickup"
 msgstr ""
 
-#: functions/functions.php:1747
+#: functions/functions.php:1744
 msgid "The customer collects the order in your shop"
 msgstr ""
 
-#: functions/functions.php:2159
+#: functions/functions.php:2156
 msgid ""
 "That order can no longer take anything more. This is ordered on its own, "
 "with its own delivery."
 msgstr ""
 
-#: functions/functions.php:2160
+#: functions/functions.php:2157
 msgid ""
 "We cannot find that order number on your email address. This is ordered on "
 "its own, with its own delivery."
 msgstr ""
 
 #. translators: %s: the product's name.
-#: functions/functions.php:2319
+#: functions/functions.php:2316
 #, php-format
 msgid "ADDITION — %s"
 msgstr ""
 
 #. translators: %s: the cancelled addition's order number.
-#: functions/functions.php:2411
+#: functions/functions.php:2408
 #, php-format
 msgid ""
 "ADDITION: order %s was cancelled. Its goods have been taken off the list."
 msgstr ""
 
 #. translators: 1: the order the addition rode along with, 2: the HTTP status or 0 when unreachable.
-#: functions/functions.php:2419
+#: functions/functions.php:2416
 #, php-format
 msgid ""
 "The goods could not be taken off order %1$s (%2$s). They may still be on "
@@ -776,13 +789,13 @@ msgid ""
 msgstr ""
 
 #. translators: %s: the order the addition rode along with.
-#: functions/functions.php:2430
+#: functions/functions.php:2427
 #, php-format
 msgid "The goods were taken off order %s."
 msgstr ""
 
 #. translators: %s: the earlier order's id.
-#: functions/functions.php:2466
+#: functions/functions.php:2463
 #, php-format
 msgid ""
 "Order %s could not be read, so nothing was added to it. Økoskabet has not "
@@ -790,7 +803,7 @@ msgid ""
 msgstr ""
 
 #. translators: %s: the earlier order's number.
-#: functions/functions.php:2482
+#: functions/functions.php:2479
 #, php-format
 msgid ""
 "Order %s can no longer take anything more, so nothing was added to it. "
@@ -798,14 +811,14 @@ msgid ""
 msgstr ""
 
 #. translators: 1: the addition's order number, 2: the date it was placed.
-#: functions/functions.php:2498
+#: functions/functions.php:2495
 #, php-format
 msgid ""
 "ADDITION: order %1$s was added %2$s. Its goods are at the bottom of the list."
 msgstr ""
 
 #. translators: 1: the earlier order's number, 2: the HTTP status or 0 when unreachable.
-#: functions/functions.php:2506
+#: functions/functions.php:2503
 #, php-format
 msgid ""
 "The goods could not be added to order %1$s (%2$s). Økoskabet has not been "
@@ -813,103 +826,103 @@ msgid ""
 msgstr ""
 
 #. translators: %s: the earlier order's number.
-#: functions/functions.php:2518
+#: functions/functions.php:2515
 #, php-format
 msgid "The goods were added to order %s. No separate delivery."
 msgstr ""
 
-#: functions/functions.php:3100
+#: functions/functions.php:3097
 msgid "Økoskabet ID"
 msgstr ""
 
-#: functions/functions.php:3108
+#: functions/functions.php:3105
 msgid "Økoskabet Delivery Date"
 msgstr ""
 
-#: functions/functions.php:3144
+#: functions/functions.php:3141
 msgid "Adding to an earlier order? Write its order number here"
 msgstr ""
 
-#: functions/functions.php:3164
+#: functions/functions.php:3161
 msgid "Flat, floor and door"
 msgstr ""
 
-#: functions/functions.php:3165
+#: functions/functions.php:3162
 msgid "e.g. 3. th"
 msgstr ""
 
-#: functions/functions.php:3190 integrations/Delivery_Exceptions.php:856
+#: functions/functions.php:3187 integrations/Delivery_Exceptions.php:856
 #: integrations/Delivery_Exceptions.php:942
 #: integrations/Delivery_Exceptions.php:2246
 msgid "Pre-order"
 msgstr ""
 
-#: functions/functions.php:3247
+#: functions/functions.php:3244
 msgid "Økoskabet merchant"
 msgstr ""
 
-#: functions/functions.php:3265
+#: functions/functions.php:3262
 msgid "Økoskabet pickup location"
 msgstr ""
 
-#: functions/functions.php:3268
+#: functions/functions.php:3265
 msgid "Økoskabet Delivery location"
 msgstr ""
 
-#: functions/functions.php:3271
+#: functions/functions.php:3268
 msgid "Note to driver"
 msgstr ""
 
 #. translators: %s: the earlier order's number, as the customer wrote it.
-#: functions/functions.php:3602
+#: functions/functions.php:3644
 #, php-format
 msgid "Addition to order %s"
 msgstr ""
 
 #. translators: %s: the new order's number.
-#: functions/functions.php:3621
+#: functions/functions.php:3663
 #, php-format
 msgid "Order %s is an addition to this one"
 msgstr ""
 
-#: functions/functions.php:3721
+#: functions/functions.php:3763
 msgid "The order could not be completed"
 msgstr ""
 
 #. translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup".
-#: functions/functions.php:3745
+#: functions/functions.php:3787
 #, php-format
 msgid "Sent to Økoskabet — %1$s, %2$s"
 msgstr ""
 
-#: functions/functions.php:3746
+#: functions/functions.php:3788
 msgid "without delivery date"
 msgstr ""
 
-#: functions/functions.php:4087
+#: functions/functions.php:4129
 msgid "Please select an Økoskab and Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4092
+#: functions/functions.php:4134
 msgid "Please select a Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4099
+#: functions/functions.php:4141
 msgid ""
 "Please select a pickup location and a pickup date before submitting the "
 "order."
 msgstr ""
 
-#: functions/functions.php:4264 functions/functions.php:4302
+#: functions/functions.php:4290 functions/functions.php:4328
 msgid "Delivery date"
 msgstr ""
 
-#: functions/functions.php:4728
+#: functions/functions.php:4754
 msgid "never"
 msgstr ""
 
 #. translators: %s: human-readable time difference, e.g. "2 hours".
-#: functions/functions.php:4732
+#: functions/functions.php:4758
 #, php-format
 msgid "%s ago"
 msgstr ""

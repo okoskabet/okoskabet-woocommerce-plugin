@@ -180,6 +180,15 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 
 	$cmb->add_field(
 		array(
+			'name'    => __('Ask for flat, floor and door', O_TEXTDOMAIN),
+			'desc'    => __('Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself ("Byagervej 194, 1. tv") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice.', O_TEXTDOMAIN),
+			'id'      => '_ask_for_floor',
+			'type'    => 'checkbox',
+		)
+	);
+
+	$cmb->add_field(
+		array(
 			'name'       => __('Shipping in a row of its own', O_TEXTDOMAIN),
 			'desc'       => __('Shipping methods shown in their own row under Shipping at checkout, e.g. an add-on to an earlier order.', O_TEXTDOMAIN),
 			'id'         => '_separate_shipping_methods',

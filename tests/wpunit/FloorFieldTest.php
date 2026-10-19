@@ -11,6 +11,46 @@
  */
 class FloorFieldTest extends \Codeception\TestCase\WPTestCase
 {
+	/**
+	 * A shop that has asked for the field. Every test below is about how it is
+	 * drawn once asked for; whether it is asked for at all is its own test.
+	 */
+	public function setUp(): void
+	{
+		parent::setUp();
+		add_filter('o_get_settings', static function ($settings) {
+			return array_merge((array) $settings, array('_ask_for_floor' => 'on'));
+		});
+	}
+
+	public function tearDown(): void
+	{
+		remove_all_filters('o_get_settings');
+		parent::tearDown();
+	}
+
+	/**
+	 * And a shop that has not asked is left exactly as it is.
+	 *
+	 * gaardmester.dk has no second address line in their checkout and delivers
+	 * to blocks of flats anyway: their customers write the floor on the street
+	 * line, and Økoskabet's address client lifts it out of there. A field they
+	 * did not ask for repairs nothing and gives a customer a second place to
+	 * write one thing — written in both, the register refuses the address.
+	 */
+	public function test_a_shop_that_has_not_asked_is_left_alone(): void
+	{
+		remove_all_filters('o_get_settings');
+
+		$fields = custom_override_checkout_fields(array(
+			'billing'  => array('billing_address_1' => array('label' => 'Gadenavn og nr')),
+			'shipping' => array('shipping_address_1' => array('label' => 'Gadenavn og nr')),
+		));
+
+		$this->assertArrayNotHasKey('billing_address_2', $fields['billing']);
+		$this->assertArrayNotHasKey('shipping_address_2', $fields['shipping']);
+	}
+
 	/** The shop has no second address line: we ask for the floor ourselves. */
 	public function test_a_checkout_without_an_address_line_2_is_given_our_own_field(): void
 	{
