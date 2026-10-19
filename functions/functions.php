@@ -881,9 +881,6 @@ const OKO_DATE_MODE_REQUIRED = 'required';
 /** A date where Økoskabet delivers; a postcode it doesn't is ordered without one. */
 const OKO_DATE_MODE_WHEN_AVAILABLE = 'when_available';
 
-/** Meta marking an order placed, on purpose, without a delivery date. */
-const OKO_WITHOUT_DATE_META = '_okoskabet_without_delivery_date';
-
 /**
  * The "postcodes Økoskabet doesn't cover" setting on a home-delivery method.
  *
@@ -4172,22 +4169,6 @@ function oko_home_delivery_may_go_without_date(array $fields): bool
 	// Only a clear "no days here" lets it through. If the question cannot be
 	// answered, the customer is asked to pick a date, as they always were.
 	return oko_home_delivery_has_dates($postcode, array_filter($product_ids)) === false;
-}
-
-add_action('woocommerce_checkout_create_order', 'oko_mark_order_without_date', 15, 2);
-
-/**
- * Record that an order goes without a delivery date on purpose, so it is
- * still sent to Økoskabet.
- */
-function oko_mark_order_without_date($order, $data): void
-{
-	if (! in_array('hey_okoskabet_shipping_home', (array) ($data['shipping_method'] ?? array()), true)) {
-		return;
-	}
-	if (oko_chosen_delivery_date_mode() === OKO_DATE_MODE_WHEN_AVAILABLE && empty($order->get_meta('_billing_okoskabet_delivery_date', true))) {
-		$order->update_meta_data(OKO_WITHOUT_DATE_META, 'yes');
-	}
 }
 
 add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery', 10, 2);
