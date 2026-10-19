@@ -3898,18 +3898,18 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 		$changed[] = sprintf(__('delivery date %s', O_TEXTDOMAIN), $date);
 	}
 
-	$shed_id = isset($shipment['shed_reservation']['shed']['id'])
-		? (string) $shipment['shed_reservation']['shed']['id']
-		: '';
+	$shed      = (array) (((array) ($shipment['shed_reservation'] ?? array()))['shed'] ?? array());
+	$shed_id   = isset($shed['id']) ? (string) $shed['id'] : '';
+	$shed_name = (string) ($shed['name'] ?? $shed_id);
 	if ($shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', $shed_id);
 		$changed[] = $shed_id !== ''
 			/* translators: %s: the name of the Økoskab. */
-			? sprintf(__('delivery to Økoskab %s', O_TEXTDOMAIN), (string) ($shipment['shed_reservation']['shed']['name'] ?? $shed_id))
+			? sprintf(__('delivery to Økoskab %s', O_TEXTDOMAIN), $shed_name)
 			: __('no longer a delivery to an Økoskab', O_TEXTDOMAIN);
 	}
 
-	$address = (array) ($shipment['home_delivery']['address'] ?? array());
+	$address = (array) (((array) ($shipment['home_delivery'] ?? array()))['address'] ?? array());
 	if ($address !== array()) {
 		foreach (oko_delivery_address_lines($address) as $setter => $value) {
 			if ($value !== (string) $order->{'get_' . $setter}()) {
@@ -3941,9 +3941,11 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 function oko_delivery_address_lines(array $address): array
 {
 	$street = trim(implode(' ', array_filter(array(
-		(string) ($address['street_name'] ?? ''),
-		(string) ($address['house_number'] ?? ''),
-	), 'strlen')));
+		trim((string) ($address['street_name'] ?? '')),
+		trim((string) ($address['house_number'] ?? '')),
+	), static function (string $part): bool {
+		return $part !== '';
+	})));
 
 	$town = trim((string) ($address['supplementary_town'] ?? ''));
 	if ($town !== '') {
@@ -3951,9 +3953,11 @@ function oko_delivery_address_lines(array $address): array
 	}
 
 	$unit = trim(implode(' ', array_filter(array(
-		(string) ($address['floor'] ?? ''),
-		(string) ($address['door'] ?? ''),
-	), 'strlen')));
+		trim((string) ($address['floor'] ?? '')),
+		trim((string) ($address['door'] ?? '')),
+	), static function (string $part): bool {
+		return $part !== '';
+	})));
 
 	return array(
 		'shipping_address_1' => $street,
