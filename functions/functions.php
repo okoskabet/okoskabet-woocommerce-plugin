@@ -2612,8 +2612,15 @@ const OKO_NO_ANSWER = 'oko_no_answer';
  * no second shipping line never gets one: WooCommerce copies billing to
  * shipping only for the fields the shipping form has, so the floor sits on the
  * invoice address and the delivery address goes to the register without it —
- * which is what it refuses a block of flats for. A customer who is not having
- * it sent somewhere else wrote one floor, and it is theirs either way.
+ * which is what it refuses a block of flats for.
+ *
+ * The fallback only applies when the two addresses are the same street, which
+ * is the case it was written for: one address, written once, and only the
+ * invoice form had somewhere to put the floor. An order sent somewhere else
+ * is a different building, and its own second line is the only one that
+ * belongs to it — carrying "2. sal" from the invoice address to a workplace
+ * across town is a flat that does not exist there, which the register
+ * refuses, or worse one that does.
  *
  * @param \WC_Order $order The order.
  * @return string
@@ -2625,8 +2632,24 @@ function oko_second_address_line($order): string
 	}
 
 	$shipping = trim((string) $order->get_shipping_address_2());
+	if ($shipping !== '') {
+		return $shipping;
+	}
 
-	return $shipping !== '' ? $shipping : trim((string) $order->get_billing_address_2());
+	$same_address = oko_same_street($order->get_shipping_address_1(), $order->get_billing_address_1())
+		&& oko_same_street($order->get_shipping_postcode(), $order->get_billing_postcode());
+
+	return $same_address ? trim((string) $order->get_billing_address_2()) : '';
+}
+
+/** Two written forms of the same line, give or take case and spacing. */
+function oko_same_street(string $one, string $other): bool
+{
+	$tidy = static function (string $value): string {
+		return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $value) ?? ''));
+	};
+
+	return $tidy($one) === $tidy($other);
 }
 
 /**
@@ -3471,6 +3494,27 @@ function oko_order_is_ours(\WC_Order $order): bool
 }
 
 /**
+ * An order's goods, with the goods of every addition riding along with it.
+ *
+ * The same list `oko_write_shipment_contents()` sends, built here for the
+ * paths that send the order on its own: the first POST, and every resend
+ * after an edit in the shop.
+ *
+ * @param \WC_Order $order
+ * @return array<int,array<string,mixed>>
+ */
+function oko_lines_with_additions(\WC_Order $order): array
+{
+	$lines = oko_order_line_items($order);
+
+	foreach (oko_additions_to($order, null) as $addition) {
+		$lines = array_merge($lines, oko_addition_lines($addition));
+	}
+
+	return $lines;
+}
+
+/**
  * Everything Økoskabet is told about an order, in one place.
  *
  * Built once and used twice — when the order is first sent, and again when it
@@ -3540,6 +3584,14 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		}
 	}
 
+	// A shed Økoskabet itself moved the order into counts as well, even though
+	// the shipping line the customer chose still says home delivery. That is
+	// what the write-back records, and the checkout clears this meta whenever
+	// home delivery is chosen — so a value here is a decision, never a
+	// leftover. Without it the next edit in the shop sent the order back as a
+	// home delivery and undid the move by hand.
+	$is_shed_delivery = $is_shed_delivery || trim((string) $order_shed) !== '';
+
 	if (!$is_shed_delivery) {
 		$order_shed = '';
 	}
@@ -3579,7 +3631,13 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		// What the order contained. Økoskabet splits these into zones and
 		// prints them as packing slips; without them an order is a name
 		// with no contents.
-		'line_items'         => oko_order_line_items($order),
+		// The order's own goods, and every addition riding along with them. A
+		// PUT replaces the shipment's lines, so a resend built from this order
+		// alone deleted the additions — the very mistake the sending path
+		// below warns about, reached by another road. Avokadokontoret renamed
+		// a product on 17 October 2026 and the rename resent three orders;
+		// an addition on any of them would have lost its goods with no note.
+		'line_items'         => oko_lines_with_additions($order),
 		// Where to ask us what those product ids are. The finished address
 		// rather than a base, because the route is keyed on the merchant
 		// id this plugin issues — handing over a base would leave
@@ -3824,7 +3882,6 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 	}
 }
 
-/** Meta holding a fingerprint of what we last told Økoskabet about an order. */
 /**
  * The fields of a shipment a change to which belongs back in the shop.
  *
@@ -3891,7 +3948,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 {
 	$changed = array();
 
-	$date = (string) ($shipment['delivery_date'] ?? '');
+	$date = sanitize_text_field((string) ($shipment['delivery_date'] ?? ''));
 	if ($date !== '' && $date !== (string) $order->get_meta('_billing_okoskabet_delivery_date', true)) {
 		$order->update_meta_data('_billing_okoskabet_delivery_date', $date);
 		/* translators: %s: the new delivery date. */
@@ -3899,8 +3956,8 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	}
 
 	$shed      = (array) (((array) ($shipment['shed_reservation'] ?? array()))['shed'] ?? array());
-	$shed_id   = isset($shed['id']) ? (string) $shed['id'] : '';
-	$shed_name = (string) ($shed['name'] ?? $shed_id);
+	$shed_id   = isset($shed['id']) ? sanitize_text_field((string) $shed['id']) : '';
+	$shed_name = sanitize_text_field((string) ($shed['name'] ?? $shed_id));
 	if ($shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', $shed_id);
 		$changed[] = $shed_id !== ''
@@ -3913,13 +3970,29 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	// Named once, as an address, rather than field by field. The note is read
 	// by whoever runs the shop, and "shipping_address_1: Byagervej 194,
 	// shipping_address_2: 1 tv" is our own column names read out loud.
+	//
+	// Written through the named setters rather than `$order->{'set_' . $key}`:
+	// a dynamic method name is invisible to the analyser, and this is the path
+	// that rewrites a customer's delivery address.
 	$address_moved = false;
 	if ($address !== array()) {
-		foreach (oko_delivery_address_lines($address) as $setter => $value) {
-			if ($value !== (string) $order->{'get_' . $setter}()) {
-				$order->{'set_' . $setter}($value);
-				$address_moved = true;
-			}
+		$lines = oko_delivery_address_lines($address);
+
+		if ($lines['shipping_address_1'] !== $order->get_shipping_address_1()) {
+			$order->set_shipping_address_1($lines['shipping_address_1']);
+			$address_moved = true;
+		}
+		if ($lines['shipping_address_2'] !== $order->get_shipping_address_2()) {
+			$order->set_shipping_address_2($lines['shipping_address_2']);
+			$address_moved = true;
+		}
+		if ($lines['shipping_city'] !== $order->get_shipping_city()) {
+			$order->set_shipping_city($lines['shipping_city']);
+			$address_moved = true;
+		}
+		if ($lines['shipping_postcode'] !== $order->get_shipping_postcode()) {
+			$order->set_shipping_postcode($lines['shipping_postcode']);
+			$address_moved = true;
 		}
 	}
 
@@ -3970,21 +4043,28 @@ function oko_address_on_one_line(\WC_Order $order): string
  */
 function oko_delivery_address_lines(array $address): array
 {
+	// Sanitised, like everything else this plugin takes off the wire. The body
+	// is signed, so this is not about trust — it is that one unlucky field
+	// would otherwise go on an order and into a note rendered in wp-admin.
+	$field = static function (string $key) use ($address): string {
+		return trim(sanitize_text_field((string) ($address[$key] ?? '')));
+	};
+
 	$street = trim(implode(' ', array_filter(array(
-		trim((string) ($address['street_name'] ?? '')),
-		trim((string) ($address['house_number'] ?? '')),
+		$field('street_name'),
+		$field('house_number'),
 	), static function (string $part): bool {
 		return $part !== '';
 	})));
 
-	$town = trim((string) ($address['supplementary_town'] ?? ''));
+	$town = $field('supplementary_town');
 	if ($town !== '') {
 		$street = trim($street . ', ' . $town);
 	}
 
 	$unit = trim(implode(' ', array_filter(array(
-		trim((string) ($address['floor'] ?? '')),
-		trim((string) ($address['door'] ?? '')),
+		$field('floor'),
+		$field('door'),
 	), static function (string $part): bool {
 		return $part !== '';
 	})));
@@ -3992,8 +4072,8 @@ function oko_delivery_address_lines(array $address): array
 	return array(
 		'shipping_address_1' => $street,
 		'shipping_address_2' => $unit,
-		'shipping_city'      => trim((string) ($address['city'] ?? '')),
-		'shipping_postcode'  => trim((string) ($address['postal_code'] ?? '')),
+		'shipping_city'      => $field('city'),
+		'shipping_postcode'  => $field('postal_code'),
 	);
 }
 
@@ -4019,7 +4099,15 @@ function oko_delivery_address_lines(array $address): array
 function oko_take_delivery_from_okoskabet(string $reference, array $merchant): array
 {
 	$order = function_exists('wc_get_order') ? wc_get_order($reference) : null;
-	if (! $order instanceof \WC_Order) {
+
+	// And it really is the order that reference names. `wc_get_order()` takes
+	// an id; the reference is the number the shop prints, and a shop with a
+	// numbering plugin has two different values — id 5500 printing as 1042.
+	// Without this, a correction to shipment 1042 would be written onto
+	// whichever order happens to have id 1042: a different customer's address,
+	// a different customer's order note. The same guard the additions got.
+	if (! $order instanceof \WC_Order
+		|| ltrim((string) $order->get_order_number(), '#') !== ltrim($reference, '#')) {
 		return array();
 	}
 
@@ -4053,10 +4141,18 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 
 	// What Økoskabet holds is now what we would send, so the next save is
 	// measured against it. Built after the save, from the order as it now is.
-	$fresh   = wc_get_order($order->get_id());
-	$payload = $fresh instanceof \WC_Order ? oko_shipment_payload($fresh, $merchant) : null;
-	if ($payload !== null) {
-		$fresh->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($payload));
+	//
+	// The hold comes off whatever happens. It used to come off only when a
+	// payload could be built, and an order that could not build one — no date
+	// and none of our shipping methods — kept the hold for good: every later
+	// edit in the shop was dropped by the filter, with no note and no line in
+	// the log. A stuck "do not send" is worse than the loop it guards against.
+	$fresh = wc_get_order($order->get_id());
+	if ($fresh instanceof \WC_Order) {
+		$payload = oko_shipment_payload($fresh, $merchant);
+		if ($payload !== null) {
+			$fresh->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($payload));
+		}
 		$fresh->delete_meta_data(OKO_WRITING_BACK_META);
 		$fresh->save();
 	}
@@ -4088,6 +4184,7 @@ function oko_hold_the_resend_while_writing_back($resend, $order): bool
 	return (bool) $resend;
 }
 
+/** Meta holding a fingerprint of what we last told Økoskabet about an order. */
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
 
 /**

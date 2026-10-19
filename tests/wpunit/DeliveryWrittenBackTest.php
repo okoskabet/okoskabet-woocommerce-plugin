@@ -229,6 +229,70 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * A shed the packing room moved the order into survives the next edit.
+	 *
+	 * The payload reads the kind of shipment off the shipping line the
+	 * customer chose, which still says home delivery after Økoskabet moves the
+	 * order to a shed. Without the shed meta counting too, the very next edit
+	 * in the shop sent the order back as a home delivery and undid the move —
+	 * the overwrite this whole change exists to prevent, in the other
+	 * direction.
+	 */
+	public function test_a_shed_written_back_survives_the_next_send(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+
+		oko_write_delivery_back($order, array(
+			'shipment_type'    => 'shed_reservation',
+			'delivery_date'    => '2026-10-22',
+			'shed_reservation' => array('shed' => array('id' => 'C2', 'name' => 'City 2')),
+		));
+		$order->save();
+
+		$payload = oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant());
+
+		$this->assertSame('C2', $payload['reservation']['shed_id'] ?? null);
+		$this->assertArrayNotHasKey('home_delivery', $payload, 'A shed delivery carries no address.');
+	}
+
+	/**
+	 * And an addition's goods survive an edit to the order it rides on.
+	 *
+	 * A resend replaces the shipment's lines. Built from the order alone it
+	 * deleted every addition — which is exactly what a product rename does:
+	 * it touches the orders, and the orders resend.
+	 */
+	public function test_an_edit_to_the_order_keeps_the_additions_goods(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+
+		$extra = wc_create_order();
+		$smoer = new \WC_Product_Simple();
+		$smoer->set_name('Smør');
+		$smoer->set_regular_price('30');
+		$smoer->save();
+		$extra->add_product($smoer, 1);
+		$extra->save();
+
+		$order->update_meta_data(OKO_ADDITIONS_META, array($extra->get_id()));
+		$order->save();
+
+		$names = array_column(
+			oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant())['line_items'],
+			'name'
+		);
+
+		$this->assertContains('Økologisk ribbensteg', $names);
+		$this->assertContains('ADDITION — Smør', $names, "The addition's goods must ride along on a resend too.");
+	}
+
+	/** @return array<string,mixed> */
+	private function merchant(): array
+	{
+		return array('id' => 'default', 'api_key' => 'test-key', 'staging' => true);
+	}
+
 	/** An order delivered to Kildeparken 98 on 20 October. */
 	private function an_order_delivered_to_the_door(): \WC_Order
 	{
