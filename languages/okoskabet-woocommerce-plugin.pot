@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Okoskabet WooCommerce Plugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-19 13:36+0200\n"
+"POT-Creation-Date: 2026-10-19 13:53+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -737,7 +737,7 @@ msgstr ""
 msgid "Discounted shipping rate"
 msgstr ""
 
-#: functions/functions.php:1637 functions/functions.php:3776
+#: functions/functions.php:1637 functions/functions.php:3801
 #: integrations/Packaging_Fee.php:68
 msgid "Home delivery"
 msgstr ""
@@ -746,7 +746,7 @@ msgstr ""
 msgid "Delivery to your home"
 msgstr ""
 
-#: functions/functions.php:1743 functions/functions.php:3774
+#: functions/functions.php:1743 functions/functions.php:3799
 #: integrations/Packaging_Fee.php:69
 msgid "Store pickup"
 msgstr ""
@@ -843,86 +843,116 @@ msgstr ""
 msgid "Adding to an earlier order? Write its order number here"
 msgstr ""
 
-#: functions/functions.php:3161
+#: functions/functions.php:3170
 msgid "Flat, floor and door"
 msgstr ""
 
-#: functions/functions.php:3162
+#: functions/functions.php:3171
 msgid "e.g. 3. th"
 msgstr ""
 
-#: functions/functions.php:3187 integrations/Delivery_Exceptions.php:856
+#: functions/functions.php:3198 integrations/Delivery_Exceptions.php:856
 #: integrations/Delivery_Exceptions.php:942
 #: integrations/Delivery_Exceptions.php:2246
 msgid "Pre-order"
 msgstr ""
 
-#: functions/functions.php:3244
+#: functions/functions.php:3255
 msgid "Økoskabet merchant"
 msgstr ""
 
-#: functions/functions.php:3262
+#: functions/functions.php:3273
 msgid "Økoskabet pickup location"
 msgstr ""
 
-#: functions/functions.php:3265
+#: functions/functions.php:3276
 msgid "Økoskabet Delivery location"
 msgstr ""
 
-#: functions/functions.php:3268
+#: functions/functions.php:3279
 msgid "Note to driver"
 msgstr ""
 
 #. translators: %s: the earlier order's number, as the customer wrote it.
-#: functions/functions.php:3644
+#: functions/functions.php:3669
 #, php-format
 msgid "Addition to order %s"
 msgstr ""
 
 #. translators: %s: the new order's number.
-#: functions/functions.php:3663
+#: functions/functions.php:3688
 #, php-format
 msgid "Order %s is an addition to this one"
 msgstr ""
 
-#: functions/functions.php:3763
+#: functions/functions.php:3788
 msgid "The order could not be completed"
 msgstr ""
 
 #. translators: 1: delivery date, 2: shed name, "Home delivery" or "Store pickup".
-#: functions/functions.php:3787
+#: functions/functions.php:3812
 #, php-format
 msgid "Sent to Økoskabet — %1$s, %2$s"
 msgstr ""
 
-#: functions/functions.php:3788
+#: functions/functions.php:3813
 msgid "without delivery date"
 msgstr ""
 
-#: functions/functions.php:4129
+#. translators: %s: the new delivery date.
+#: functions/functions.php:3898
+#, php-format
+msgid "delivery date %s"
+msgstr ""
+
+#. translators: %s: the name of the Økoskab.
+#: functions/functions.php:3908
+#, php-format
+msgid "delivery to Økoskab %s"
+msgstr ""
+
+#: functions/functions.php:3909
+msgid "no longer a delivery to an Økoskab"
+msgstr ""
+
+#. translators: %s: the shipment reference.
+#: functions/functions.php:4000
+#, php-format
+msgid ""
+"Økoskabet changed the delivery for %s, but it could not be read back. The "
+"order still says what the customer ordered."
+msgstr ""
+
+#. translators: %s: a list of what was changed, already joined.
+#: functions/functions.php:4016
+#, php-format
+msgid "Økoskabet changed the delivery: %s. Changed there, not here."
+msgstr ""
+
+#: functions/functions.php:4383
 msgid "Please select an Økoskab and Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4134
+#: functions/functions.php:4388
 msgid "Please select a Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4141
+#: functions/functions.php:4395
 msgid ""
 "Please select a pickup location and a pickup date before submitting the "
 "order."
 msgstr ""
 
-#: functions/functions.php:4290 functions/functions.php:4328
+#: functions/functions.php:4544 functions/functions.php:4582
 msgid "Delivery date"
 msgstr ""
 
-#: functions/functions.php:4754
+#: functions/functions.php:5008
 msgid "never"
 msgstr ""
 
 #. translators: %s: human-readable time difference, e.g. "2 hours".
-#: functions/functions.php:4758
+#: functions/functions.php:5012
 #, php-format
 msgid "%s ago"
 msgstr ""
@@ -2381,14 +2411,14 @@ msgid ""
 msgstr ""
 
 #. translators: %1$s = internal event name, %2$s = capture result message
-#: rest/OkoRest.php:1120
+#: rest/OkoRest.php:1135
 #, php-format
 msgid ""
 "Økoskabet webhook: betalingshåndtering via event \"%1$s\". Resultat: %2$s"
 msgstr ""
 
 #. translators: %s = internal event name
-#: rest/OkoRest.php:1149
+#: rest/OkoRest.php:1164
 #, php-format
 msgid "Ordre markeret som afsluttet via Økoskabet webhook. Event: %s"
 msgstr ""

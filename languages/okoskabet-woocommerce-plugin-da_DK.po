@@ -1703,6 +1703,21 @@ msgstr "aldrig"
 msgid "%s ago"
 msgstr "for %s siden"
 
+msgid "delivery date %s"
+msgstr "leveringsdato %s"
+
+msgid "delivery to Økoskab %s"
+msgstr "levering til Økoskab %s"
+
+msgid "no longer a delivery to an Økoskab"
+msgstr "ikke længere en levering til et Økoskab"
+
+msgid "Økoskabet changed the delivery for %s, but it could not be read back. The order still says what the customer ordered."
+msgstr "Økoskabet ændrede leveringen for %s, men den kunne ikke læses tilbage. Ordren siger stadig det, kunden bestilte."
+
+msgid "Økoskabet changed the delivery: %s. Changed there, not here."
+msgstr "Økoskabet ændrede leveringen: %s. Ændret dér, ikke her."
+
 msgid "Ask for flat, floor and door"
 msgstr "Spørg om lejlighed, etage og dør"
 

@@ -3825,6 +3825,235 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 }
 
 /** Meta holding a fingerprint of what we last told Økoskabet about an order. */
+/**
+ * The fields of a shipment a change to which belongs back in the shop.
+ *
+ * The packing room moves a delivery to a shed, or back to the customer's
+ * door, or corrects an address — in Økoskabet's backoffice, where the shop
+ * cannot see it. WooCommerce then still holds what the customer ordered, and
+ * the next edit in the shop sends that back over the correction. Avokadokontoret
+ * renamed a product on 17 October 2026; the rename touched three orders, and
+ * two deliveries that had been moved to a shed by hand and back again were
+ * overwritten with the address they were ordered with.
+ */
+const OKO_DELIVERY_CHANGES = array(
+	'shipment_type',
+	'delivery_date',
+	'shed_id',
+	'recipient_name',
+	'street_name',
+	'house_number',
+	'floor',
+	'door',
+	'supplementary_town',
+	'city',
+	'postal_code',
+);
+
+/** Set while we are writing Økoskabet's own change, so it is not sent back. */
+const OKO_WRITING_BACK_META = '_okoskabet_writing_back';
+
+/**
+ * Whether a webhook's `changes` touch the delivery itself.
+ *
+ * @param array<string,mixed> $changes The `changes` map from the webhook.
+ * @return bool
+ */
+function oko_changes_touch_the_delivery(array $changes): bool
+{
+	foreach (OKO_DELIVERY_CHANGES as $field) {
+		if (array_key_exists($field, $changes)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Put Økoskabet's delivery back on the WooCommerce order.
+ *
+ * The webhook says which fields changed, not what the delivery now is, and a
+ * single changed `floor` cannot be merged into an address WooCommerce holds
+ * as two composed lines. So the shipment is read whole and written whole —
+ * one lookup, and the two ends agree afterwards rather than nearly agree.
+ *
+ * Nothing about money: not the shipping method, not the freight, not a line.
+ * A delivery moved to a shed is the packing room's business; re-pricing an
+ * order the customer has already paid is not, and a shop that saw its totals
+ * change by themselves would be right to stop trusting this.
+ *
+ * @param \WC_Order           $order    The order to write on.
+ * @param array<string,mixed> $shipment The shipment as Økoskabet has it.
+ * @return array<int,string> What was changed, for the order's own note.
+ */
+function oko_write_delivery_back(\WC_Order $order, array $shipment): array
+{
+	$changed = array();
+
+	$date = (string) ($shipment['delivery_date'] ?? '');
+	if ($date !== '' && $date !== (string) $order->get_meta('_billing_okoskabet_delivery_date', true)) {
+		$order->update_meta_data('_billing_okoskabet_delivery_date', $date);
+		/* translators: %s: the new delivery date. */
+		$changed[] = sprintf(__('delivery date %s', O_TEXTDOMAIN), $date);
+	}
+
+	$shed_id = isset($shipment['shed_reservation']['shed']['id'])
+		? (string) $shipment['shed_reservation']['shed']['id']
+		: '';
+	if ($shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
+		$order->update_meta_data('_billing_okoskabet_shed_id', $shed_id);
+		$changed[] = $shed_id !== ''
+			/* translators: %s: the name of the Økoskab. */
+			? sprintf(__('delivery to Økoskab %s', O_TEXTDOMAIN), (string) ($shipment['shed_reservation']['shed']['name'] ?? $shed_id))
+			: __('no longer a delivery to an Økoskab', O_TEXTDOMAIN);
+	}
+
+	$address = (array) ($shipment['home_delivery']['address'] ?? array());
+	if ($address !== array()) {
+		foreach (oko_delivery_address_lines($address) as $setter => $value) {
+			if ($value !== (string) $order->{'get_' . $setter}()) {
+				$order->{'set_' . $setter}($value);
+				$changed[] = sprintf('%s: %s', $setter, $value !== '' ? $value : '—');
+			}
+		}
+	}
+
+	return $changed;
+}
+
+/**
+ * Økoskabet's address, as the two lines WooCommerce keeps it in.
+ *
+ * The register holds a street, a house number and a unit apart; WooCommerce
+ * holds a line and a second line. Composed the way the plugin's own sending
+ * is parsed at the other end, so writing this back and sending it again is a
+ * round trip and not a slow drift.
+ *
+ * `supplementary_town` — "Kirkendrup" in "Ærtebjerggårdvej 122, Kirkendrup,
+ * 5270 Odense N" — is a place name between the street and the postcode. It
+ * goes on the first line after the house number, which is where the register
+ * reads it from, and never on the second, which is the flat's.
+ *
+ * @param array<string,mixed> $address Økoskabet's address fields.
+ * @return array<string,string> WooCommerce setter name => value.
+ */
+function oko_delivery_address_lines(array $address): array
+{
+	$street = trim(implode(' ', array_filter(array(
+		(string) ($address['street_name'] ?? ''),
+		(string) ($address['house_number'] ?? ''),
+	), 'strlen')));
+
+	$town = trim((string) ($address['supplementary_town'] ?? ''));
+	if ($town !== '') {
+		$street = trim($street . ', ' . $town);
+	}
+
+	$unit = trim(implode(' ', array_filter(array(
+		(string) ($address['floor'] ?? ''),
+		(string) ($address['door'] ?? ''),
+	), 'strlen')));
+
+	return array(
+		'shipping_address_1' => $street,
+		'shipping_address_2' => $unit,
+		'shipping_city'      => trim((string) ($address['city'] ?? '')),
+		'shipping_postcode'  => trim((string) ($address['postal_code'] ?? '')),
+	);
+}
+
+/**
+ * Take Økoskabet's delivery and put it on the order it belongs to.
+ *
+ * Called when a webhook says a delivery changed. The shipment is read once
+ * and written whole; the order gets a note naming what moved, so the shop can
+ * see that somebody at Økoskabet changed it and what to.
+ *
+ * It does not send anything back. Writing the order is itself an edit, and the
+ * resend would push Økoskabet's own change at Økoskabet — so the resend is
+ * held off for this save, and the fingerprint is moved forward to what the
+ * shipment now is. The next genuine edit in the shop is then a difference
+ * against the corrected delivery rather than against the one it replaced,
+ * which is the whole point: it is what stops a product rename from undoing
+ * the packing room's work.
+ *
+ * @param string              $reference The shipment reference, i.e. the order number.
+ * @param array<string,mixed> $merchant  The merchant record.
+ * @return array<int,string> What was changed, empty when nothing was.
+ */
+function oko_take_delivery_from_okoskabet(string $reference, array $merchant): array
+{
+	$order = function_exists('wc_get_order') ? wc_get_order($reference) : null;
+	if (! $order instanceof \WC_Order) {
+		return array();
+	}
+
+	// Read fresh. The webhook is the signal, not the source: it says which
+	// fields moved, and a single changed floor cannot be merged into an
+	// address WooCommerce keeps as two composed lines.
+	oko_forget_shipment($reference, $merchant);
+	$shipment = oko_shipment_at_okoskabet($reference, $merchant);
+	if ($shipment === null) {
+		$order->add_order_note(sprintf(
+			/* translators: %s: the shipment reference. */
+			__('Økoskabet changed the delivery for %s, but it could not be read back. The order still says what the customer ordered.', O_TEXTDOMAIN),
+			$reference
+		));
+		return array();
+	}
+
+	$changed = oko_write_delivery_back($order, $shipment);
+	if ($changed === array()) {
+		return array();
+	}
+
+	$order->update_meta_data(OKO_WRITING_BACK_META, 'yes');
+	$order->save();
+
+	$order->add_order_note(sprintf(
+		/* translators: %s: a list of what was changed, already joined. */
+		__('Økoskabet changed the delivery: %s. Changed there, not here.', O_TEXTDOMAIN),
+		implode(', ', $changed)
+	));
+
+	// What Økoskabet holds is now what we would send, so the next save is
+	// measured against it. Built after the save, from the order as it now is.
+	$fresh   = wc_get_order($order->get_id());
+	$payload = $fresh instanceof \WC_Order ? oko_shipment_payload($fresh, $merchant) : null;
+	if ($payload !== null) {
+		$fresh->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($payload));
+		$fresh->delete_meta_data(OKO_WRITING_BACK_META);
+		$fresh->save();
+	}
+
+	oko_forget_shipment($reference, $merchant);
+
+	return $changed;
+}
+
+add_filter('oko_resend_shipment_on_update', 'oko_hold_the_resend_while_writing_back', 10, 2);
+
+/**
+ * Økoskabet's own change is not sent back to Økoskabet.
+ *
+ * Writing the order fires the same save hook as a shop's edit, and without
+ * this the correction would be pushed straight back at the account it came
+ * from — a round trip that can only lose.
+ *
+ * @param bool      $resend Whether to resend.
+ * @param \WC_Order $order  The order being saved.
+ * @return bool
+ */
+function oko_hold_the_resend_while_writing_back($resend, $order): bool
+{
+	if ($order instanceof \WC_Order && ! empty($order->get_meta(OKO_WRITING_BACK_META, true))) {
+		return false;
+	}
+
+	return (bool) $resend;
+}
+
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
 
 /**

@@ -1023,6 +1023,19 @@ class OkoRest extends Base
 			}
 		}
 
+		// The delivery itself, before anything about statuses. A shed, a date
+		// or an address changed by hand in Økoskabet's backoffice is a change
+		// the shop has to hear about whatever steps it has ticked — and until
+		// it does, WooCommerce still holds what the customer ordered, and the
+		// next edit in the shop sends that back over the correction.
+		$delivery_written_back = array();
+		if ($raw_event === 'reservation_updated'
+			&& $shipment_reference !== ''
+			&& isset($params['changes']) && is_array($params['changes'])
+			&& \oko_changes_touch_the_delivery($params['changes'])) {
+			$delivery_written_back = \oko_take_delivery_from_okoskabet($shipment_reference, $merchant);
+		}
+
 		// As the shop saved them. The old names are rewritten once, by the
 		// migration, and translating again here would undo a shop's own
 		// choice: a freshly ticked "I skabet" is the real `in_shed` step, and
@@ -1040,9 +1053,10 @@ class OkoRest extends Base
 				));
 			}
 			return array(
-				'success' => true,
-				'message' => 'Event acknowledged but not actionable',
-				'event'   => $raw_event,
+				'success'  => true,
+				'message'  => 'Event acknowledged but not actionable',
+				'event'    => $raw_event,
+				'delivery' => $delivery_written_back,
 			);
 		}
 
@@ -1064,6 +1078,7 @@ class OkoRest extends Base
 				'message'  => 'Event not configured for any action',
 				'event'    => $internal_event,
 				'order_id' => $shipment_reference,
+				'delivery' => $delivery_written_back,
 			);
 		}
 
@@ -1173,6 +1188,7 @@ class OkoRest extends Base
 			'merchant_id'    => $merchant['id'] ?? '',
 			'capture_result' => $capture_result,
 			'new_status'     => $order->get_status(),
+			'delivery'       => $delivery_written_back,
 		);
 	}
 }
