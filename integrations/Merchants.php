@@ -230,6 +230,7 @@ class Merchants extends Base {
 	 */
 	public static function purge_config_cache(): void {
 		self::$config_cache = null;
+		\oko_merchant_configuration( \OKO_FORGET_CONFIGURATION );
 	}
 
 	/**

@@ -115,6 +115,17 @@ function o_check_configuration(string $value, ?string $merchant_id = null): bool
  * string produce a cache that can never be cleared — which is exactly the
  * bug this replaced.
  */
+/**
+ * Asking for this merchant's configuration drops the memo instead.
+ *
+ * The memo below lasts a request, which is right for a checkout recalculating
+ * on every keystroke and wrong for the request that has just saved new
+ * settings: `Merchants::purge_config_cache()` dropped the stored copy and the
+ * one held in here outlived it. A merchant id nobody can have is how that
+ * cache is reached without opening it to everything else.
+ */
+const OKO_FORGET_CONFIGURATION = "\0forget";
+
 function o_configuration_transient_key(string $merchant_id): string
 {
 	return O_TEXTDOMAIN . '_configuration_' . sanitize_key($merchant_id);
@@ -182,6 +193,11 @@ function oko_api_request(array $merchant, string $method, string $path, ?string 
 function oko_merchant_configuration(string $merchant_id): array
 {
 	static $asked = array();
+
+	if ($merchant_id === OKO_FORGET_CONFIGURATION) {
+		$asked = array();
+		return array();
+	}
 
 	if (array_key_exists($merchant_id, $asked)) {
 		return $asked[$merchant_id];
@@ -3347,6 +3363,15 @@ function oko_order_line_items(\WC_Order $order): array
 {
 	$lines = array();
 
+	// Only in kroner. Økoskabet keeps the figure as an amount and nothing
+	// else — there is no currency beside it — so a shop selling in euros
+	// would have its offers reckoned on numbers read as kroner. Our shops are
+	// Danish; the day one is not, this is the line that has to be thought
+	// about rather than the one that quietly went wrong.
+	$with_totals = oko_shop_sends_line_totals(oko_merchant_for_order($order))
+		&& $order->get_currency() === 'DKK';
+	$with_vat    = wc_prices_include_tax();
+
 	foreach ($order->get_items('line_item') as $item) {
 		// Minus whatever has been refunded. WooCommerce only lets a line be
 		// edited while an order is pending or on hold, so on an order that has
@@ -3443,7 +3468,7 @@ function oko_order_line_items(\WC_Order $order): array
 			}
 		}
 
-		$lines[] = array(
+		$line = array(
 			'product_id'    => $product_id > 0 ? $product_id : null,
 			'variant_id'    => $variant_id > 0 ? $variant_id : null,
 			'name'          => $name,
@@ -3454,11 +3479,81 @@ function oko_order_line_items(\WC_Order $order): array
 			'properties'    => $properties,
 			'image'         => $image,
 		);
+
+		// Left out rather than sent empty when the shop is not asked for it:
+		// an update that carries no `total` keeps the one the line already
+		// has, so an absent key is the only way to say nothing about money.
+		if ($with_totals) {
+			$line['total'] = oko_line_total($order, $item, $with_vat);
+		}
+
+		$lines[] = $line;
 	}
 
 	return $lines;
 }
 
+
+/**
+ * Whether Økoskabet wants the line totals on this shop's orders.
+ *
+ * It says so in its own configuration, and only while the shop uses offers in
+ * the Track&Trace app: a share of what an offer sold is reckoned on what the
+ * lines came to, and a line price is kept for nothing else (Marc, 19 October
+ * 2026 — "priserne må kun bruges, når butikken har sagt ja til
+ * tilbudsdelen"). A shop that has not said yes is not asked for them, and an
+ * Økoskabet that has not heard of the field answers nothing, which reads the
+ * same way: the shop sends no prices until the day it is asked to.
+ *
+ * @param array<string,mixed> $merchant
+ */
+function oko_shop_sends_line_totals(array $merchant): bool
+{
+	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
+
+	return ! empty($configuration['send_line_totals']);
+}
+
+/**
+ * What a line came to, as this shop reports money.
+ *
+ * Økoskabet takes the line in the shop's own money after discounts, with VAT
+ * in it only where the shop's own prices have VAT in them — so the figure is
+ * read the way the shop would read it off the order, not converted into some
+ * convention of ours.
+ *
+ * Minus what has been refunded, for the reason the quantity is: WooCommerce
+ * only lets a line be edited while an order is pending or on hold, so on an
+ * order already sent, refunding is how a shop takes goods off it. The refund
+ * lines carry negative amounts, which is why they are subtracted by adding.
+ *
+ * @param \WC_Order                 $order
+ * @param \WC_Order_Item            $item
+ */
+function oko_line_total(\WC_Order $order, $item, bool $with_vat): float
+{
+	$total = (float) $item->get_total();
+	if ($with_vat) {
+		$total += (float) $item->get_total_tax();
+	}
+
+	$item_id = (int) $item->get_id();
+
+	foreach ($order->get_refunds() as $refund) {
+		foreach ($refund->get_items('line_item') as $refunded) {
+			if ((int) $refunded->get_meta('_refunded_item_id') !== $item_id) {
+				continue;
+			}
+
+			$total += (float) $refunded->get_total();
+			if ($with_vat) {
+				$total += (float) $refunded->get_total_tax();
+			}
+		}
+	}
+
+	return round($total, 2);
+}
 
 /**
  * Whether this shop wants us to ask for the flat, floor and door.
