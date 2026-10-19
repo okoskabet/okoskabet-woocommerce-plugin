@@ -3701,14 +3701,18 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	} else {
 		$recipient_name = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
 		$data['customer']['recipient_name'] = $recipient_name;
+		// `location` used to be sent here as well, carrying the same text as
+		// the note below. Økoskabet has no such field — `HomeDelivery` holds a
+		// name and an address and nothing else — so the key was cast away
+		// unread on every order. It is gone, and with it the resend that a
+		// changed message used to set off: the payload no longer differs, so
+		// nothing is sent that would arrive carrying nothing.
 		$data['home_delivery'] = array_filter([
 			'recipient_name' => $recipient_name,
 			'address_1'      => $order->get_shipping_address_1(),
 			'address_2'      => oko_second_address_line($order),
 			'city'           => $order->get_shipping_city(),
 			'postal_code'    => $order->get_shipping_postcode(),
-			// Combined English location + free-text note, or null if empty.
-			'location'       => !empty($logistics_note) ? $logistics_note : null,
 		]);
 		// Send the logistics note (dropdown selection + free-text) as the API
 		// notes field so it appears in Økoskabet's Notes column. A message the
@@ -4305,7 +4309,12 @@ function oko_order_save_depth(int $delta = 0): int
  */
 function oko_shipment_fingerprint(array $payload): string
 {
-	unset($payload['locale'], $payload['webshop_products_url']);
+	// `notes` is left out for a different reason than the other two: it is not
+	// something we send again at all after the order is created, so a change
+	// to the shop's copy of it is not a reason to resend — and counting it
+	// would send an order whose note is the only thing that moved, with the
+	// note stripped, achieving nothing.
+	unset($payload['locale'], $payload['webshop_products_url'], $payload['notes']);
 	return md5((string) wp_json_encode($payload));
 }
 
@@ -4407,6 +4416,18 @@ function oko_resend_shipment_on_update(int $order_id): void
 	}
 
 	$seen[$order_id] = true;
+
+	// The note is not ours to send again. The shop composes it once, when the
+	// order is created; after that the only place it can be changed is
+	// Økoskabet's own backoffice, and a resend that carried it would put the
+	// shop's old wording back over whatever was written there. WooCommerce has
+	// no field for it anyway — checked on Gaardmester's order screen, open
+	// order and all: the only note box a shop has is the one in the sidebar,
+	// which is WooCommerce's own log and has never been sent.
+	//
+	// Leaving the key out is what makes the difference: the other end casts
+	// the fields it is given, so an absent `notes` is left as it stands.
+	unset($payload['notes']);
 
 	$response = oko_api_request(
 		$merchant,
