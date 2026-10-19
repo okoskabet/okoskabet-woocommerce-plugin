@@ -1709,6 +1709,9 @@ msgstr "leveringsadresse %s"
 msgid "delivery date %s"
 msgstr "leveringsdato %s"
 
+msgid "recipient %s"
+msgstr "modtager %s"
+
 msgid "delivery to Økoskab %s"
 msgstr "levering til Økoskab %s"
 

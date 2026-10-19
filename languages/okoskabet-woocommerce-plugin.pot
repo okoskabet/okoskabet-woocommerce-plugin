@@ -908,6 +908,9 @@ msgstr ""
 #. translators: %s: the name of the Økoskab.
 #: functions/functions.php:3908
 #, php-format
+msgid "recipient %s"
+msgstr ""
+
 msgid "delivery to Økoskab %s"
 msgstr ""
 
