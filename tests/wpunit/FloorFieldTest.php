@@ -111,6 +111,41 @@ class FloorFieldTest extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
+	 * But not when the parcel is going somewhere else entirely.
+	 *
+	 * The fallback is for one address written once, where only the invoice
+	 * form had room for the floor. An order sent to a workplace across town is
+	 * a different building: carrying "2. sal" over to it is a flat that is not
+	 * there, which the register refuses — or, worse, one that is.
+	 */
+	public function test_the_invoice_floor_does_not_follow_to_another_address(): void
+	{
+		$order = new \WC_Order();
+		$order->set_billing_address_1('Korsløkkevej 51');
+		$order->set_billing_postcode('5220');
+		$order->set_billing_address_2('2. sal');
+		$order->set_shipping_address_1('Byagervej 194');
+		$order->set_shipping_postcode('8330');
+		$order->save();
+
+		$this->assertSame('', oko_second_address_line($order));
+	}
+
+	/** Same street written a little differently is still the same street. */
+	public function test_the_same_address_typed_loosely_still_answers(): void
+	{
+		$order = new \WC_Order();
+		$order->set_billing_address_1('  Korsløkkevej   51 ');
+		$order->set_billing_postcode('5220');
+		$order->set_billing_address_2('3 th');
+		$order->set_shipping_address_1('Korsløkkevej 51');
+		$order->set_shipping_postcode('5220');
+		$order->save();
+
+		$this->assertSame('3 th', oko_second_address_line($order));
+	}
+
+	/**
 	 * And the invoice address answers when there is no delivery one — which is
 	 * every order in a shop whose checkout has no second shipping line.
 	 */
