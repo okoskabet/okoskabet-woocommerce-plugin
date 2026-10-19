@@ -4001,7 +4001,23 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			: __('no longer a delivery to an Økoskab', O_TEXTDOMAIN);
 	}
 
-	$address = (array) (((array) ($shipment['home_delivery'] ?? array()))['address'] ?? array());
+	// The name the box is delivered to. Økoskabet holds it as one name,
+	// WooCommerce as a first and a last, so it is written back only when the
+	// two actually disagree: a name of three words composes to the same
+	// string either way, and rewriting "Marc Seerup Hansen" as first "Marc",
+	// last "Seerup Hansen" would put a change nobody made on every order.
+	$home      = (array) ($shipment['home_delivery'] ?? array());
+	$recipient = isset($home['recipient_name']) ? sanitize_text_field((string) $home['recipient_name']) : '';
+	$held_name = trim($order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name());
+	if ($recipient !== '' && $recipient !== $held_name) {
+		$name = explode(' ', $recipient, 2);
+		$order->set_shipping_first_name($name[0]);
+		$order->set_shipping_last_name($name[1] ?? '');
+		/* translators: %s: the name the delivery is now addressed to. */
+		$changed[] = sprintf(__('recipient %s', O_TEXTDOMAIN), $recipient);
+	}
+
+	$address = (array) ($home['address'] ?? array());
 	// Named once, as an address, rather than field by field. The note is read
 	// by whoever runs the shop, and "shipping_address_1: Byagervej 194,
 	// shipping_address_2: 1 tv" is our own column names read out loud.

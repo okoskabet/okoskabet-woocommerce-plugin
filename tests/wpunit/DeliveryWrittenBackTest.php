@@ -337,6 +337,70 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$this->assertContains('ADDITION — Smør', $names, "The addition's goods must ride along on a resend too.");
 	}
 
+	/**
+	 * A recipient renamed at Økoskabet is written onto the order.
+	 *
+	 * Measured on staging before it was: the backoffice could rename the
+	 * recipient, the webhook said so, and the shop never heard — until the
+	 * next edit in the shop sent the old name back and undid it.
+	 */
+	public function test_a_renamed_recipient_reaches_the_order(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_shipping_first_name('Marc');
+		$order->set_shipping_last_name('Hansen');
+
+		$changed = oko_write_delivery_back($order, array(
+			'home_delivery' => array('recipient_name' => 'Pernille Testmodtager'),
+		));
+		$order->save();
+
+		$fresh = wc_get_order($order->get_id());
+
+		$this->assertSame('Pernille', $fresh->get_shipping_first_name());
+		$this->assertSame('Testmodtager', $fresh->get_shipping_last_name());
+		$this->assertNotSame(array(), $changed, 'A renamed recipient belongs in the order note.');
+	}
+
+	/**
+	 * A name of three words is left exactly as the shop wrote it.
+	 *
+	 * Økoskabet holds one name and WooCommerce two, so "Marc Seerup Hansen"
+	 * can be first "Marc Seerup" or first "Marc" — both compose back to the
+	 * same name. Rewriting it would record a change nobody made, on every
+	 * order with a middle name.
+	 */
+	public function test_the_same_name_split_differently_is_left_alone(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_shipping_first_name('Marc Seerup');
+		$order->set_shipping_last_name('Hansen');
+
+		$changed = oko_write_delivery_back($order, array(
+			'home_delivery' => array('recipient_name' => 'Marc Seerup Hansen'),
+		));
+
+		$this->assertSame('Marc Seerup', $order->get_shipping_first_name());
+		$this->assertSame(array(), $changed);
+	}
+
+	/** And the written-back name is what the next send carries. */
+	public function test_the_written_back_recipient_survives_the_next_send(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_shipping_first_name('Marc');
+		$order->set_shipping_last_name('Hansen');
+
+		oko_write_delivery_back($order, array(
+			'home_delivery' => array('recipient_name' => 'Pernille Testmodtager'),
+		));
+		$order->save();
+
+		$payload = oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant());
+
+		$this->assertSame('Pernille Testmodtager', $payload['home_delivery']['recipient_name']);
+	}
+
 	/** @return array<string,mixed> */
 	private function merchant(): array
 	{
