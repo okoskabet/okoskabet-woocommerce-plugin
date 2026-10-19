@@ -3913,8 +3913,11 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		$order->update_meta_data('billing_okoskabet_done', true);
 
 		// Record what Økoskabet now has. Without this the save below would look
-		// like an edit and send the same order straight back a second time.
+		// like an edit and send the same order straight back a second time —
+		// and the copy is what every later edit is measured against, so that
+		// only what actually moved is sent.
 		$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($data));
+		$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($data));
 
 		$order->save();
 	}
@@ -4189,6 +4192,7 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	$payload = oko_shipment_payload($order, $merchant);
 	if ($payload !== null) {
 		$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($payload));
+		$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
 	}
 
 	$order->save();
@@ -4204,6 +4208,24 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 
 /** Meta holding a fingerprint of what we last told Økoskabet about an order. */
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
+
+/**
+ * Meta holding the order as Økoskabet last accepted it.
+ *
+ * The fingerprint above answers "has anything moved"; this answers "what".
+ * Both are kept because they are written together and read at different
+ * moments — an order sent by an older version has the fingerprint and not
+ * this, and the resend knows what to do with that.
+ */
+const OKO_SENT_META = '_okoskabet_sent_payload';
+
+/**
+ * Meta holding the shape of the last change Økoskabet refused.
+ *
+ * So that a change it will never accept is not sent on every save for the
+ * rest of the order's life, while a different change still gets its own try.
+ */
+const OKO_REFUSED_CHANGE_META = '_okoskabet_refused_change';
 
 /**
  * Meta marking an order Økoskabet will not take changes to any more.
@@ -4317,21 +4339,149 @@ function oko_order_save_depth(int $delta = 0): int
 }
 
 /**
- * A fingerprint of a payload, so we can tell whether anything actually changed.
+ * A payload reduced to what is actually about the order.
  *
  * Leaves out what describes the request rather than the order: the language
  * and the shop's own address can differ between the customer's checkout and
  * an admin's screen on a multilingual shop, and that is not an edit.
+ * `allow_invalid` goes the same way — the other end reads it when a shipment
+ * is created and never again.
+ *
+ * `notes` is left out for a different reason: it is not something we send
+ * again at all after the order is created, so a change to the shop's copy of
+ * it is not a reason to resend — and counting it would send an order whose
+ * note is the only thing that moved, with the note stripped, achieving
+ * nothing.
+ *
+ * @param array<string,mixed> $payload
+ * @return array<string,mixed>
  */
+function oko_comparable_payload(array $payload): array
+{
+	unset(
+		$payload['locale'],
+		$payload['webshop_products_url'],
+		$payload['notes'],
+		$payload['allow_invalid']
+	);
+
+	return $payload;
+}
+
+/** A fingerprint of a payload, for telling two of them apart. */
 function oko_shipment_fingerprint(array $payload): string
 {
-	// `notes` is left out for a different reason than the other two: it is not
-	// something we send again at all after the order is created, so a change
-	// to the shop's copy of it is not a reason to resend — and counting it
-	// would send an order whose note is the only thing that moved, with the
-	// note stripped, achieving nothing.
-	unset($payload['locale'], $payload['webshop_products_url'], $payload['notes']);
-	return md5((string) wp_json_encode($payload));
+	return md5((string) wp_json_encode(oko_comparable_payload($payload)));
+}
+
+/** The parts of a payload that are an object of their own, not a value. */
+const OKO_NESTED_PAYLOAD_KEYS = array('customer', 'home_delivery', 'reservation');
+
+/**
+ * Which shape of delivery a payload describes.
+ *
+ * Not the value of `shipment_type` alone: the keys themselves move when an
+ * order changes destination — `home_delivery` gives way to `reservation`, and
+ * back — and that is the one change a difference cannot express, because
+ * leaving a key out means "unchanged" and never "gone".
+ *
+ * @param array<string,mixed> $payload
+ */
+function oko_destination_shape(array $payload): string
+{
+	return implode('|', array(
+		(string) ($payload['shipment_type'] ?? ''),
+		isset($payload['home_delivery']) ? 'home' : '',
+		isset($payload['reservation']) ? 'shed' : '',
+		array_key_exists('pickup_location_id', $payload) ? 'pickup' : '',
+	));
+}
+
+/**
+ * What has changed since Økoskabet was last told about this order.
+ *
+ * The other end writes the fields it is given and leaves the rest as they
+ * stand, so sending only what moved is what keeps a product rename in the
+ * shop from undoing an address the packing room corrected. Sending the whole
+ * order every time is what made that possible in the first place.
+ *
+ * Returns an empty array when nothing moved — the order is not sent at all
+ * then — and the whole payload when the delivery changed shape, which is not
+ * a field edit and is not safe to express as a difference.
+ *
+ * @param array<string,mixed> $sent    What Økoskabet accepted last.
+ * @param array<string,mixed> $payload What the order says now.
+ * @return array<string,mixed>
+ */
+function oko_payload_changes(array $sent, array $payload): array
+{
+	$sent    = oko_comparable_payload($sent);
+	$payload = oko_comparable_payload($payload);
+
+	if (oko_destination_shape($sent) !== oko_destination_shape($payload)) {
+		return $payload;
+	}
+
+	$changes = array();
+
+	foreach ($payload as $key => $value) {
+		if (! array_key_exists($key, $sent)) {
+			$changes[$key] = $value;
+			continue;
+		}
+
+		$before = $sent[$key];
+
+		if (is_array($value) && is_array($before) && in_array($key, OKO_NESTED_PAYLOAD_KEYS, true)) {
+			$inner = oko_nested_changes($before, $value);
+			if ($inner !== array()) {
+				$changes[$key] = $inner;
+			}
+			continue;
+		}
+
+		if ($before !== $value) {
+			$changes[$key] = $value;
+		}
+	}
+
+	// A key the order has stopped carrying altogether — a delivery date taken
+	// off — is left alone, because an absent key reads as "unchanged" at the
+	// other end. That is not new: the whole payload left it out too, and the
+	// date stayed. Changing it belongs in Økoskabet's own backoffice.
+
+	return $changes;
+}
+
+/**
+ * The same comparison one level down, inside `customer` and the rest.
+ *
+ * A field the order has stopped carrying is sent as empty rather than left
+ * out: inside an object, leaving it out reads as "unchanged" just as it does
+ * at the top, and a second address line the shop has deleted would otherwise
+ * stay on the delivery for good.
+ *
+ * @param array<string,mixed> $before
+ * @param array<string,mixed> $now
+ * @return array<string,mixed>
+ */
+function oko_nested_changes(array $before, array $now): array
+{
+	$changes = array();
+
+	foreach ($now as $key => $value) {
+		if (! array_key_exists($key, $before) || $before[$key] !== $value) {
+			$changes[$key] = $value;
+		}
+	}
+
+	foreach ($before as $key => $value) {
+		if (! array_key_exists($key, $now)) {
+			$changes[$key] = '';
+		}
+	}
+
+	return $changes;
 }
 
 add_action('woocommerce_update_order', 'oko_resend_shipment_on_update', 20, 1);
@@ -4427,11 +4577,27 @@ function oko_resend_shipment_on_update(int $order_id): void
 	}
 
 	$fingerprint = oko_shipment_fingerprint($payload);
-	if ($fingerprint === $sent_fingerprint) {
+	$sent        = $order->get_meta(OKO_SENT_META, true);
+
+	if (is_array($sent)) {
+		$changes = oko_payload_changes($sent, $payload);
+	} elseif ($fingerprint === $sent_fingerprint) {
+		// Sent by a version that recorded a fingerprint and not the payload.
+		// Nothing has moved, so this is the free moment to write down what
+		// Økoskabet holds — after this the order compares like any other.
+		$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
+		$order->save_meta_data();
 		return;
+	} else {
+		// Something moved, and we have no record of what it moved from. The
+		// whole order goes, exactly as it did before differences — once per
+		// order, and never again.
+		$changes = oko_comparable_payload($payload);
 	}
 
-	$seen[$order_id] = true;
+	if ($changes === array()) {
+		return;
+	}
 
 	// The note is not ours to send again. The shop composes it once, when the
 	// order is created; after that the only place it can be changed is
@@ -4441,15 +4607,25 @@ function oko_resend_shipment_on_update(int $order_id): void
 	// order and all: the only note box a shop has is the one in the sidebar,
 	// which is WooCommerce's own log and has never been sent.
 	//
-	// Leaving the key out is what makes the difference: the other end casts
-	// the fields it is given, so an absent `notes` is left as it stands.
-	unset($payload['notes']);
+	// `oko_comparable_payload()` takes it off both sides of the comparison, so
+	// it is neither a reason to send nor part of what is sent.
+
+	// A refusal is about the change, not the order. Økoskabet answering 422
+	// to one edit must not stop the next one, but sending the identical thing
+	// again cannot help either — so the refused change is remembered by shape
+	// and only that exact shape is held back.
+	$change_print = md5((string) wp_json_encode($changes));
+	if ($change_print === (string) $order->get_meta(OKO_REFUSED_CHANGE_META, true)) {
+		return;
+	}
+
+	$seen[$order_id] = true;
 
 	$response = oko_api_request(
 		$merchant,
 		'PUT',
 		'/api/v1/shipments/' . rawurlencode((string) $order->get_order_number()),
-		(string) wp_json_encode($payload)
+		(string) wp_json_encode($changes)
 	);
 
 	// Could not reach Økoskabet at all. Leave the fingerprint alone so the
@@ -4528,13 +4704,28 @@ function oko_resend_shipment_on_update(int $order_id): void
 				$reason
 			));
 		}
+
+		// Refused, so Økoskabet still holds what it held before: the record of
+		// what it has must not move. Only this exact change is held back, and
+		// the next edit — including one that touches nothing else — is sent
+		// and refused on its own merits rather than silently dropped.
+		//
+		// Moving the record here instead would lose the refused field for
+		// good: the next edit would compare against an order Økoskabet never
+		// accepted, find that field unchanged, leave it out, and the two ends
+		// would disagree about it forever with nothing said.
+		$order->update_meta_data(OKO_REFUSED_CHANGE_META, $change_print);
+		$order->save_meta_data();
+		return;
 	}
 
-	// Meta only, not a full save — writing the fingerprint should not itself
-	// read as an edit and call us straight back. `save_meta_data()` also goes
-	// through the order's data store, so this works whether the shop keeps
-	// orders in posts or in WooCommerce's own tables.
+	// Meta only, not a full save — writing down what was sent should not
+	// itself read as an edit and call us straight back. `save_meta_data()`
+	// also goes through the order's data store, so this works whether the shop
+	// keeps orders in posts or in WooCommerce's own tables.
 	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, $fingerprint);
+	$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
+	$order->delete_meta_data(OKO_REFUSED_CHANGE_META);
 	$order->save_meta_data();
 }
 
