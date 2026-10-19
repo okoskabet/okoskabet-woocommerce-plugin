@@ -3419,6 +3419,35 @@ function oko_order_line_items(\WC_Order $order): array
 }
 
 
+/** The shipping methods this plugin puts in a checkout. */
+const OKO_SHIPPING_METHODS = array(
+	'hey_okoskabet_shipping_shed',
+	'hey_okoskabet_shipping_home',
+	'hey_okoskabet_shipping_store_pickup',
+);
+
+/**
+ * Whether Økoskabet is carrying this order.
+ *
+ * The shipping method the customer chose, and nothing else. A shop may sell
+ * with its own couriers beside ours — Gaardmester runs Shipmondo for part of
+ * what they send — and those orders are not ours to forward, whatever else
+ * they carry.
+ *
+ * @param \WC_Order $order
+ * @return bool
+ */
+function oko_order_is_ours(\WC_Order $order): bool
+{
+	foreach ($order->get_shipping_methods() as $shipping_method) {
+		if (in_array($shipping_method->get_method_id(), OKO_SHIPPING_METHODS, true)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 /**
  * Everything Økoskabet is told about an order, in one place.
  *
@@ -3428,8 +3457,8 @@ function oko_order_line_items(\WC_Order $order): array
  *
  * @param \WC_Order $order
  * @param array     $merchant The merchant this order routes to.
- * @return array|null Null when the order carries no delivery date, which means
- *                    it is not an Økoskabet order at all.
+ * @return array|null Null when the order is none of ours — no delivery date
+ *                    and none of our shipping methods.
  */
 function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 {
@@ -3452,9 +3481,25 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	}
 	$logistics_note = implode(' — ', $logistics_note_parts);
 
-	// No date means this is not an Økoskabet order — unless it was placed
-	// without one on purpose, to be given a date by hand.
-	$without_date = empty($order_delivery_date) && $order->get_meta(OKO_WITHOUT_DATE_META, true) === 'yes';
+	// A missing date is not the same as "not our order".
+	//
+	// An order that carries one of our shipping methods is ours whatever else
+	// is missing, and it goes to Økoskabet without a date — where it lands
+	// among the unprocessable shipments and is given one by hand. It used to
+	// be dropped here instead, and that drop was completely silent: no note on
+	// the order, no line in the log, nothing at Økoskabet. Gaardmester's order
+	// 88587 of 17 October 2026 went that way, and it was found because the
+	// customer asked where the food was.
+	//
+	// Only the checkout writes the date, so an order that reaches this without
+	// one was not born in the checkout — a renewal, an import, an order typed
+	// in the admin. The checkout itself refuses to submit a home delivery with
+	// no date unless the postcode has no delivery days at all.
+	//
+	// An order with no method of ours is a different matter: the shop's own
+	// couriers carry those, and sending them would fill the packing room's
+	// list with orders it must not touch.
+	$without_date = empty($order_delivery_date) && oko_order_is_ours($order);
 	if (empty($order_delivery_date) && ! $without_date) {
 		return null;
 	}
