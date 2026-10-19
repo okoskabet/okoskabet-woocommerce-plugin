@@ -3910,16 +3910,46 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	}
 
 	$address = (array) (((array) ($shipment['home_delivery'] ?? array()))['address'] ?? array());
+	// Named once, as an address, rather than field by field. The note is read
+	// by whoever runs the shop, and "shipping_address_1: Byagervej 194,
+	// shipping_address_2: 1 tv" is our own column names read out loud.
+	$address_moved = false;
 	if ($address !== array()) {
 		foreach (oko_delivery_address_lines($address) as $setter => $value) {
 			if ($value !== (string) $order->{'get_' . $setter}()) {
 				$order->{'set_' . $setter}($value);
-				$changed[] = sprintf('%s: %s', $setter, $value !== '' ? $value : '—');
+				$address_moved = true;
 			}
 		}
 	}
 
+	if ($address_moved) {
+		$changed[] = sprintf(
+			/* translators: %s: the delivery address, on one line. */
+			__('delivery address %s', O_TEXTDOMAIN),
+			oko_address_on_one_line($order)
+		);
+	}
+
 	return $changed;
+}
+
+/**
+ * An order's delivery address, written the way a person would say it.
+ *
+ * @param \WC_Order $order
+ * @return string
+ */
+function oko_address_on_one_line(\WC_Order $order): string
+{
+	$street = trim($order->get_shipping_address_1() . ' ' . $order->get_shipping_address_2());
+
+	return trim(implode(', ', array_filter(array(
+		trim($street),
+		trim($order->get_shipping_postcode() . ' ' . $order->get_shipping_city()),
+	), static function (string $part): bool {
+		return $part !== '';
+	})));
 }
 
 /**

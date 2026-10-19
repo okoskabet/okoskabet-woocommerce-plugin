@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Okoskabet WooCommerce Plugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-19 13:53+0200\n"
+"POT-Creation-Date: 2026-10-19 14:29+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -915,8 +915,14 @@ msgstr ""
 msgid "no longer a delivery to an Økoskab"
 msgstr ""
 
+#. translators: %s: the delivery address, on one line.
+#: functions/functions.php:3929
+#, php-format
+msgid "delivery address %s"
+msgstr ""
+
 #. translators: %s: the shipment reference.
-#: functions/functions.php:4000
+#: functions/functions.php:4034
 #, php-format
 msgid ""
 "Økoskabet changed the delivery for %s, but it could not be read back. The "
@@ -924,35 +930,35 @@ msgid ""
 msgstr ""
 
 #. translators: %s: a list of what was changed, already joined.
-#: functions/functions.php:4016
+#: functions/functions.php:4050
 #, php-format
 msgid "Økoskabet changed the delivery: %s. Changed there, not here."
 msgstr ""
 
-#: functions/functions.php:4383
+#: functions/functions.php:4417
 msgid "Please select an Økoskab and Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4388
+#: functions/functions.php:4422
 msgid "Please select a Delivery date before submitting the order."
 msgstr ""
 
-#: functions/functions.php:4395
+#: functions/functions.php:4429
 msgid ""
 "Please select a pickup location and a pickup date before submitting the "
 "order."
 msgstr ""
 
-#: functions/functions.php:4544 functions/functions.php:4582
+#: functions/functions.php:4578 functions/functions.php:4616
 msgid "Delivery date"
 msgstr ""
 
-#: functions/functions.php:5008
+#: functions/functions.php:5042
 msgid "never"
 msgstr ""
 
 #. translators: %s: human-readable time difference, e.g. "2 hours".
-#: functions/functions.php:5012
+#: functions/functions.php:5046
 #, php-format
 msgid "%s ago"
 msgstr ""

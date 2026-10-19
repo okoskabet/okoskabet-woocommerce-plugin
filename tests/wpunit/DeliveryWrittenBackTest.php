@@ -134,6 +134,34 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
+	 * The note names an address, not our column names.
+	 *
+	 * Measured on Gaardmester's staging, where the first version wrote
+	 * "shipping_address_1: Byagervej 194, shipping_address_2: 1 tv,
+	 * shipping_city: Beder" into a note the shop's own people read.
+	 */
+	public function test_the_note_reads_as_an_address(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+
+		$changed = oko_write_delivery_back($order, array(
+			'shipment_type' => 'home_delivery',
+			'delivery_date' => '2026-10-20',
+			'home_delivery' => array('address' => array(
+				'street_name'  => 'Byagervej',
+				'house_number' => '194',
+				'floor'        => '1.',
+				'door'         => 'tv',
+				'city'         => 'Beder',
+				'postal_code'  => '8330',
+			)),
+		));
+
+		$this->assertContains('delivery address Byagervej 194 1. tv, 8330 Beder', $changed);
+		$this->assertStringNotContainsString('shipping_address_1', implode(' ', $changed));
+	}
+
+	/**
 	 * Nothing about money moves.
 	 *
 	 * Where a delivery goes is the packing room's business. Re-pricing an
