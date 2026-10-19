@@ -3997,6 +3997,30 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			: __('no longer a delivery to an Økoskab', O_TEXTDOMAIN);
 	}
 
+	// The note, but only on a home delivery.
+	//
+	// A shed delivery carries none — a message to the driver is for a door,
+	// not a locker — so the sending side leaves it out, and reading an empty
+	// one back would wipe what the customer wrote. Leaving the shop's fields
+	// alone through a stay in a shed is also what lets the original come back
+	// by itself when the delivery returns to the door.
+	//
+	// A note the packing room writes while it IS a home delivery replaces the
+	// shop's own, and the dropdown choice goes with it: the two are joined
+	// with an em dash on the way out, and keeping a stale half would send
+	// "At the front door — ring the bell twice" when Økoskabet now says
+	// something else entirely.
+	if (isset($shipment['home_delivery'])) {
+		$note = oko_delivery_note_from_shipment($order, $shipment);
+
+		if ($note !== (string) $order->get_meta('_billing_okoskabet_delivery_note', true)) {
+			$order->update_meta_data('_billing_okoskabet_delivery_note', $note);
+			$order->update_meta_data('_billing_okoskabet_delivery_location', '');
+			/* translators: %s: the message for the driver. */
+			$changed[] = sprintf(__('message for the driver: %s', O_TEXTDOMAIN), $note !== '' ? $note : '—');
+		}
+	}
+
 	$address = (array) (((array) ($shipment['home_delivery'] ?? array()))['address'] ?? array());
 	// Named once, as an address, rather than field by field. The note is read
 	// by whoever runs the shop, and "shipping_address_1: Byagervej 194,
@@ -4034,6 +4058,31 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	}
 
 	return $changed;
+}
+
+/**
+ * The message for the driver, as Økoskabet now has it.
+ *
+ * The shipment's `notes` is the two fields joined on the way out — the
+ * delivery-info choice and the customer's free text — with the shop's own
+ * WooCommerce order note after them. That last part is the customer's and
+ * comes from the order anyway, so it is taken off again here; left on, it
+ * would be sent a second time on the next save and grow by a copy each round.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $shipment
+ * @return string
+ */
+function oko_delivery_note_from_shipment(\WC_Order $order, array $shipment): string
+{
+	$notes    = trim(sanitize_textarea_field((string) ($shipment['notes'] ?? '')));
+	$customer = trim(oko_customer_note_as_written($order));
+
+	if ($customer !== '' && substr($notes, -strlen($customer)) === $customer) {
+		$notes = rtrim(substr($notes, 0, -strlen($customer)));
+	}
+
+	return trim($notes);
 }
 
 /**
