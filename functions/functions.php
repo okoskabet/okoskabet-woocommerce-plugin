@@ -285,6 +285,43 @@ function oko_merchant_statuses(string $merchant_id): array
 }
 
 /**
+ * The steps a shop can hang a choice on, in the order an order passes them.
+ *
+ * Printing the label is not a step a shipment passes — it is the moment the
+ * boxes come into being — so it is the one entry that is ours rather than
+ * Økoskabet's. It used to be written in front of the whole list, which put
+ * it before "Registered" and read as though a label were printed before the
+ * order existed. It belongs where it happens: after the order is registered,
+ * before it is packed.
+ *
+ * After `registered` wherever that step is, rather than at a fixed index: the
+ * list comes from the merchant's own account and Økoskabet may add a step to
+ * it without a plugin release.
+ *
+ * @param string $merchant_id
+ * @return array<string,string>
+ */
+function oko_merchant_events(string $merchant_id): array
+{
+	$label_printed = array('label_printed' => __('Label printed', O_TEXTDOMAIN));
+	$statuses      = oko_merchant_statuses($merchant_id);
+
+	if (! array_key_exists('registered', $statuses)) {
+		return $label_printed + $statuses;
+	}
+
+	$events = array();
+	foreach ($statuses as $code => $name) {
+		$events[$code] = $name;
+		if ($code === 'registered') {
+			$events += $label_printed;
+		}
+	}
+
+	return $events;
+}
+
+/**
  * Internal — does THIS merchant's `/configuration` advertise the given
  * shipping method? Cached per-merchant for 5 minutes.
  */

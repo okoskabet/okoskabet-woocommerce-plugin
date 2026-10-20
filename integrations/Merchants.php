@@ -1031,9 +1031,10 @@ class Merchants extends Base {
 					// shop is never told about is one it can never pick.
 					// Printing the label is not a step a shipment passes —
 					// it is the moment the boxes come into being — so it is
-					// the one entry that stays ours.
-					$capture_options = array( 'label_printed' => __( 'Label printed', O_TEXTDOMAIN ) )
-						+ \oko_merchant_statuses( (string) ( $merchant['id'] ?? '' ) );
+					// the one entry that stays ours. `oko_merchant_events()`
+					// puts it where it happens, after the order is
+					// registered.
+					$capture_options = \oko_merchant_events( (string) ( $merchant['id'] ?? '' ) );
 					// Hidden for a gateway that only charges on completion: see
 					// Payment_Capture::capture_events_are_useful().
 					$capture_useful = \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture_events_are_useful_for_shop(
