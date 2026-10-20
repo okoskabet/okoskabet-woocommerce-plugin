@@ -942,7 +942,7 @@ msgstr ""
 msgid "The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop."
 msgstr ""
 
-msgid "The change did not reach Økoskabet, which refused it (%1$d): %2$s. The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own."
+msgid "The change did not reach Økoskabet, which refused it (%1$d): %2$s The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own."
 msgstr ""
 
 msgid "no reason given"

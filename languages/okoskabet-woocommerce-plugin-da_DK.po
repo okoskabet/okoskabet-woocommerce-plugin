@@ -1715,8 +1715,8 @@ msgstr "Ændringen nåede ikke Økoskabet: API-nøglen blev afvist (%d). Tjek n�
 msgid "The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop."
 msgstr "Ændringen nåede ikke Økoskabet: ordren kan ikke længere ændres der, fordi en pakke er modtaget. Denne og senere rettelser bliver kun i butikken."
 
-msgid "The change did not reach Økoskabet, which refused it (%1$d): %2$s. The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own."
-msgstr "Ændringen nåede ikke Økoskabet, som afviste den (%1$d): %2$s. Ordren siger nu noget, Økoskabet ikke siger, og denne ændring sendes ikke igen — en senere rettelse forsøges for sig."
+msgid "The change did not reach Økoskabet, which refused it (%1$d): %2$s The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own."
+msgstr "Ændringen nåede ikke Økoskabet, som afviste den (%1$d): %2$s Ordren siger nu noget, Økoskabet ikke siger, og denne ændring sendes ikke igen — en senere rettelse forsøges for sig."
 
 msgid "no reason given"
 msgstr "ingen grund oplyst"

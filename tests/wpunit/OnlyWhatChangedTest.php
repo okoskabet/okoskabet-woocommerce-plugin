@@ -313,6 +313,8 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 
 		$this->assertStringContainsString('422', $note);
 		$this->assertStringContainsString('Adressen er ugyldig', $note);
+		// One sentence ending, not two: Økoskabet's message brings its own.
+		$this->assertStringNotContainsString('..', $note);
 	}
 
 	/** The reason Økoskabet gives, when it gives none. */
@@ -415,6 +417,21 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 			'A 5xx retries on the next save, so there is nothing to tell yet.'
 		);
 		$this->assertSame('', (string) wc_get_order($order->get_id())->get_meta(OKO_REFUSED_CHANGE_META, true));
+	}
+
+	/** And a reason that brings no full stop of its own is given one. */
+	public function test_a_reason_without_a_full_stop_gets_one(): void
+	{
+		$this->okoskabet_answers(400, 'Bad request');
+
+		$order = $this->an_order_already_at_okoskabet();
+		$order->set_billing_phone('+4531224400');
+		$order->save();
+
+		$note = $this->last_note($order);
+
+		$this->assertStringContainsString('Bad request.', $note);
+		$this->assertStringNotContainsString('request..', $note);
 	}
 
 	/** The newest note on the order, as a string. */

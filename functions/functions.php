@@ -4836,11 +4836,15 @@ function oko_short_reason(string $reason): string
 		return __('no reason given', O_TEXTDOMAIN);
 	}
 
-	if (mb_strlen($reason) <= 200) {
-		return $reason;
+	if (mb_strlen($reason) > 200) {
+		return mb_substr($reason, 0, 200) . '…';
 	}
 
-	return mb_substr($reason, 0, 200) . '…';
+	// Exactly one sentence ending, because the note puts a sentence of its own
+	// after this one. Økoskabet's own messages end with a full stop and the
+	// note read "… ufuldstændige.." on staging; a 404 answers plain text and
+	// ends with nothing at all.
+	return preg_match('/[.!?:…]$/u', $reason) === 1 ? $reason : $reason . '.';
 }
 
 /**
@@ -5073,7 +5077,7 @@ function oko_resend_shipment_on_update(int $order_id): void
 			// text rather than a message, and a note is not a log.
 			$order->add_order_note(sprintf(
 				/* translators: 1: the HTTP status Økoskabet answered with, 2: Økoskabet's reason. */
-				__('The change did not reach Økoskabet, which refused it (%1$d): %2$s. The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own.', O_TEXTDOMAIN),
+				__('The change did not reach Økoskabet, which refused it (%1$d): %2$s The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own.', O_TEXTDOMAIN),
 				$http_code,
 				oko_short_reason($reason)
 			));
