@@ -15,6 +15,7 @@ namespace okoskabet_woocommerce_plugin\Rest;
 use okoskabet_woocommerce_plugin\Engine\Base;
 use okoskabet_woocommerce_plugin\Integrations\Merchants;
 use okoskabet_woocommerce_plugin\Integrations\Merchant_Router;
+use okoskabet_woocommerce_plugin\Integrations\Payment_Capture;
 
 /**
  * Multi-merchant aware REST endpoints.
@@ -1108,7 +1109,7 @@ class OkoRest extends Base
 
 		// --- Step 6: Capture payment if this event is a capture trigger ---
 		if ($triggers_capture && !$order->is_paid()) {
-			$capture_result = \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture(
+			$capture_result = Payment_Capture::capture(
 				$order,
 				$gateway_hint
 			);
@@ -1127,11 +1128,18 @@ class OkoRest extends Base
 		// used then — the order is not paid — but it has happened, and the
 		// capture event that pays the order is the moment to use it. Nothing
 		// else does: without the completion event, a capture only captures.
-		$completion_event = null;
-		$waiting_event    = (string) $order->get_meta(self::COMPLETION_WAITING_META, true);
+		// Only while the shop still has that step ticked — a completion step
+		// switched off since must not go on completing orders — and only when
+		// the capture went through. Some gateways move the order to processing
+		// before asking for the money, so a refused capture can still leave it
+		// looking paid.
+		$completion_event     = null;
+		$waiting_event        = (string) $order->get_meta(self::COMPLETION_WAITING_META, true);
+		$capture_went_through = $capture_result === null || ! empty($capture_result['success']);
 		if ($triggers_complete) {
 			$completion_event = $internal_event;
-		} elseif ($triggers_capture && $waiting_event !== '') {
+		} elseif ($capture_went_through && in_array($waiting_event, $webhook_events, true)) {
+			// Not a completion event, so Step 4 let it through as a capture event.
 			$completion_event = $waiting_event;
 		}
 
@@ -1158,12 +1166,11 @@ class OkoRest extends Base
 				// Remembered, not acted on: only a capture that actually pays
 				// the order puts it to use, and the checks above run again then.
 				// Once per order, however many times the event is retried. Not
-				// for an order no capture will touch again, where the note would
-				// promise something that cannot happen; a failed payment can
-				// still be captured, so it is remembered there too.
-				$never_captured = array('cancelled', 'refunded', 'trash');
-				if ($triggers_complete && ! $order->is_paid() && $waiting_event === ''
-					&& ! in_array($order->get_status(), $never_captured, true)) {
+				// when no capture can come — no capture step chosen, an offline
+				// payment, an order capture will not touch — since the note
+				// would promise something that cannot happen.
+				if ($triggers_complete && $waiting_event === '' && ! empty($capture_events)
+					&& Payment_Capture::can_capture($order)) {
 					$order->update_meta_data(self::COMPLETION_WAITING_META, $internal_event);
 					$order->add_order_note(sprintf(
 						/* translators: %s = internal event name */
@@ -1173,15 +1180,25 @@ class OkoRest extends Base
 					$order->save();
 				}
 			} else {
-				if ($order->get_status() !== 'completed') {
-					$order->update_status('completed', sprintf(
-						/* translators: %s = internal event name */
-						__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),
-						$completion_event
-					));
-				}
+				// Cleared before update_status(), which saves it in the same write.
 				if ($waiting_event !== '') {
 					$order->delete_meta_data(self::COMPLETION_WAITING_META);
+				}
+				if ($order->get_status() !== 'completed') {
+					$note = $triggers_complete
+						? sprintf(
+							/* translators: %s = internal event name */
+							__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),
+							$completion_event
+						)
+						: sprintf(
+							/* translators: %1$s = completion event, %2$s = capture event */
+							__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %1$s, som kom før betalingen blev hævet ved %2$s.', O_TEXTDOMAIN),
+							$completion_event,
+							$internal_event
+						);
+					$order->update_status('completed', $note);
+				} elseif ($waiting_event !== '') {
 					$order->save();
 				}
 			}

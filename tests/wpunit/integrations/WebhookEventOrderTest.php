@@ -30,12 +30,8 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 		parent::setUp();
 		add_filter( 'pre_wp_mail', '__return_false' );
 		delete_option( Merchants::OPTION_KEY );
-		delete_option( O_TEXTDOMAIN . '-settings' );
+		update_option( O_TEXTDOMAIN . '-settings', array( '_webhook_enabled' => 'on' ) );
 		Merchants::purge_config_cache();
-
-		$settings                     = (array) get_option( O_TEXTDOMAIN . '-settings', array() );
-		$settings['_webhook_enabled'] = 'on';
-		update_option( O_TEXTDOMAIN . '-settings', $settings );
 	}
 
 	public function tearDown(): void {
@@ -139,6 +135,68 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 		$this->send( $order, 'received' );
 
 		$this->assertSame( 'on-hold', $this->status( $order ) );
+		$this->assertSame(
+			0,
+			$this->notes_containing( $order, 'betalingen er ikke hævet endnu' ),
+			'a bank transfer is not promised a finish that no capture can bring'
+		);
+	}
+
+	/**
+	 * A shop with no capture step takes its money some other way, so no
+	 * capture event will ever come to finish the order.
+	 */
+	public function test_without_a_capture_step_nothing_is_promised() {
+		$this->configure( array(), array( 'fulfilled' ) );
+		$order = $this->order();
+
+		$this->send( $order, 'fulfilled' );
+
+		$this->assertSame( 'on-hold', $this->status( $order ) );
+		$this->assertSame( 0, $this->notes_containing( $order, 'betalingen er ikke hævet endnu' ) );
+	}
+
+	/**
+	 * The shop switched the finishing step off while an order was waiting.
+	 * "No step completes my orders" holds for that order too.
+	 */
+	public function test_a_finishing_step_switched_off_while_waiting_finishes_nothing() {
+		$this->configure( array( 'received' ), array( 'fulfilled' ) );
+		$order = $this->order();
+
+		$this->send( $order, 'fulfilled' );
+		$this->configure( array( 'received' ), array() );
+		$this->send( $order, 'received' );
+
+		$this->assertSame( 'processing', $this->status( $order ) );
+	}
+
+	/**
+	 * Quickpay moves the order to processing before it asks for the money, so
+	 * a refused capture leaves an order that looks paid. The early finish
+	 * must wait for a capture that went through.
+	 */
+	public function test_a_refused_capture_finishes_nothing() {
+		if ( ! class_exists( 'WC_QuickPay_Order' ) ) {
+			class_alias(
+				get_class( new class( 0 ) {
+					public function __construct( $order_id ) {}
+					public function capture() {
+						throw new \RuntimeException( 'Afvist' );
+					}
+				} ),
+				'WC_QuickPay_Order'
+			);
+		}
+		$this->configure( array( 'received' ), array( 'fulfilled' ) );
+		$order = $this->order( 'on-hold', 'quickpay' );
+		$order->set_transaction_id( 'qp-1' );
+		$order->save();
+
+		$this->send( $order, 'fulfilled' );
+		$this->send( $order, 'received' );
+
+		$this->assertNotSame( 'completed', $this->status( $order ) );
 	}
 
 	/**
@@ -229,8 +287,11 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 	 * paid once a capture step has come, and otherwise untouched.
 	 *
 	 * Each choice is one step or none, which is what shops pick, plus two
-	 * pairings where one choice holds two steps. Every combination of every
-	 * subset is 768 runs and two minutes, and finds nothing these do not.
+	 * pairings where one choice holds two steps. An order that is paid already
+	 * never reaches a capture, so it is run once per finishing choice rather
+	 * than once per pairing, and arrivals that differ only in steps neither
+	 * choice names are run once. Every combination of every subset is 768
+	 * runs and two minutes, and finds nothing these do not.
 	 */
 	public function test_every_setting_and_every_order_of_arrival() {
 		$choices = array( array() );
@@ -247,23 +308,32 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 		$settings[] = array( array( 'received', 'label_printed' ), array( 'fulfilled' ) );
 		$settings[] = array( array( 'label_printed' ), array( 'received', 'fulfilled' ) );
 
-		$orders_of_arrival = array();
-		foreach ( self::STEPS as $a ) {
-			foreach ( self::STEPS as $b ) {
-				foreach ( self::STEPS as $c ) {
-					if ( count( array_unique( array( $a, $b, $c ) ) ) === 3 ) {
-						$orders_of_arrival[] = array( $a, $b, $c );
-					}
-				}
-			}
-		}
+		$orders_of_arrival = array(
+			array( 'received', 'label_printed', 'fulfilled' ),
+			array( 'received', 'fulfilled', 'label_printed' ),
+			array( 'label_printed', 'received', 'fulfilled' ),
+			array( 'label_printed', 'fulfilled', 'received' ),
+			array( 'fulfilled', 'received', 'label_printed' ),
+			array( 'fulfilled', 'label_printed', 'received' ),
+		);
 
 		$wrong = array();
 		foreach ( $settings as list( $capture, $finish ) ) {
 			$this->configure( $capture, $finish );
 
-			foreach ( array( 'on-hold', 'processing' ) as $start ) {
+			// A step neither choice names is ignored by the webhook, so only the
+			// order of the named steps tells two arrivals apart.
+			$named  = array_merge( $capture, $finish );
+			$starts = empty( $capture ) ? array( 'on-hold', 'processing' ) : array( 'on-hold' );
+			foreach ( $starts as $start ) {
+				$tried = array();
 				foreach ( $orders_of_arrival as $arrival ) {
+					$key = implode( ',', array_intersect( $arrival, $named ) );
+					if ( isset( $tried[ $key ] ) ) {
+						continue;
+					}
+					$tried[ $key ] = true;
+
 					$order = $this->order( $start );
 					$paid  = $start === 'processing';
 					$seen  = false;
