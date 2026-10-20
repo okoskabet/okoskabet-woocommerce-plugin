@@ -930,6 +930,12 @@ msgstr ""
 #. translators: %s: the delivery address, on one line.
 #: functions/functions.php:3929
 #, php-format
+msgid "collection from the shop"
+msgstr ""
+
+msgid "no longer a collection from the shop"
+msgstr ""
+
 msgid "delivery address %s"
 msgstr ""
 

@@ -509,6 +509,62 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame('', oko_second_address_line($fresh));
 	}
 
+	/**
+	 * A collection the packing room arranged survives the shop's next edit.
+	 *
+	 * The shed has had this guard since the first review round; the
+	 * collection did not, so moving an order to Butiksafhentning in the
+	 * backoffice was undone by the next save in the shop — the same bug, one
+	 * delivery type along.
+	 */
+	public function test_a_collection_from_the_shop_survives_the_next_send(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+
+		oko_write_delivery_back($order, array(
+			'shipment_type'      => 'store_pickup',
+			'delivery_date'      => '2026-10-22',
+			'pickup_location_id' => 7,
+		));
+		$order->save();
+
+		$payload = oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant());
+
+		$this->assertSame('store_pickup', $payload['shipment_type'] ?? null);
+		$this->assertSame(7, $payload['pickup_location_id'] ?? null);
+		$this->assertArrayNotHasKey('home_delivery', $payload, 'A collection carries no address.');
+		$this->assertArrayNotHasKey('reservation', $payload, 'And no shed.');
+	}
+
+	/** And an order moved away from a collection stops being one. */
+	public function test_an_order_moved_off_a_collection_is_no_longer_one(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->update_meta_data('_billing_okoskabet_pickup_location_id', '7');
+		$order->save();
+
+		$order = wc_get_order($order->get_id());
+
+		oko_write_delivery_back($order, array(
+			'shipment_type' => 'home_delivery',
+			'home_delivery' => array(
+				'recipient_name' => 'Marc Seerup Hansen',
+				'address'        => array(
+					'street_name'  => 'Kildeparken',
+					'house_number' => '98',
+					'city'         => 'Kolding',
+					'postal_code'  => '6000',
+				),
+			),
+		));
+		$order->save();
+
+		$payload = oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant());
+
+		$this->assertArrayNotHasKey('shipment_type', $payload);
+		$this->assertArrayHasKey('home_delivery', $payload);
+	}
+
 	/** @return array<string,mixed> */
 	private function merchant(): array
 	{

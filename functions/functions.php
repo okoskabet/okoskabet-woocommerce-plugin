@@ -3845,9 +3845,30 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	// shed reservation nor a delivery address. What it does carry is the
 	// place to collect from, chosen at checkout from the merchant's own
 	// pickup locations.
-	$order_pickup_location_id = $is_store_pickup
-		? $order->get_meta('_billing_okoskabet_pickup_location_id', true)
-		: '';
+	//
+	// Read before the decision, not after it, for the same reason the shed is:
+	// a collection Økoskabet itself moved the order to counts too, even though
+	// the shipping line the customer chose still says home delivery. Without
+	// it the next edit in the shop sent the order back as a home delivery and
+	// undid the move by hand — the shed had its guard and this did not.
+	$order_pickup_location_id = trim(
+		(string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)
+	);
+
+	$is_store_pickup = $is_store_pickup || $order_pickup_location_id !== '';
+
+	if (! $is_store_pickup) {
+		$order_pickup_location_id = '';
+	}
+
+	// One of the two at a time. The write-back clears the other when Økoskabet
+	// moves an order between them, so both being set means the shop's own
+	// checkout and a correction disagree — and a collection the packing room
+	// made is the later word.
+	if ($is_store_pickup) {
+		$is_shed_delivery = false;
+		$order_shed       = '';
+	}
 
 
 	// One shipment, three shapes. Everything every shipment carries is
@@ -4200,6 +4221,19 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 		$order->update_meta_data('_billing_okoskabet_delivery_date', $date);
 		/* translators: %s: the new delivery date. */
 		$changed[] = sprintf(__('delivery date %s', O_TEXTDOMAIN), $date);
+	}
+
+	// Where the customer collects, when Økoskabet has moved the order to a
+	// collection — or nothing, when it has moved it away from one. Written
+	// like the shed below and read by the payload the same way, so a
+	// collection made by hand survives the shop's next edit.
+	$pickup = $shipment['pickup_location_id'] ?? null;
+	$pickup = ($pickup === null || $pickup === '') ? '' : (string) (int) $pickup;
+	if ($pickup !== (string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)) {
+		$order->update_meta_data('_billing_okoskabet_pickup_location_id', $pickup);
+		$changed[] = $pickup !== ''
+			? __('collection from the shop', O_TEXTDOMAIN)
+			: __('no longer a collection from the shop', O_TEXTDOMAIN);
 	}
 
 	$shed      = (array) (((array) ($shipment['shed_reservation'] ?? array()))['shed'] ?? array());
