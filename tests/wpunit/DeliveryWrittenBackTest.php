@@ -536,6 +536,26 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$this->assertArrayNotHasKey('reservation', $payload, 'And no shed.');
 	}
 
+	/**
+	 * Both at once: the shop's checkout put the order in a shed, and a
+	 * correction here made it a collection. The collection wins, because it is
+	 * the later word — and the payload carries no shed beside it, which would
+	 * be two delivery targets for one order.
+	 */
+	public function test_a_collection_beats_a_shed_on_the_same_order(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->update_meta_data('_billing_okoskabet_shed_id', 'SKAB-1');
+		$order->update_meta_data('_billing_okoskabet_pickup_location_id', '7');
+		$order->save();
+
+		$payload = oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant());
+
+		$this->assertSame('store_pickup', $payload['shipment_type'] ?? null);
+		$this->assertSame(7, $payload['pickup_location_id'] ?? null);
+		$this->assertArrayNotHasKey('reservation', $payload, 'Not a shed as well.');
+	}
+
 	/** And an order moved away from a collection stops being one. */
 	public function test_an_order_moved_off_a_collection_is_no_longer_one(): void
 	{

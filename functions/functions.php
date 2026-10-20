@@ -3861,15 +3861,6 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		$order_pickup_location_id = '';
 	}
 
-	// One of the two at a time. The write-back clears the other when Økoskabet
-	// moves an order between them, so both being set means the shop's own
-	// checkout and a correction disagree — and a collection the packing room
-	// made is the later word.
-	if ($is_store_pickup) {
-		$is_shed_delivery = false;
-		$order_shed       = '';
-	}
-
 
 	// One shipment, three shapes. Everything every shipment carries is
 	// built once; each type then adds only what makes it that type —
@@ -3922,6 +3913,10 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	if ($is_store_pickup) {
 		// A collection has no delivery target at all — the shop keeps the
 		// goods — so it names the place to collect from instead.
+		//
+		// And it is asked first, so that it beats a shed on the same order:
+		// both can be set when the shop's own checkout and a correction made
+		// here disagree, and the correction is the later word.
 		$data['shipment_type']      = 'store_pickup';
 		$data['pickup_location_id'] = $order_pickup_location_id !== '' ? (int) $order_pickup_location_id : null;
 	} elseif (!empty($order_shed)) {
