@@ -283,8 +283,12 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		// reports them, plus the label print — which is not a step but the
 		// moment the boxes come into being. Read from the account so a step
 		// added later can be chosen without a plugin release.
-		$oko_status_event_options = array( 'label_printed' => __('Label printed', O_TEXTDOMAIN) )
-			+ oko_merchant_statuses( 'default' );
+		// `oko_merchant_events()` rather than the list with the label written
+		// in front of it: printing the label belongs where it happens, after
+		// the order is registered. This screen is the one a shop with a single
+		// account sees — Gaardmester's — and it built its own copy of the
+		// list, so the same fix had to be made twice. Now it is made once.
+		$oko_status_event_options = oko_merchant_events( 'default' );
 
 		$cmb->add_field(
 			array(
