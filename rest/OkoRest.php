@@ -37,6 +37,12 @@ use okoskabet_woocommerce_plugin\Integrations\Merchant_Router;
 class OkoRest extends Base
 {
 
+	/**
+	 * Order meta: the completion event that arrived before the order was paid,
+	 * kept until a capture event pays it. See Step 7 of handle_webhook().
+	 */
+	const COMPLETION_WAITING_META = '_okoskabet_completion_waiting';
+
 	public function initialize()
 	{
 		parent::initialize();
@@ -1116,7 +1122,20 @@ class OkoRest extends Base
 		}
 
 		// --- Step 7: Mark order as completed if this event triggers completion ---
+		// Økoskabet sends each step on its own and retries after a 5xx, so the
+		// completion event can arrive before the capture event. It cannot be
+		// used then — the order is not paid — but it has happened, and the
+		// capture event that pays the order is the moment to use it. Nothing
+		// else does: without the completion event, a capture only captures.
+		$completion_event = null;
+		$waiting_event    = (string) $order->get_meta(self::COMPLETION_WAITING_META, true);
 		if ($triggers_complete) {
+			$completion_event = $internal_event;
+		} elseif ($triggers_capture && $waiting_event !== '') {
+			$completion_event = $waiting_event;
+		}
+
+		if ($completion_event !== null) {
 			// A delivery says nothing about an order the shop has already
 			// settled. Cancelled, refunded and failed orders are done with,
 			// and an order nobody has paid for is not one to call finished:
@@ -1135,12 +1154,36 @@ class OkoRest extends Base
 						$order->is_paid() ? 'yes' : 'no'
 					));
 				}
-			} elseif ($order->get_status() !== 'completed') {
-				$order->update_status('completed', sprintf(
-					/* translators: %s = internal event name */
-					__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),
-					$internal_event
-				));
+
+				// Remembered, not acted on: only a capture that actually pays
+				// the order puts it to use, and the checks above run again then.
+				// Once per order, however many times the event is retried. Not
+				// for an order no capture will touch again, where the note would
+				// promise something that cannot happen; a failed payment can
+				// still be captured, so it is remembered there too.
+				$never_captured = array('cancelled', 'refunded', 'trash');
+				if ($triggers_complete && ! $order->is_paid() && $waiting_event === ''
+					&& ! in_array($order->get_status(), $never_captured, true)) {
+					$order->update_meta_data(self::COMPLETION_WAITING_META, $internal_event);
+					$order->add_order_note(sprintf(
+						/* translators: %s = internal event name */
+						__('Økoskabet webhook: event "%s" afslutter ordren, men betalingen er ikke hævet endnu. Ordren afsluttes, når betalingen hæves.', O_TEXTDOMAIN),
+						$internal_event
+					));
+					$order->save();
+				}
+			} else {
+				if ($order->get_status() !== 'completed') {
+					$order->update_status('completed', sprintf(
+						/* translators: %s = internal event name */
+						__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),
+						$completion_event
+					));
+				}
+				if ($waiting_event !== '') {
+					$order->delete_meta_data(self::COMPLETION_WAITING_META);
+					$order->save();
+				}
 			}
 		}
 
