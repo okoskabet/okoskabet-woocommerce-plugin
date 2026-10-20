@@ -38,12 +38,6 @@ use okoskabet_woocommerce_plugin\Integrations\Payment_Capture;
 class OkoRest extends Base
 {
 
-	/**
-	 * Order meta: the completion event that arrived before the order was paid,
-	 * kept until a capture event pays it. See Step 7 of handle_webhook().
-	 */
-	const COMPLETION_WAITING_META = '_okoskabet_completion_waiting';
-
 	public function initialize()
 	{
 		parent::initialize();
@@ -1128,17 +1122,29 @@ class OkoRest extends Base
 		// used then — the order is not paid — but it has happened, and the
 		// capture event that pays the order is the moment to use it. Nothing
 		// else does: without the completion event, a capture only captures.
-		// Only while the shop still has that step ticked — a completion step
-		// switched off since must not go on completing orders — and only when
-		// the capture went through. Some gateways move the order to processing
-		// before asking for the money, so a refused capture can still leave it
-		// looking paid.
-		$completion_event     = null;
-		$waiting_event        = (string) $order->get_meta(self::COMPLETION_WAITING_META, true);
-		$capture_went_through = $capture_result === null || ! empty($capture_result['success']);
+		// Only while the shop still has that step ticked: a completion step
+		// switched off since must not go on completing orders.
+		$completion_event = null;
+		$waiting_event    = (string) $order->get_meta(Payment_Capture::COMPLETION_WAITING_META, true);
+
+		// A refused capture ends the wait. Some gateways move the order to
+		// processing before asking for the money, so the order can look paid
+		// all the same, and the next event to come along would otherwise
+		// finish an order whose money was never taken.
+		if ($waiting_event !== '' && $capture_result !== null && empty($capture_result['success'])) {
+			$order->delete_meta_data(Payment_Capture::COMPLETION_WAITING_META);
+			$order->add_order_note(sprintf(
+				/* translators: %s = completion event */
+				__('Økoskabet webhook: betalingen blev ikke hævet, så ordren afsluttes ikke af event "%s", der kom før.', O_TEXTDOMAIN),
+				$waiting_event
+			));
+			$order->save();
+			$waiting_event = '';
+		}
+
 		if ($triggers_complete) {
 			$completion_event = $internal_event;
-		} elseif ($capture_went_through && in_array($waiting_event, $webhook_events, true)) {
+		} elseif (in_array($waiting_event, $webhook_events, true)) {
 			// Not a completion event, so Step 4 let it through as a capture event.
 			$completion_event = $waiting_event;
 		}
@@ -1165,13 +1171,16 @@ class OkoRest extends Base
 
 				// Remembered, not acted on: only a capture that actually pays
 				// the order puts it to use, and the checks above run again then.
-				// Once per order, however many times the event is retried. Not
-				// when no capture can come — no capture step chosen, an offline
-				// payment, an order capture will not touch — since the note
-				// would promise something that cannot happen.
-				if ($triggers_complete && $waiting_event === '' && ! empty($capture_events)
+				// Once, however many times the event is retried — unless the
+				// shop has since unticked the step that is waiting, which then
+				// makes way for the one it ticks instead. Not when no capture
+				// can come — no capture step chosen, an offline payment, an
+				// order capture will not touch — since the note would promise
+				// something that cannot happen.
+				$waiting_still_ticked = in_array($waiting_event, $webhook_events, true);
+				if ($triggers_complete && ! $waiting_still_ticked && ! empty($capture_events)
 					&& Payment_Capture::can_capture($order)) {
-					$order->update_meta_data(self::COMPLETION_WAITING_META, $internal_event);
+					$order->update_meta_data(Payment_Capture::COMPLETION_WAITING_META, $internal_event);
 					$order->add_order_note(sprintf(
 						/* translators: %s = internal event name */
 						__('Økoskabet webhook: event "%s" afslutter ordren, men betalingen er ikke hævet endnu. Ordren afsluttes, når betalingen hæves.', O_TEXTDOMAIN),
@@ -1182,7 +1191,7 @@ class OkoRest extends Base
 			} else {
 				// Cleared before update_status(), which saves it in the same write.
 				if ($waiting_event !== '') {
-					$order->delete_meta_data(self::COMPLETION_WAITING_META);
+					$order->delete_meta_data(Payment_Capture::COMPLETION_WAITING_META);
 				}
 				if ($order->get_status() !== 'completed') {
 					$note = $triggers_complete

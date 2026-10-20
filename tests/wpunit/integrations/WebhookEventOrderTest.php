@@ -37,7 +37,33 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 	public function tearDown(): void {
 		remove_filter( 'pre_wp_mail', '__return_false' );
 		Merchants::purge_config_cache();
+		if ( class_exists( 'WC_QuickPay_Order' ) && property_exists( 'WC_QuickPay_Order', 'refuse' ) ) {
+			\WC_QuickPay_Order::$refuse = false;
+		}
 		parent::tearDown();
+	}
+
+	/**
+	 * Stands in for the Quickpay plugin, whose capture can be told to refuse.
+	 * It outlives the test, so it only refuses while a test asks it to and
+	 * tearDown() puts it back.
+	 */
+	private function quickpay_refuses(): void {
+		if ( ! class_exists( 'WC_QuickPay_Order' ) ) {
+			class_alias(
+				get_class( new class( 0 ) {
+					public static $refuse = false;
+					public function __construct( $order_id ) {}
+					public function capture() {
+						if ( self::$refuse ) {
+							throw new \RuntimeException( 'Afvist' );
+						}
+					}
+				} ),
+				'WC_QuickPay_Order'
+			);
+		}
+		\WC_QuickPay_Order::$refuse = true;
 	}
 
 	private function configure( array $capture_events, array $webhook_events ): void {
@@ -174,29 +200,56 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 	/**
 	 * Quickpay moves the order to processing before it asks for the money, so
 	 * a refused capture leaves an order that looks paid. The early finish
-	 * must wait for a capture that went through.
+	 * must wait for a capture that went through — and the refusal ends the
+	 * wait, or the next capture step would find the order looking paid and
+	 * finish it without the money.
 	 */
 	public function test_a_refused_capture_finishes_nothing() {
-		if ( ! class_exists( 'WC_QuickPay_Order' ) ) {
-			class_alias(
-				get_class( new class( 0 ) {
-					public function __construct( $order_id ) {}
-					public function capture() {
-						throw new \RuntimeException( 'Afvist' );
-					}
-				} ),
-				'WC_QuickPay_Order'
-			);
-		}
-		$this->configure( array( 'received' ), array( 'fulfilled' ) );
+		$this->quickpay_refuses();
+		$this->configure( array( 'received', 'label_printed' ), array( 'fulfilled' ) );
 		$order = $this->order( 'on-hold', 'quickpay' );
 		$order->set_transaction_id( 'qp-1' );
 		$order->save();
 
 		$this->send( $order, 'fulfilled' );
 		$this->send( $order, 'received' );
+		$this->assertNotSame( 'completed', $this->status( $order ), 'not by the refused capture' );
 
-		$this->assertNotSame( 'completed', $this->status( $order ) );
+		$this->send( $order, 'label_printed' );
+		$this->assertNotSame( 'completed', $this->status( $order ), 'nor by the capture step after it' );
+	}
+
+	/**
+	 * The shop moved the finishing step while an order was waiting. The old
+	 * step no longer finishes anything, so the new one, when it comes before
+	 * the money, has to be remembered in its place.
+	 */
+	public function test_a_newly_chosen_finishing_step_takes_the_place_of_the_old() {
+		$this->configure( array( 'received' ), array( 'fulfilled' ) );
+		$order = $this->order();
+
+		$this->send( $order, 'fulfilled' );
+		$this->configure( array( 'received' ), array( 'in_shed' ) );
+		$this->send( $order, 'in_shed' );
+		$this->send( $order, 'received' );
+
+		$this->assertSame( 'completed', $this->status( $order ) );
+	}
+
+	/**
+	 * Cancelled, reopened and sent again: the delivery that came before the
+	 * cancellation is not the one that finishes the order now.
+	 */
+	public function test_a_cancelled_and_reopened_order_waits_for_its_new_delivery() {
+		$this->configure( array( 'received' ), array( 'fulfilled' ) );
+		$order = $this->order();
+
+		$this->send( $order, 'fulfilled' );
+		wc_get_order( $order->get_id() )->update_status( 'cancelled' );
+		wc_get_order( $order->get_id() )->update_status( 'on-hold' );
+		$this->send( $order, 'received' );
+
+		$this->assertSame( 'processing', $this->status( $order ) );
 	}
 
 	/**
@@ -214,6 +267,11 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertSame( 'processing', $this->status( $order ) );
 	}
 
+	/**
+	 * A parcel can turn up in a courier's feed long after the shop cancelled
+	 * the order. Neither step may bring it back, and the shop is not told the
+	 * order will be finished.
+	 */
 	public function test_a_cancelled_order_stays_cancelled_whatever_the_order() {
 		$this->configure( array( 'received' ), array( 'fulfilled' ) );
 		$order = $this->order( 'cancelled' );

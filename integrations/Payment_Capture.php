@@ -21,13 +21,47 @@ use okoskabet_woocommerce_plugin\Engine\Base;
 class Payment_Capture extends Base {
 
 	/**
+	 * Order meta: the completion event that reached the webhook before the
+	 * order was paid. The capture that pays the order uses it; see Step 7 of
+	 * OkoRest::handle_webhook().
+	 */
+	public const COMPLETION_WAITING_META = '_okoskabet_completion_waiting';
+
+	/**
 	 * Initialize the class.
+	 *
+	 * Capture itself is called directly from the OkoRest webhook handler. The
+	 * hooks here run wherever the order is cancelled or refunded, the admin
+	 * included, which the REST classes are not loaded for.
 	 *
 	 * @return void|bool
 	 */
 	public function initialize() {
 		parent::initialize();
-		// No hooks needed here — capture is called directly from OkoRest webhook handler.
+
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'forget_waiting_completion' ), 10, 2 );
+		add_action( 'woocommerce_order_status_refunded', array( $this, 'forget_waiting_completion' ), 10, 2 );
+	}
+
+	/**
+	 * A cancelled or refunded order is done with, and so is the delivery that
+	 * was waiting for its money. Should the shop reopen it and send it again,
+	 * the next capture must wait for the next delivery, not finish the order
+	 * on the old one.
+	 *
+	 * @param int            $order_id The order whose status changed.
+	 * @param \WC_Order|null $order    The order, as WooCommerce passes it.
+	 * @return void
+	 */
+	public function forget_waiting_completion( $order_id, $order = null ) {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+
+		if ( ! $order || (string) $order->get_meta( self::COMPLETION_WAITING_META, true ) === '' ) {
+			return;
+		}
+
+		$order->delete_meta_data( self::COMPLETION_WAITING_META );
+		$order->save();
 	}
 
 	/**
@@ -130,6 +164,8 @@ class Payment_Capture extends Base {
 	 * was paid by card, and it is in a status capture() will act on. The
 	 * webhook asks before it promises a shop that an order will be finished
 	 * once its payment is taken.
+	 *
+	 * @param \WC_Order $order The order.
 	 */
 	public static function can_capture( \WC_Order $order ): bool {
 		return ! $order->is_paid()
@@ -137,6 +173,11 @@ class Payment_Capture extends Base {
 			&& $order->has_status( self::capturable_statuses() );
 	}
 
+	/**
+	 * Whether the order was paid in a way no capture can touch.
+	 *
+	 * @param \WC_Order $order The order.
+	 */
 	private static function is_offline( \WC_Order $order ): bool {
 		$offline_methods = apply_filters(
 			'okoskabet_offline_payment_methods',
@@ -146,6 +187,11 @@ class Payment_Capture extends Base {
 		return in_array( $order->get_payment_method(), (array) $offline_methods, true );
 	}
 
+	/**
+	 * The statuses capture() acts on.
+	 *
+	 * @return array<string>
+	 */
 	private static function capturable_statuses(): array {
 		return (array) apply_filters(
 			'okoskabet_capturable_order_statuses',
