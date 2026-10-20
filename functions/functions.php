@@ -2720,11 +2720,33 @@ function oko_second_address_line($order): string
 		return $shipping;
 	}
 
+	// Not once Økoskabet has given us the delivery. The fallback exists for a
+	// checkout with no second shipping line, where the flat is only in the
+	// billing address — and it must not outlive the moment somebody corrected
+	// the delivery by hand. A backoffice that takes the flat off a delivery
+	// clears the shipping line, and without this the customer's old billing
+	// flat walked straight back into the next payload: written into the
+	// record of what Økoskabet accepted, so the two ends disagreed about the
+	// address with nothing to say so, and the shop's next address edit sent
+	// the flat back over the correction.
+	if (! empty($order->get_meta(OKO_ADDRESS_FROM_OKOSKABET_META, true))) {
+		return '';
+	}
+
 	$same_address = oko_same_line($order->get_shipping_address_1(), $order->get_billing_address_1())
 		&& oko_same_line($order->get_shipping_postcode(), $order->get_billing_postcode());
 
 	return $same_address ? trim((string) $order->get_billing_address_2()) : '';
 }
+
+/**
+ * Meta marking a delivery address that came from Økoskabet's own backoffice.
+ *
+ * What it switches off is the billing fallback in `oko_second_address_line()`,
+ * and nothing else: an address somebody corrected by hand is the address, and
+ * what the customer typed in another field months ago is not a second opinion.
+ */
+const OKO_ADDRESS_FROM_OKOSKABET_META = '_okoskabet_address_written_back';
 
 /** Two written forms of one line, give or take case and spacing. */
 function oko_same_line(string $one, string $other): bool
@@ -4187,6 +4209,13 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			$order->set_shipping_city($lines['shipping_city']);
 			$order->set_shipping_postcode($lines['shipping_postcode']);
 		}
+
+		// Whether or not the lines moved. The fact that matters is that
+		// Økoskabet has given us the address — and the case this exists for is
+		// precisely the one where nothing moved: a flat taken off a delivery
+		// whose shipping line was empty all along, because the shop's checkout
+		// has no second line and the flat only ever lived in billing.
+		$order->update_meta_data(OKO_ADDRESS_FROM_OKOSKABET_META, true);
 	}
 
 	if ($address_moved) {
@@ -4315,6 +4344,12 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 
 	$changed = oko_write_delivery_back($order, $shipment);
 	if ($changed === array()) {
+		// Nothing of the shop's own moved, so there is no note to write and no
+		// edit to record — but the write-back may have marked the address as
+		// Økoskabet's, and that mark is the whole point when the correction
+		// was a flat being taken off. Meta only: a full save here would read
+		// as an edit and call the resend straight back.
+		$order->save_meta_data();
 		return array();
 	}
 

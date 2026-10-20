@@ -401,6 +401,70 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame('Pernille Testmodtager', $payload['home_delivery']['recipient_name']);
 	}
 
+	/**
+	 * A flat Økoskabet removed does not come back from the billing address.
+	 *
+	 * Gaardmester's checkout has no second shipping line, so the flat reaches
+	 * us through `oko_second_address_line()`'s fallback to the billing
+	 * address. When the backoffice then corrects the delivery to a house with
+	 * no flat, the write-back clears the shipping line — and the fallback put
+	 * the customer's old billing flat straight back into the next payload.
+	 *
+	 * Worse than a wrong line: it was written into the record of what
+	 * Økoskabet accepted, so the two ends disagreed about the address with
+	 * nothing to say so, and the shop's next address edit sent the flat back
+	 * over the correction.
+	 */
+	public function test_a_flat_okoskabet_removed_does_not_return_from_billing(): void
+	{
+		// Gaardmester's checkout has no second shipping line at all; the flat
+		// is only ever in the billing address.
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_billing_address_1('Kildeparken 98');
+		$order->set_billing_postcode('6000');
+		$order->set_billing_address_2('3 th');
+		$order->save();
+
+		$order = wc_get_order($order->get_id());
+
+		$this->assertSame(
+			'3 th',
+			oko_second_address_line($order),
+			'Until somebody corrects it, the flat reaches us through billing.'
+		);
+
+		// Økoskabet says the delivery is the house, with no flat.
+		oko_write_delivery_back($order, array(
+			'home_delivery' => array(
+				'address' => array(
+					'street_name'  => 'Kildeparken',
+					'house_number' => '98',
+					'floor'        => '',
+					'door'         => '',
+					'city'         => 'Kolding',
+					'postal_code'  => '6000',
+				),
+			),
+		));
+		$order->save();
+
+		$fresh = wc_get_order($order->get_id());
+
+		$this->assertSame('', $fresh->get_shipping_address_2());
+		$this->assertSame(
+			'',
+			oko_second_address_line($fresh),
+			'The billing address is no longer a source once Økoskabet has given us the delivery.'
+		);
+
+		$payload = oko_shipment_payload($fresh, $this->merchant());
+		$this->assertArrayNotHasKey(
+			'address_2',
+			$payload['home_delivery'],
+			'And the record of what Økoskabet accepted must not carry a flat it rejected.'
+		);
+	}
+
 	/** @return array<string,mixed> */
 	private function merchant(): array
 	{
