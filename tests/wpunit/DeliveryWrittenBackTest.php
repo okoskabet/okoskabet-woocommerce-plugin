@@ -34,6 +34,14 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$this->assertTrue(oko_changes_touch_the_delivery(array('shed_id' => array('value' => 3))));
 		$this->assertTrue(oko_changes_touch_the_delivery(array('shipment_type' => array('value' => 'home_delivery'))));
 
+		// The third shape's destination. A shed names its `shed_id` and an
+		// address its street; a collection names where the customer collects,
+		// and a merchant moving an order between two of its own shops moves
+		// nothing else at all — so without this the shop would hear nothing.
+		$this->assertTrue(
+			oko_changes_touch_the_delivery(array('pickup_location_id' => array('value' => 7)))
+		);
+
 		$this->assertFalse(
 			oko_changes_touch_the_delivery(array('status' => array('value' => 'in_shed'))),
 			'A step is not a delivery change; the shop already has its own choices for those.'

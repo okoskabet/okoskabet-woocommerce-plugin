@@ -4163,6 +4163,13 @@ const OKO_DELIVERY_CHANGES = array(
 	'shipment_type',
 	'delivery_date',
 	'shed_id',
+	// Where the customer collects, for the third shape. A shed names its
+	// `shed_id` here and an address its street; a collection said nothing,
+	// because Økoskabet did not report it either — its webhook left a store
+	// pickup's destination out altogether, so a merchant moving an order from
+	// one of its shops to another told the shop nothing. Økoskabet now says
+	// it (delivery_backend#1978), and this is the half that listens.
+	'pickup_location_id',
 	'recipient_name',
 	'street_name',
 	'house_number',
