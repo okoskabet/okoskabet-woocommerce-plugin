@@ -11,25 +11,17 @@ use okoskabet_woocommerce_plugin\Integrations\Merchants;
  */
 class EventOrderTest extends \Codeception\TestCase\WPTestCase
 {
+	use ConfiguresMerchant;
+
 	public function setUp(): void
 	{
 		parent::setUp();
-		delete_option(Merchants::OPTION_KEY);
-		Merchants::purge_config_cache();
-		Merchants::save_config(array(
-			'default_merchant_id' => 'default',
-			'merchants' => array('default' => array(
-				'id' => 'default', 'label' => 'D', 'api_key' => 'test-key', 'staging' => true,
-			)),
-		));
+		$this->a_merchant_with_an_account();
 	}
 
 	public function tearDown(): void
 	{
-		remove_all_filters('pre_http_request');
-		delete_transient(o_configuration_transient_key('default'));
-		delete_option(Merchants::OPTION_KEY);
-		Merchants::purge_config_cache();
+		$this->forget_the_merchant();
 		parent::tearDown();
 	}
 
@@ -89,19 +81,7 @@ class EventOrderTest extends \Codeception\TestCase\WPTestCase
 	/** @param array<int,array<string,string>> $statuses */
 	private function okoskabet_publishes(array $statuses): void
 	{
-		delete_transient(o_configuration_transient_key('default'));
-		Merchants::purge_config_cache();
-		remove_all_filters('pre_http_request');
-
-		add_filter('pre_http_request', static function ($preempt, $args, $url) use ($statuses) {
-			if (strpos($url, '/api/v1/configuration') === false) {
-				return $preempt;
-			}
-
-			return array(
-				'response' => array('code' => 200),
-				'body'     => wp_json_encode(array('statuses' => $statuses)),
-			);
-		}, 1, 3);
+		$this->okoskabet_configuration(array('statuses' => $statuses));
 	}
+
 }

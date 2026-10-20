@@ -18,28 +18,21 @@ use okoskabet_woocommerce_plugin\Integrations\Merchants;
  */
 class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 {
+	use ConfiguresMerchant;
+
 	/** @var array<int,string> Every body we sent to Økoskabet. */
 	private $bodies = array();
 
 	public function setUp(): void
 	{
 		parent::setUp();
-		delete_option(Merchants::OPTION_KEY);
-		Merchants::purge_config_cache();
-		Merchants::save_config(array(
-			'default_merchant_id' => 'default',
-			'merchants' => array('default' => array(
-				'id' => 'default', 'label' => 'D', 'api_key' => 'test-key', 'staging' => true,
-			)),
-		));
+		$this->a_merchant_with_an_account();
 		$this->bodies = array();
 	}
 
 	public function tearDown(): void
 	{
-		remove_all_filters('pre_http_request');
-		delete_option(Merchants::OPTION_KEY);
-		Merchants::purge_config_cache();
+		$this->forget_the_merchant();
 		parent::tearDown();
 	}
 

@@ -16,25 +16,17 @@ use okoskabet_woocommerce_plugin\Integrations\Merchants;
  */
 class LineTotalTest extends \Codeception\TestCase\WPTestCase
 {
+	use ConfiguresMerchant;
+
 	public function setUp(): void
 	{
 		parent::setUp();
-		delete_option(Merchants::OPTION_KEY);
-		Merchants::purge_config_cache();
-		Merchants::save_config(array(
-			'default_merchant_id' => 'default',
-			'merchants' => array('default' => array(
-				'id' => 'default', 'label' => 'D', 'api_key' => 'test-key', 'staging' => true,
-			)),
-		));
+		$this->a_merchant_with_an_account();
 	}
 
 	public function tearDown(): void
 	{
-		remove_all_filters('pre_http_request');
-		delete_transient(o_configuration_transient_key('default'));
-		delete_option(Merchants::OPTION_KEY);
-		Merchants::purge_config_cache();
+		$this->forget_the_merchant();
 		remove_all_filters('wc_tax_enabled');
 		remove_all_filters('woocommerce_prices_include_tax');
 		parent::tearDown();
@@ -158,23 +150,10 @@ class LineTotalTest extends \Codeception\TestCase\WPTestCase
 		$this->assertArrayNotHasKey('total', oko_order_line_items(wc_get_order($order->get_id()))[0]);
 	}
 
-	/** Økoskabet, answering the configuration call with this and nothing else. */
+	/** @param array<string,mixed> $configuration */
 	private function okoskabet_says(array $configuration): void
 	{
-		delete_transient(o_configuration_transient_key('default'));
-		Merchants::purge_config_cache();
-		remove_all_filters('pre_http_request');
-
-		add_filter('pre_http_request', static function ($preempt, $args, $url) use ($configuration) {
-			if (strpos($url, '/api/v1/configuration') === false) {
-				return $preempt;
-			}
-
-			return array(
-				'response' => array('code' => 200),
-				'body'     => wp_json_encode($configuration),
-			);
-		}, 1, 3);
+		$this->okoskabet_configuration($configuration);
 	}
 
 	/** Two of a 199-kroner product, on an order of ours. */

@@ -164,6 +164,34 @@ function oko_api_request(array $merchant, string $method, string $path, ?string 
 }
 
 /**
+ * The one holder for the configurations answered during this request.
+ *
+ * A memo that lasts a request is right for a checkout recalculating on every
+ * keystroke and wrong for the request that has just saved new settings, so it
+ * has to be droppable: `Merchants::purge_config_cache()` dropped the stored
+ * copy, and the one held here outlived it.
+ *
+ * A holder both functions bind by reference, rather than a static inside the
+ * getter reached through a merchant id nobody can have. A getter that also
+ * means "forget everything" is a getter that lies about what it returns.
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function &oko_merchant_configuration_memo(): array
+{
+	static $asked = array();
+
+	return $asked;
+}
+
+/** Drop what this request has already been told, so the next read asks again. */
+function oko_forget_merchant_configurations(): void
+{
+	$asked = &oko_merchant_configuration_memo();
+	$asked = array();
+}
+
+/**
  * What this merchant's Økoskabet account says about itself.
  *
  * One answer, cached for five minutes per merchant and memoised for the
@@ -179,25 +207,9 @@ function oko_api_request(array $merchant, string $method, string $path, ?string 
  * @param string $merchant_id
  * @return array<string,mixed>
  */
-/**
- * Asking for this merchant's configuration drops the memo instead.
- *
- * The memo in `oko_merchant_configuration()` lasts a request, which is right for a checkout recalculating
- * on every keystroke and wrong for the request that has just saved new
- * settings: `Merchants::purge_config_cache()` dropped the stored copy and the
- * one held in here outlived it. A merchant id nobody can have is how that
- * cache is reached without opening it to everything else.
- */
-const OKO_FORGET_CONFIGURATION = "\0forget";
-
 function oko_merchant_configuration(string $merchant_id): array
 {
-	static $asked = array();
-
-	if ($merchant_id === OKO_FORGET_CONFIGURATION) {
-		$asked = array();
-		return array();
-	}
+	$asked = &oko_merchant_configuration_memo();
 
 	if (array_key_exists($merchant_id, $asked)) {
 		return $asked[$merchant_id];
@@ -2394,7 +2406,7 @@ function oko_forget_addition($parent, $addition): void
  * @param \WC_Order $order The addition.
  * @return array<int,array<string,mixed>>
  */
-function oko_addition_lines($order): array
+function oko_addition_lines($order, ?array $merchant = null): array
 {
 	if (! $order instanceof \WC_Order) {
 		return array();
@@ -2408,7 +2420,7 @@ function oko_addition_lines($order): array
 		);
 
 		return $line;
-	}, oko_order_line_items($order));
+	}, oko_order_line_items($order, $merchant));
 }
 
 /**
@@ -2436,7 +2448,7 @@ function oko_write_shipment_contents(\WC_Order $parent, array $additions, array 
 {
 	$reference = (string) $parent->get_order_number();
 
-	$body = array('line_items' => oko_lines_for($parent, $additions));
+	$body = array('line_items' => oko_lines_for($parent, $additions, $merchant));
 
 	$shipment = oko_shipment_at_okoskabet($reference, $merchant);
 	if ($shipment !== null) {
@@ -3415,19 +3427,28 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
  * two apart cannot leave the variation off a label when the shop asks it to.
  * Shopify has always sent them apart; now so do we.
  *
- * @param \WC_Order $order
+ * @param \WC_Order           $order
+ * @param array<string,mixed>|null $merchant The account the order is sent
+ *                                           under; resolved from the order
+ *                                           when the caller has none.
  * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,variant_title:string|null,sku:string,quantity:int,tags:string[],properties:array,image:string}>
  */
-function oko_order_line_items(\WC_Order $order): array
+function oko_order_line_items(\WC_Order $order, ?array $merchant = null): array
 {
 	$lines = array();
+
+	// Handed down rather than resolved again: every caller that builds a
+	// payload already holds the merchant, and `Merchant_Router` walks every
+	// item and resolves the shipping zone for an order the checkout did not
+	// stamp. An order with three additions paid for that four times.
+	$merchant = $merchant ?? oko_merchant_for_order($order);
 
 	// Only in kroner. Økoskabet keeps the figure as an amount and nothing
 	// else — there is no currency beside it — so a shop selling in euros
 	// would have its offers reckoned on numbers read as kroner. Our shops are
 	// Danish; the day one is not, this is the line that has to be thought
 	// about rather than the one that quietly went wrong.
-	$with_totals = oko_shop_sends_line_totals(oko_merchant_for_order($order))
+	$with_totals = oko_shop_sends_line_totals($merchant)
 		&& $order->get_currency() === 'DKK';
 	$with_vat    = wc_prices_include_tax();
 
@@ -3704,9 +3725,9 @@ function oko_order_is_ours(\WC_Order $order): bool
  * @param \WC_Order $order
  * @return array<int,array<string,mixed>>
  */
-function oko_lines_with_additions(\WC_Order $order): array
+function oko_lines_with_additions(\WC_Order $order, ?array $merchant = null): array
 {
-	return oko_lines_for($order, oko_additions_to($order, null));
+	return oko_lines_for($order, oko_additions_to($order, null), $merchant);
 }
 
 /**
@@ -3719,14 +3740,19 @@ function oko_lines_with_additions(\WC_Order $order): array
  *
  * @param \WC_Order            $parent
  * @param array<int,\WC_Order> $additions Oldest first.
+ * @param array<string,mixed>|null $merchant The parent's account.
  * @return array<int,array<string,mixed>>
  */
-function oko_lines_for(\WC_Order $parent, array $additions): array
+function oko_lines_for(\WC_Order $parent, array $additions, ?array $merchant = null): array
 {
-	$lines = oko_order_line_items($parent);
+	// The parent's merchant for the additions too: an addition rides on the
+	// parent's delivery, so it is sent under the account that delivery
+	// belongs to.
+	$merchant = $merchant ?? oko_merchant_for_order($parent);
+	$lines    = oko_order_line_items($parent, $merchant);
 
 	foreach ($additions as $addition) {
-		$lines = array_merge($lines, oko_addition_lines($addition));
+		$lines = array_merge($lines, oko_addition_lines($addition, $merchant));
 	}
 
 	return $lines;
@@ -3855,7 +3881,7 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		// below warns about, reached by another road. Avokadokontoret renamed
 		// a product on 17 October 2026 and the rename resent three orders;
 		// an addition on any of them would have lost its goods with no note.
-		'line_items'         => oko_lines_with_additions($order),
+		'line_items'         => oko_lines_with_additions($order, $merchant),
 		// Where to ask us what those product ids are. The finished address
 		// rather than a base, because the route is keyed on the merchant
 		// id this plugin issues — handing over a base would leave
