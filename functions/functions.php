@@ -3586,6 +3586,13 @@ function oko_shop_sends_line_totals(array $merchant): bool
  * order already sent, refunding is how a shop takes goods off it. The refund
  * lines carry negative amounts, which is why they are subtracted by adding.
  *
+ * Walked by hand rather than through `WC_Order::get_total_refunded_for_item()`,
+ * which the quantity above uses its sibling of. That accessor answers the
+ * amount without VAT, and WooCommerce has no sibling that answers the VAT for
+ * an item alone — `get_tax_refunded_for_item()` wants a tax-rate id. Using the
+ * accessor for one half and a walk for the other would read as two refund
+ * conventions in one sum; one walk answers both.
+ *
  * @param \WC_Order      $order    The order the line belongs to.
  * @param \WC_Order_Item  $item     The line itself. Untyped in the
  *                                  signature because the class is
@@ -3618,6 +3625,23 @@ function oko_line_total(\WC_Order $order, $item, bool $with_vat): float
 	}
 
 	return round($total, 2);
+}
+
+/**
+ * The name a delivery is addressed to, as WooCommerce holds it.
+ *
+ * One definition, because the write-back asks "do Økoskabet and the shop
+ * actually disagree about the name" by comparing against this exact string.
+ * Two spellings of it that drift apart — a different separator, one of them
+ * untrimmed — make every webhook rename every order.
+ *
+ * Trimmed for the same reason: a recipient of one word, which the write-back
+ * can produce by splitting "Pernille" into a first name and nothing, would
+ * otherwise be sent with a trailing space and stored that way.
+ */
+function oko_recipient_name(\WC_Order $order): string
+{
+	return trim($order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name());
 }
 
 /**
@@ -3859,10 +3883,7 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 			'max_duration_days' => 1,
 		];
 	} else {
-		// Trimmed: a recipient of one word — which the write-back can now
-		// produce, splitting "Pernille" into a first name and nothing —
-		// would otherwise be sent with a trailing space and stored that way.
-		$recipient_name = trim($order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name());
+		$recipient_name = oko_recipient_name($order);
 		$data['customer']['recipient_name'] = $recipient_name;
 		// `location` used to be sent here as well, carrying the same text as
 		// the note below. Økoskabet has no such field — `HomeDelivery` holds a
@@ -4079,8 +4100,7 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// like an edit and send the same order straight back a second time —
 		// and the copy is what every later edit is measured against, so that
 		// only what actually moved is sent.
-		$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($data));
-		$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($data));
+		oko_remember_what_was_sent($order, $data);
 
 		$order->save();
 	}
@@ -4174,7 +4194,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	// last "Seerup Hansen" would put a change nobody made on every order.
 	$home      = (array) ($shipment['home_delivery'] ?? array());
 	$recipient = isset($home['recipient_name']) ? sanitize_text_field((string) $home['recipient_name']) : '';
-	$held_name = trim($order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name());
+	$held_name = oko_recipient_name($order);
 	if ($recipient !== '' && $recipient !== $held_name) {
 		$name = explode(' ', $recipient, 2);
 		$order->set_shipping_first_name($name[0]);
@@ -4367,8 +4387,7 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	// mechanism for the same question.
 	$payload = oko_shipment_payload($order, $merchant);
 	if ($payload !== null) {
-		$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($payload));
-		$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
+		oko_remember_what_was_sent($order, $payload);
 	}
 
 	$order->save();
@@ -4380,6 +4399,26 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	));
 
 	return $changed;
+}
+
+/**
+ * Write down the order as Økoskabet now has it.
+ *
+ * The two metas are written together everywhere, and an order carrying only
+ * one of them is precisely the state the resend has to special-case — a
+ * caller that wrote one and forgot the other would put a live order into it
+ * silently. One function, so there is nothing to forget.
+ *
+ * Meta only: the caller decides whether this is part of a save.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $payload What was sent, before it was trimmed
+ *                                     down to a difference.
+ */
+function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
+{
+	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($payload));
+	$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
 }
 
 /** Meta holding a fingerprint of what we last told Økoskabet about an order. */
@@ -4575,6 +4614,10 @@ const OKO_NESTED_PAYLOAD_KEYS = array('customer');
  * back — and that is the one change a difference cannot express, because
  * leaving a key out means "unchanged" and never "gone".
  *
+ * `pickup_location_id` is not asked about: it is written in the same branch
+ * as the only `shipment_type` there is, so it can never say anything the
+ * first component has not said already.
+ *
  * @param array<string,mixed> $payload
  */
 function oko_destination_shape(array $payload): string
@@ -4583,7 +4626,6 @@ function oko_destination_shape(array $payload): string
 		(string) ($payload['shipment_type'] ?? ''),
 		isset($payload['home_delivery']) ? 'home' : '',
 		isset($payload['reservation']) ? 'shed' : '',
-		array_key_exists('pickup_location_id', $payload) ? 'pickup' : '',
 	));
 }
 
@@ -4752,53 +4794,51 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
-	$payload = oko_shipment_payload($order, $merchant);
-	if ($payload === null) {
-		return;
-	}
-
 	// Orders sent before this version have no record of what was sent, so
 	// there is nothing to compare an edit with — and treating "no record" as
 	// "changed" would send every old order again the first time a shop marks
 	// it completed. They stay as they were placed.
+	//
+	// Asked before the payload is built, and that is the point: a meta read
+	// against a whole payload — every line, every product's terms and picture,
+	// the refunds, the merchant resolved twice and a call to Økoskabet — built
+	// only to be thrown away on the next line. Every order placed before this
+	// release is in that state, so it was paid on every save and every refund
+	// of all of them.
 	$sent_fingerprint = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true);
 	if ($sent_fingerprint === '') {
 		return;
 	}
 
-	$fingerprint = oko_shipment_fingerprint($payload);
-	$sent        = $order->get_meta(OKO_SENT_META, true);
+	$payload = oko_shipment_payload($order, $merchant);
+	if ($payload === null) {
+		return;
+	}
+
+	// Once, and passed on: every reader below wants the payload without what
+	// describes the request rather than the order.
+	$comparable = oko_comparable_payload($payload);
+	$sent       = $order->get_meta(OKO_SENT_META, true);
 
 	if (is_array($sent)) {
-		$changes = oko_payload_changes($sent, $payload);
-	} elseif ($fingerprint === $sent_fingerprint) {
+		$changes = oko_payload_changes($sent, $comparable);
+	} elseif (md5((string) wp_json_encode($comparable)) === $sent_fingerprint) {
 		// Sent by a version that recorded a fingerprint and not the payload.
 		// Nothing has moved, so this is the free moment to write down what
 		// Økoskabet holds — after this the order compares like any other.
-		$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
+		$order->update_meta_data(OKO_SENT_META, $comparable);
 		$order->save_meta_data();
 		return;
 	} else {
 		// Something moved, and we have no record of what it moved from. The
 		// whole order goes, exactly as it did before differences — once per
 		// order, and never again.
-		$changes = oko_comparable_payload($payload);
+		$changes = $comparable;
 	}
 
 	if ($changes === array()) {
 		return;
 	}
-
-	// The note is not ours to send again. The shop composes it once, when the
-	// order is created; after that the only place it can be changed is
-	// Økoskabet's own backoffice, and a resend that carried it would put the
-	// shop's old wording back over whatever was written there. WooCommerce has
-	// no field for it anyway — checked on Gaardmester's order screen, open
-	// order and all: the only note box a shop has is the one in the sidebar,
-	// which is WooCommerce's own log and has never been sent.
-	//
-	// `oko_comparable_payload()` takes it off both sides of the comparison, so
-	// it is neither a reason to send nor part of what is sent.
 
 	// A refusal is about the change, not the order. Økoskabet answering 422
 	// to one edit must not stop the next one, but sending the identical thing
@@ -4913,8 +4953,8 @@ function oko_resend_shipment_on_update(int $order_id): void
 	// itself read as an edit and call us straight back. `save_meta_data()`
 	// also goes through the order's data store, so this works whether the shop
 	// keeps orders in posts or in WooCommerce's own tables.
-	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, $fingerprint);
-	$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
+	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, md5((string) wp_json_encode($comparable)));
+	$order->update_meta_data(OKO_SENT_META, $comparable);
 	$order->delete_meta_data(OKO_REFUSED_CHANGE_META);
 	$order->save_meta_data();
 }
