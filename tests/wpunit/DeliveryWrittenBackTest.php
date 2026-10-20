@@ -465,6 +465,50 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * And the mark survives the request, through the entrance that really
+	 * writes it.
+	 *
+	 * `oko_take_delivery_from_okoskabet()` returns early when nothing of the
+	 * shop's own moved — which is exactly this case, a flat taken off a
+	 * delivery whose shipping line was empty all along. Without a save on
+	 * that path the mark lives in memory and dies with the request, and the
+	 * billing flat is back on the next payload.
+	 */
+	public function test_the_mark_survives_the_request_it_was_made_in(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_billing_address_1('Kildeparken 98');
+		$order->set_billing_postcode('6000');
+		$order->set_billing_address_2('3 th');
+		$order->save();
+
+		$this->okoskabet_answers_with(array(
+			'shipment_reference' => (string) $order->get_order_number(),
+			'delivery_date'      => '2026-10-20',
+			'home_delivery'      => array(
+				'address' => array(
+					'street_name'  => 'Kildeparken',
+					'house_number' => '98',
+					'floor'        => '',
+					'door'         => '',
+					'city'         => 'Kolding',
+					'postal_code'  => '6000',
+				),
+			),
+		));
+
+		oko_take_delivery_from_okoskabet((string) $order->get_order_number(), $this->merchant());
+
+		$fresh = wc_get_order($order->get_id());
+
+		$this->assertNotEmpty(
+			$fresh->get_meta(OKO_ADDRESS_FROM_OKOSKABET_META, true),
+			'The mark has to be on the order after the request that made it.'
+		);
+		$this->assertSame('', oko_second_address_line($fresh));
+	}
+
 	/** @return array<string,mixed> */
 	private function merchant(): array
 	{
