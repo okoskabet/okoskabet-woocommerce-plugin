@@ -4447,7 +4447,35 @@ function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
 	$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
 }
 
-/** Meta holding a fingerprint of what we last told Økoskabet about an order. */
+/**
+ * Meta holding a fingerprint of what we last told Økoskabet about an order.
+ *
+ * ## It can go, and here is exactly when
+ *
+ * Everything it holds is derivable from `OKO_SENT_META`, which is written in
+ * the same breath — so the hash answers nothing for an order that has the
+ * payload. Its one job is the order that does *not*: one sent by a version
+ * that recorded a fingerprint and no payload. For such an order the hash is
+ * the only thing left to compare, and it buys the branch at
+ * `oko_resend_shipment_on_update()` that writes the payload down for free
+ * when nothing has moved.
+ *
+ * Without it, every order placed before this release would send its *whole*
+ * payload on its first save — over whatever the backoffice had corrected in
+ * the meantime. That is the bug this whole change exists to stop, so it stays
+ * until no editable order is in that state. That needs two things, and
+ * neither can be hurried:
+ *
+ *   1. this release live long enough that every such order has either been
+ *      saved once, which upgrades it, or been locked by Økoskabet;
+ *   2. no backfill — the hash is not reversible, so writing `OKO_SENT_META`
+ *      from the current payload would bless edits Økoskabet never accepted.
+ *
+ * When that holds: delete this constant, the `$sent_fingerprint === ''` guard,
+ * and the `elseif` branch. `is_array($sent)` then carries "sent by a recording
+ * version" on its own. Tracked as an issue rather than left here to be
+ * remembered.
+ */
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
 
 /**
@@ -4979,8 +5007,7 @@ function oko_resend_shipment_on_update(int $order_id): void
 	// itself read as an edit and call us straight back. `save_meta_data()`
 	// also goes through the order's data store, so this works whether the shop
 	// keeps orders in posts or in WooCommerce's own tables.
-	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, md5((string) wp_json_encode($comparable)));
-	$order->update_meta_data(OKO_SENT_META, $comparable);
+	oko_remember_what_was_sent($order, $comparable);
 	$order->delete_meta_data(OKO_REFUSED_CHANGE_META);
 	$order->save_meta_data();
 }
