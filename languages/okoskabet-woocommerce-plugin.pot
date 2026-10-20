@@ -1,12 +1,21 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR Okoskabet
-# This file is distributed under the same license as the Okoskabet WooCommerce Plugin package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Translation template for Økoskabet WooCommerce Plugin.
+# Copyright (C) 2026 HeyRobot.AI / Økoskabet
+# This file is distributed under the same license as the plugin.
 #
-#, fuzzy
+# Regenerated with xgettext; the old template had fallen to 99 strings
+# while the Danish catalogue had grown past 440, so it was no use to
+# anyone starting a new language.
+#
+# Regenerate with the package named, or xgettext writes its own header over
+# this one — and writes the shop's name without its Ø:
+#
+#   xgettext --package-name="Økoskabet WooCommerce Plugin" \
+#            --package-version=1.5.2 \
+#            --copyright-holder="HeyRobot.AI / Økoskabet" ...
+#
 msgid ""
 msgstr ""
-"Project-Id-Version: Okoskabet WooCommerce Plugin\n"
+"Project-Id-Version: Økoskabet WooCommerce Plugin 1.5.2\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-19 14:29+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"

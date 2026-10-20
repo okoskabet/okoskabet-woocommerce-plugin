@@ -136,8 +136,17 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
-	/** A second address line the shop has deleted still reaches Økoskabet. */
-	public function test_a_deleted_address_line_reaches_okoskabet(): void
+	/**
+	 * A second address line the shop has deleted is a change, and sends the
+	 * address.
+	 *
+	 * The shop builds the address with `array_filter`, so a deleted line is a
+	 * missing key rather than an empty one, and the address goes without it.
+	 * What Økoskabet then makes of an address with no flat is its own wash's
+	 * business — this pins that the shop sends the address at all, which is
+	 * what it failed to do when the lines were compared one at a time.
+	 */
+	public function test_a_deleted_address_line_sends_the_address(): void
 	{
 		$before = $this->payload();
 		$after  = $this->payload();
@@ -146,8 +155,8 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 		$changes = oko_payload_changes($before, $after);
 
 		$this->assertArrayHasKey('home_delivery', $changes);
-		$this->assertArrayNotHasKey('address_2', $changes['home_delivery']);
 		$this->assertSame('Kildeparken 98', $changes['home_delivery']['address_1']);
+		$this->assertArrayNotHasKey('address_2', $changes['home_delivery']);
 	}
 
 	/**

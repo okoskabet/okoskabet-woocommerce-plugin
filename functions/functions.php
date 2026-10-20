@@ -115,17 +115,6 @@ function o_check_configuration(string $value, ?string $merchant_id = null): bool
  * string produce a cache that can never be cleared — which is exactly the
  * bug this replaced.
  */
-/**
- * Asking for this merchant's configuration drops the memo instead.
- *
- * The memo below lasts a request, which is right for a checkout recalculating
- * on every keystroke and wrong for the request that has just saved new
- * settings: `Merchants::purge_config_cache()` dropped the stored copy and the
- * one held in here outlived it. A merchant id nobody can have is how that
- * cache is reached without opening it to everything else.
- */
-const OKO_FORGET_CONFIGURATION = "\0forget";
-
 function o_configuration_transient_key(string $merchant_id): string
 {
 	return O_TEXTDOMAIN . '_configuration_' . sanitize_key($merchant_id);
@@ -190,6 +179,17 @@ function oko_api_request(array $merchant, string $method, string $path, ?string 
  * @param string $merchant_id
  * @return array<string,mixed>
  */
+/**
+ * Asking for this merchant's configuration drops the memo instead.
+ *
+ * The memo in `oko_merchant_configuration()` lasts a request, which is right for a checkout recalculating
+ * on every keystroke and wrong for the request that has just saved new
+ * settings: `Merchants::purge_config_cache()` dropped the stored copy and the
+ * one held in here outlived it. A merchant id nobody can have is how that
+ * cache is reached without opening it to everything else.
+ */
+const OKO_FORGET_CONFIGURATION = "\0forget";
+
 function oko_merchant_configuration(string $merchant_id): array
 {
 	static $asked = array();
@@ -3564,8 +3564,14 @@ function oko_shop_sends_line_totals(array $merchant): bool
  * order already sent, refunding is how a shop takes goods off it. The refund
  * lines carry negative amounts, which is why they are subtracted by adding.
  *
- * @param \WC_Order                 $order
- * @param \WC_Order_Item            $item
+ * @param \WC_Order      $order    The order the line belongs to.
+ * @param \WC_Order_Item  $item     The line itself. Untyped in the
+ *                                  signature because the class is
+ *                                  WooCommerce's and not loaded by the
+ *                                  analyser.
+ * @param bool            $with_vat Whether this shop's prices have VAT in
+ *                                  them.
+ * @return float The line in kroner, after discounts and refunds.
  */
 function oko_line_total(\WC_Order $order, $item, bool $with_vat): float
 {
@@ -3831,7 +3837,10 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 			'max_duration_days' => 1,
 		];
 	} else {
-		$recipient_name = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
+		// Trimmed: a recipient of one word — which the write-back can now
+		// produce, splitting "Pernille" into a first name and nothing —
+		// would otherwise be sent with a trailing space and stored that way.
+		$recipient_name = trim($order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name());
 		$data['customer']['recipient_name'] = $recipient_name;
 		// `location` used to be sent here as well, carrying the same text as
 		// the note below. Økoskabet has no such field — `HomeDelivery` holds a
@@ -4600,7 +4609,7 @@ function oko_payload_changes(array $sent, array $payload): array
 }
 
 /**
- * The same comparison one level down, inside `customer` and the rest.
+ * The same comparison one level down, inside the customer.
  *
  * A field the order has stopped carrying is sent as empty rather than left
  * out: inside an object, leaving it out reads as "unchanged" just as it does
@@ -4760,7 +4769,7 @@ function oko_resend_shipment_on_update(int $order_id): void
 	// to one edit must not stop the next one, but sending the identical thing
 	// again cannot help either — so the refused change is remembered by shape
 	// and only that exact shape is held back.
-	$change_print = md5((string) wp_json_encode($changes));
+	$change_print = oko_shipment_fingerprint($changes);
 	if ($change_print === (string) $order->get_meta(OKO_REFUSED_CHANGE_META, true)) {
 		return;
 	}
