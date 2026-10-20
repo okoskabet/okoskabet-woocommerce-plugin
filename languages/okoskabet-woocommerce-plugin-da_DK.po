@@ -1709,6 +1709,18 @@ msgstr "afhentning i butikken"
 msgid "no longer a collection from the shop"
 msgstr "ikke længere en afhentning i butikken"
 
+msgid "The change did not reach Økoskabet: the API key was refused (%d). Check the key under Økoskabet settings — until then, edits to this order stay in the shop. It is tried again next time the order is saved."
+msgstr "Ændringen nåede ikke Økoskabet: API-nøglen blev afvist (%d). Tjek nøglen under Økoskabet-indstillinger — indtil da bliver rettelser på denne ordre kun i butikken. Den forsøges igen, næste gang ordren gemmes."
+
+msgid "The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop."
+msgstr "Ændringen nåede ikke Økoskabet: ordren kan ikke længere ændres der, fordi en pakke er modtaget. Denne og senere rettelser bliver kun i butikken."
+
+msgid "The change did not reach Økoskabet, which refused it (%1$d): %2$s. The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own."
+msgstr "Ændringen nåede ikke Økoskabet, som afviste den (%1$d): %2$s. Ordren siger nu noget, Økoskabet ikke siger, og denne ændring sendes ikke igen — en senere rettelse forsøges for sig."
+
+msgid "no reason given"
+msgstr "ingen grund oplyst"
+
 msgid "delivery address %s"
 msgstr "leveringsadresse %s"
 

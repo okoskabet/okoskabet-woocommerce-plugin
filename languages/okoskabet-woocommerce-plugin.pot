@@ -936,6 +936,18 @@ msgstr ""
 msgid "no longer a collection from the shop"
 msgstr ""
 
+msgid "The change did not reach Økoskabet: the API key was refused (%d). Check the key under Økoskabet settings — until then, edits to this order stay in the shop. It is tried again next time the order is saved."
+msgstr ""
+
+msgid "The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop."
+msgstr ""
+
+msgid "The change did not reach Økoskabet, which refused it (%1$d): %2$s. The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own."
+msgstr ""
+
+msgid "no reason given"
+msgstr ""
+
 msgid "delivery address %s"
 msgstr ""
 

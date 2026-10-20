@@ -4817,6 +4817,33 @@ function oko_resend_shipment_on_refund($order_id, $refund_id): void
 }
 
 /**
+ * Økoskabet's reason, short enough to be a note.
+ *
+ * A refusal with a message answers JSON and the message is a sentence. A 404
+ * answers plain text, and a server in front of Økoskabet can answer a whole
+ * HTML page — which is why this cuts rather than trusts the length, and why
+ * the tags go: a note is rendered in the admin, and an error page pasted into
+ * one would bring its markup along.
+ *
+ * @param string $reason The reason as it came back.
+ * @return string
+ */
+function oko_short_reason(string $reason): string
+{
+	$reason = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($reason)) ?? '');
+
+	if ($reason === '') {
+		return __('no reason given', O_TEXTDOMAIN);
+	}
+
+	if (mb_strlen($reason) <= 200) {
+		return $reason;
+	}
+
+	return mb_substr($reason, 0, 200) . '…';
+}
+
+/**
  * Send an edited order to Økoskabet again.
  *
  * An order can be changed after it has been placed — a date moved, an address
@@ -4832,9 +4859,14 @@ function oko_resend_shipment_on_refund($order_id, $refund_id): void
  *     `woocommerce_update_order` fires on every save, including our own, and a
  *     shop that saves an order ten times should not send ten identical PUTs.
  *   - Once per request, whatever WooCommerce does internally.
- *   - A failure is logged and the fingerprint is left alone, so the next save
- *     tries again. It never touches the order's status: an edit that cannot
- *     reach Økoskabet is a problem to retry, not a reason to fail an order a
+ *   - A failure that can be retried — no answer at all, or a 5xx — is logged
+ *     and the fingerprint is left alone, so the next save tries again. A
+ *     *refusal* is a verdict: it is recorded as dealt with and never sent
+ *     again, so it also gets a note on the order. Without one the shop had no
+ *     way at all to learn that an edit never arrived; the only record was a
+ *     line in `debug.log`.
+ *   - It never touches the order's status: an edit that cannot reach
+ *     Økoskabet is a problem to retry, not a reason to fail an order a
  *     customer has already paid for.
  *
  * @param int $order_id
@@ -4988,6 +5020,19 @@ function oko_resend_shipment_on_update(int $order_id): void
 			(string) ($merchant['id'] ?? '?'),
 			$body
 		));
+
+		// And on the order, because the log is not a place anyone looks. This
+		// is how it stayed invisible: the shop edited an order, the screen
+		// said the edit was saved, nothing reached Økoskabet, and the only
+		// record was a line in `debug.log`. Measured on Gaardmester staging
+		// 2026-10-20 with order 88091 — a corrected address refused and lost
+		// with nothing said anywhere a person would see it.
+		$order->add_order_note(sprintf(
+			/* translators: %d: the HTTP status Økoskabet answered with. */
+			__('The change did not reach Økoskabet: the API key was refused (%d). Check the key under Økoskabet settings — until then, edits to this order stay in the shop. It is tried again next time the order is saved.', O_TEXTDOMAIN),
+			$http_code
+		));
+
 		return;
 	}
 
@@ -5009,12 +5054,28 @@ function oko_resend_shipment_on_update(int $order_id): void
 				'okoskabet_woocommerce_plugin: order %s can no longer be changed at Økoskabet — a parcel has been received. Later edits stay in the shop only.',
 				$order->get_order_number()
 			));
+
+			$order->add_order_note(__(
+				'The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop.',
+				O_TEXTDOMAIN
+			));
 		} else {
 			error_log(sprintf(
 				'okoskabet_woocommerce_plugin: resend of order %s refused (%d), not retrying: %s',
 				$order->get_order_number(),
 				$http_code,
 				$reason
+			));
+
+			// The reason in Økoskabet's own words, which are already in the
+			// shop's language, and the code beside it so a reason that says
+			// nothing is still placed. Cut short because a 404 answers plain
+			// text rather than a message, and a note is not a log.
+			$order->add_order_note(sprintf(
+				/* translators: 1: the HTTP status Økoskabet answered with, 2: Økoskabet's reason. */
+				__('The change did not reach Økoskabet, which refused it (%1$d): %2$s. The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own.', O_TEXTDOMAIN),
+				$http_code,
+				oko_short_reason($reason)
 			));
 		}
 

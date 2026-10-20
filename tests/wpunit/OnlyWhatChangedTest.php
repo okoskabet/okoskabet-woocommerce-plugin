@@ -291,6 +291,142 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 		$this->assertNotSame('', (string) $fresh->get_meta(OKO_REFUSED_CHANGE_META, true));
 	}
 
+	/**
+	 * A refusal is a verdict, so it is said on the order.
+	 *
+	 * Until now it was a line in `debug.log` and nothing else: the shop
+	 * corrected an address, the screen said the edit was saved, Økoskabet
+	 * never heard of it, and the change is recorded as dealt with and never
+	 * sent again. Measured on Gaardmester staging 2026-10-20 (order 88091),
+	 * where a `home_delivery` sent to a collection was refused 422 and lost
+	 * with nothing said anywhere a person looks.
+	 */
+	public function test_a_refusal_is_written_on_the_order(): void
+	{
+		$this->okoskabet_answers(422, '{"error_message":"Adressen er ugyldig"}');
+
+		$order = $this->an_order_already_at_okoskabet();
+		$order->set_billing_phone('+4531223344');
+		$order->save();
+
+		$note = $this->last_note($order);
+
+		$this->assertStringContainsString('422', $note);
+		$this->assertStringContainsString('Adressen er ugyldig', $note);
+	}
+
+	/** The reason Økoskabet gives, when it gives none. */
+	public function test_a_refusal_without_a_reason_still_says_so(): void
+	{
+		$this->okoskabet_answers(404, '');
+
+		$order = $this->an_order_already_at_okoskabet();
+		$order->set_billing_phone('+4531223355');
+		$order->save();
+
+		$note = $this->last_note($order);
+
+		$this->assertStringContainsString('404', $note);
+		// Through `__()`, so the assertion moves with the translation instead
+		// of pinning a Danish shop to the English msgid.
+		$this->assertStringContainsString(__('no reason given', O_TEXTDOMAIN), $note);
+	}
+
+	/**
+	 * An error page is not a note. A server in front of Økoskabet can answer
+	 * HTML, and a note is rendered in the admin.
+	 */
+	public function test_a_refusal_carries_no_markup_and_is_cut_short(): void
+	{
+		// Under a code that is a verdict: a 5xx retries, so a gateway page
+		// there would never reach a note at all.
+		$this->okoskabet_answers(400, '<p>Bad request</p>' . str_repeat('x', 400));
+
+		$order = $this->an_order_already_at_okoskabet();
+		$order->set_billing_phone('+4531223366');
+		$order->save();
+
+		$note = $this->last_note($order);
+
+		$this->assertStringNotContainsString('<p>', $note);
+		$this->assertStringContainsString('Bad request', $note);
+		$this->assertStringContainsString('…', $note);
+	}
+
+	/** A locked order says why, because the shop cannot fix this one. */
+	public function test_a_locked_order_says_a_parcel_has_been_received(): void
+	{
+		$this->okoskabet_answers(422, '{"error_code":"' . OKO_ERROR_CODE_LOCKED . '","error_message":"Laast"}');
+
+		$order = $this->an_order_already_at_okoskabet();
+		$order->set_billing_phone('+4531223377');
+		$order->save();
+
+		$note = $this->last_note($order);
+
+		$this->assertSame(
+			__('The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop.', O_TEXTDOMAIN),
+			$note,
+			'The locked note, not the one every other refusal gets.'
+		);
+		$this->assertTrue((bool) wc_get_order($order->get_id())->get_meta(OKO_SHIPMENT_LOCKED_META, true));
+	}
+
+	/** A refused key needs a person, so it reaches one. */
+	public function test_a_refused_key_tells_the_shop_to_check_it(): void
+	{
+		$this->okoskabet_answers(401, 'Unauthorized');
+
+		$order = $this->an_order_already_at_okoskabet();
+		$order->set_billing_phone('+4531223388');
+		$order->save();
+
+		$note = $this->last_note($order);
+
+		$this->assertSame(
+			sprintf(
+				__('The change did not reach Økoskabet: the API key was refused (%d). Check the key under Økoskabet settings — until then, edits to this order stay in the shop. It is tried again next time the order is saved.', O_TEXTDOMAIN),
+				401
+			),
+			$note
+		);
+	}
+
+	/**
+	 * And a failure that retries says nothing. The edit is not lost — the
+	 * fingerprint has not moved, so the next save sends it again — and a note
+	 * per bad minute at Økoskabet would be noise about a thing that fixes
+	 * itself.
+	 */
+	public function test_a_failure_that_will_be_retried_writes_no_note(): void
+	{
+		$this->okoskabet_answers(503, 'Service Unavailable');
+
+		$order = $this->an_order_already_at_okoskabet();
+		$before = count(wc_get_order_notes(array('order_id' => $order->get_id())));
+
+		$order->set_billing_phone('+4531223399');
+		$order->save();
+
+		$this->assertCount(1, $this->bodies);
+		$this->assertCount(
+			$before,
+			wc_get_order_notes(array('order_id' => $order->get_id())),
+			'A 5xx retries on the next save, so there is nothing to tell yet.'
+		);
+		$this->assertSame('', (string) wc_get_order($order->get_id())->get_meta(OKO_REFUSED_CHANGE_META, true));
+	}
+
+	/** The newest note on the order, as a string. */
+	private function last_note(\WC_Order $order): string
+	{
+		$notes = wc_get_order_notes(array('order_id' => $order->get_id()));
+
+		$this->assertNotEmpty($notes, 'The order was expected to carry a note.');
+
+		return (string) $notes[0]->content;
+	}
+
 	/** Økoskabet, taking whatever it is sent, and keeping the body. */
 	private function okoskabet_accepts_everything(): void
 	{
