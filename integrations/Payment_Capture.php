@@ -49,14 +49,12 @@ class Payment_Capture extends Base {
 	 * the next capture must wait for the next delivery, not finish the order
 	 * on the old one.
 	 *
-	 * @param int            $order_id The order whose status changed.
-	 * @param \WC_Order|null $order    The order, as WooCommerce passes it.
+	 * @param int       $order_id The order whose status changed.
+	 * @param \WC_Order $order    The order, as WooCommerce passes it.
 	 * @return void
 	 */
-	public function forget_waiting_completion( $order_id, $order = null ) {
-		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
-
-		if ( ! $order || (string) $order->get_meta( self::COMPLETION_WAITING_META, true ) === '' ) {
+	public function forget_waiting_completion( $order_id, \WC_Order $order ) {
+		if ( (string) $order->get_meta( self::COMPLETION_WAITING_META, true ) === '' ) {
 			return;
 		}
 

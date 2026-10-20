@@ -1142,9 +1142,10 @@ class OkoRest extends Base
 			$waiting_event = '';
 		}
 
+		$waiting_ticked = in_array($waiting_event, $webhook_events, true);
 		if ($triggers_complete) {
 			$completion_event = $internal_event;
-		} elseif (in_array($waiting_event, $webhook_events, true)) {
+		} elseif ($waiting_ticked) {
 			// Not a completion event, so Step 4 let it through as a capture event.
 			$completion_event = $waiting_event;
 		}
@@ -1177,8 +1178,7 @@ class OkoRest extends Base
 				// can come — no capture step chosen, an offline payment, an
 				// order capture will not touch — since the note would promise
 				// something that cannot happen.
-				$waiting_still_ticked = in_array($waiting_event, $webhook_events, true);
-				if ($triggers_complete && ! $waiting_still_ticked && ! empty($capture_events)
+				if ($triggers_complete && ! $waiting_ticked && ! empty($capture_events)
 					&& Payment_Capture::can_capture($order)) {
 					$order->update_meta_data(Payment_Capture::COMPLETION_WAITING_META, $internal_event);
 					$order->add_order_note(sprintf(
