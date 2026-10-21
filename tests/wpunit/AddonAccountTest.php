@@ -24,6 +24,7 @@ class AddonAccountTest extends \Codeception\TestCase\WPTestCase
 			'merchants' => array(
 				'default' => array('id' => 'default', 'label' => 'A', 'api_key' => 'key-a', 'staging' => true),
 				'gaard'   => array('id' => 'gaard', 'label' => 'B', 'api_key' => 'key-b', 'staging' => true),
+				'tom'     => array('id' => 'tom', 'label' => 'C', 'api_key' => '', 'staging' => true),
 			),
 		));
 		foreach (array('default', 'gaard') as $id) {
@@ -82,6 +83,25 @@ class AddonAccountTest extends \Codeception\TestCase\WPTestCase
 
 		$this->assertContains('PUT key-b', $this->keys);
 		$this->assertNotContains('PUT key-a', $this->keys);
+	}
+
+	/**
+	 * The addition's own basket routing to an account without a key does not
+	 * stop it: the delivery it rides on is the earlier order's, under that
+	 * order's account.
+	 */
+	public function test_an_addition_is_sent_even_when_its_own_account_has_no_key(): void
+	{
+		$parent   = $this->an_order('gaard', 'hey_okoskabet_shipping_home');
+		$addition = $this->an_order('tom', 'hey_okoskabet_shipping_home');
+		$addition->update_meta_data(OKO_ADDON_PARENT_ID_META, (string) $parent->get_id());
+		$addition->save();
+		$this->keys = array();
+
+		$addition->update_status('processing');
+
+		$this->assertContains('PUT key-b', $this->keys);
+		$this->assertSame('yes', wc_get_order($addition->get_id())->get_meta('billing_okoskabet_done', true));
 	}
 
 	/** A customer who picked the shop's own courier is not put on our delivery. */

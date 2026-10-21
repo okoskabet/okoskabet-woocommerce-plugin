@@ -2499,7 +2499,9 @@ function oko_write_shipment_contents(\WC_Order $parent, array $additions, array 
  *
  * @param \WC_Order           $order     The cancelled addition.
  * @param int                 $parent_id The order it rode along with.
- * @param array<string,mixed> $merchant  The merchant record.
+ * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
+ *                                       order's, and so is the account it is
+ *                                       written under. Kept for the callers.
  */
 function oko_take_addition_off_its_order($order, int $parent_id, array $merchant): void
 {
@@ -2560,7 +2562,9 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
  *
  * @param \WC_Order           $order     The addition.
  * @param int                 $parent_id The earlier order's WooCommerce id.
- * @param array<string,mixed> $merchant  The merchant record.
+ * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
+ *                                       order's, and so is the account it is
+ *                                       written under. Kept for the callers.
  */
 function oko_send_addition_to_its_order($order, int $parent_id, array $merchant): void
 {
@@ -4301,6 +4305,15 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 	// over the order's items. This keeps existing orders working after an
 	// upgrade — they resolve to the default merchant.
 	$merchant = oko_merchant_for_order($order);
+
+	// An addition is written onto the earlier order's shipment, under that
+	// order's account, so that is the account whose key decides. Asking the
+	// addition's own basket stopped an addition that routed to an account
+	// still without a key, although the delivery it rides on was fine.
+	$addon_parent = wc_get_order((int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true));
+	if ($addon_parent instanceof \WC_Order && $addon_parent->get_id() !== $order->get_id()) {
+		$merchant = oko_merchant_for_order($addon_parent);
+	}
 
 	if (empty($merchant['api_key'])) {
 		error_log("okoskabet_woocommerce_plugin: API key not set for order {$order_number}, merchant=" . (string) ($merchant['id'] ?? '?'));
