@@ -382,6 +382,24 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		$this->assertCount(2, $this->hold_notes($addition));
 	}
 
+	/**
+	 * A card payment carries a transaction id, so nothing further up stops the
+	 * hold's own change of status from asking once more. The mark does.
+	 */
+	public function test_a_card_paid_addition_is_held_once(): void
+	{
+		$addition = $this->an_addition_to_a_delivery_on($this->days_ahead(0), 'pending');
+		$addition->set_payment_method('quickpay');
+		$addition->set_transaction_id('qp-4711');
+		$addition->save();
+
+		$addition->update_status('processing');
+
+		$addition = wc_get_order($addition->get_id());
+		$this->assertSame('on-hold', $addition->get_status());
+		$this->assertCount(1, $this->hold_notes($addition), 'The hold is not one more try.');
+	}
+
 	/** Once it gets on, it is an addition like any other and no longer held. */
 	public function test_a_held_addition_that_gets_on_is_released(): void
 	{
@@ -403,7 +421,7 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 	 * with money owing, which the plugin does not send. The shop setting it to
 	 * processing is the shop saying the money has arrived.
 	 */
-	private function an_addition_to_a_delivery_on(string $delivery_date): \WC_Order
+	private function an_addition_to_a_delivery_on(string $delivery_date, string $status = 'on-hold'): \WC_Order
 	{
 		$parent = new \WC_Order();
 		$parent->add_product(wc_get_product($this->a_product('Økologiske æg')), 2);
@@ -415,7 +433,7 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		$addition->set_payment_method('bacs');
 		$addition->calculate_totals();
 		$addition->update_meta_data(OKO_ADDON_PARENT_ID_META, (string) $parent->get_id());
-		$addition->set_status('on-hold');
+		$addition->set_status($status);
 		$addition->save();
 
 		return $addition;
