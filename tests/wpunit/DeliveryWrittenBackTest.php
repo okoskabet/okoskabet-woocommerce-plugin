@@ -623,6 +623,13 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$order->calculate_totals(false);
 		$order->save();
 
+		// Booked, as every order the write-back is about has been. Since #52
+		// an order is only the one a reference names if the plugin booked it
+		// under that reference — the point being that an order Økoskabet never
+		// heard of cannot be completed, or charged, for someone else's parcel.
+		oko_keep_booked_reference($order, (string) $order->get_order_number());
+		$order->save();
+
 		return $order;
 	}
 }

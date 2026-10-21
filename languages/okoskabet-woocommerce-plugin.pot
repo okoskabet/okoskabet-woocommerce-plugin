@@ -478,6 +478,12 @@ msgstr ""
 
 #: backend/views/settings.php:468
 msgid ""
+"more than one order has the reference in shipment_reference, and none of "
+"them is touched. Check the orders for a copied Økoskabet reference."
+msgstr ""
+
+#: backend/views/settings.php:426
+msgid ""
 "the merchant has no webhook secret configured. Edit the merchant and paste a "
 "value."
 msgstr ""

@@ -1087,12 +1087,15 @@ class OkoRest extends Base
 			return new \WP_Error('woocommerce_not_available', 'WooCommerce is not available', array('status' => 503));
 		}
 
-		$order = wc_get_order($shipment_reference);
-		if (!$order) {
+		// By the reference it was booked under — which is the order *number*,
+		// not its id. Reading it as an id found nothing in a shop with a
+		// numbering plugin, or found some other order that had that id.
+		$order = oko_order_for_shipment_reference($shipment_reference);
+		if (is_wp_error($order)) {
 			if (defined('WP_DEBUG') && WP_DEBUG) {
-				error_log(sprintf('Økoskabet webhook: order not found for shipment_reference=%s', $shipment_reference));
+				error_log(sprintf('Økoskabet webhook: %s for shipment_reference=%s', $order->get_error_message(), $shipment_reference));
 			}
-			return new \WP_Error('order_not_found', 'Order not found', array('status' => 404));
+			return $order;
 		}
 
 		// --- Step 5b: Verify the order actually belongs to the merchant
@@ -1169,11 +1172,12 @@ class OkoRest extends Base
 
 		if (defined('WP_DEBUG') && WP_DEBUG) {
 			error_log(sprintf(
-				'Økoskabet webhook processed: Merchant=%s, RawEvent=%s, InternalEvent=%s, Order=%s, Capture=%s, Complete=%s',
+				'Økoskabet webhook processed: Merchant=%s, RawEvent=%s, InternalEvent=%s, Order=%s (id %d), Capture=%s, Complete=%s',
 				$merchant['id'] ?? '?',
 				$raw_event,
 				$internal_event,
 				$shipment_reference,
+				$order->get_id(),
 				$triggers_capture ? 'yes' : 'no',
 				$triggers_complete ? 'yes' : 'no'
 			));

@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/BooksWithOkoskabet.php';
+
 /**
  * What the chosen steps actually do.
  *
@@ -10,6 +12,8 @@
  * can hold.
  */
 class StatusEventBehaviourTest extends \Codeception\TestCase\WPTestCase {
+
+	use BooksWithOkoskabet;
 
 	const SECRET = 'a-webhook-secret';
 
@@ -31,12 +35,13 @@ class StatusEventBehaviourTest extends \Codeception\TestCase\WPTestCase {
 		update_option( O_TEXTDOMAIN . '-settings', $settings );
 	}
 
+	/** An order the plugin booked with Økoskabet, in the status the shop has it in now. */
 	private function order( string $status ): \WC_Order {
 		$order = new \WC_Order();
 		$order->set_status( $status );
 		$order->save();
 
-		return $order;
+		return $this->book_with_okoskabet( $order );
 	}
 
 	/**

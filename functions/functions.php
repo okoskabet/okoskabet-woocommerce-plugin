@@ -2298,18 +2298,30 @@ function oko_addition_ids(\WC_Order $parent): array
  */
 function oko_order_for_reference(string $reference): ?\WC_Order
 {
-	if (! function_exists('wc_get_order')) {
-		return null;
+	// One lookup, in `oko_order_for_shipment_reference()`. This used to read
+	// the reference as an order id and check the number afterwards, which
+	// never hit the wrong order but could not find one at a shop whose
+	// numbering plugin makes id and number differ — Avokadokontoret's, and
+	// their webhooks answered 404 (#52).
+	$found = oko_order_for_shipment_reference($reference);
+
+	if ($found instanceof \WC_Order) {
+		return $found;
 	}
 
-	$order = wc_get_order(absint($reference));
-
-	if (! $order instanceof \WC_Order
-		|| ltrim((string) $order->get_order_number(), '#') !== ltrim(trim($reference), '#')) {
-		return null;
+	// Two orders claim the reference. Both callers here read `null` as "no
+	// such order", which is the right answer — we cannot say which one — but
+	// it is not the same thing as not finding one, and the shop would have no
+	// way to tell the two apart. The webhook answers 409 for this; these
+	// paths say it to the log.
+	if (is_wp_error($found)) {
+		error_log(sprintf(
+			'okoskabet_woocommerce_plugin: reference %s matches more than one order; treated as unknown',
+			$reference
+		));
 	}
 
-	return $order;
+	return null;
 }
 
 /**
@@ -2446,7 +2458,9 @@ function oko_addition_lines($order, ?array $merchant = null): array
  */
 function oko_write_shipment_contents(\WC_Order $parent, array $additions, array $merchant, string $note_line): int
 {
-	$reference = (string) $parent->get_order_number();
+	// What Økoskabet booked it under, which is not always its number: a shop
+	// with a numbering plugin has two, and only one of them is ours (#52).
+	$reference = oko_shipment_reference($parent);
 
 	$body = array('line_items' => oko_lines_for($parent, $additions, $merchant));
 
@@ -2494,7 +2508,7 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 		return;
 	}
 
-	$reference = (string) $parent->get_order_number();
+	$reference = oko_shipment_reference($parent);
 	$code      = oko_write_shipment_contents(
 		$parent,
 		oko_additions_to($parent, $order),
@@ -2562,7 +2576,7 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 		return;
 	}
 
-	$reference = (string) $parent->get_order_number();
+	$reference = oko_shipment_reference($parent);
 
 	// Asked again here, not only in the checkout. A bank transfer is marked
 	// paid days after it was ordered, and by then the delivery may have left
@@ -2890,7 +2904,7 @@ function oko_shipment_still_with_merchant($order, array $merchant): bool
 		return false;
 	}
 
-	$shipment = oko_shipment_at_okoskabet((string) $order->get_order_number(), $merchant);
+	$shipment = oko_shipment_at_okoskabet(oko_shipment_reference($order), $merchant);
 
 	return $shipment !== null && (string) ($shipment['status'] ?? '') === 'registered';
 }
@@ -3575,6 +3589,247 @@ function oko_order_line_items(\WC_Order $order, ?array $merchant = null): array
 
 
 /**
+ * Meta holding the `shipment_reference` an order was booked with Økoskabet under.
+ *
+ * Økoskabet knows an order by that reference and by nothing else, so every
+ * later conversation about it — a webhook coming in, an edit or a cancellation
+ * going out — has to use exactly the same string. It is the order *number*, and
+ * with a numbering plugin that is not the order's id; the number can even
+ * change after booking. Keeping what was sent is the only way to be sure.
+ */
+const OKO_SHIPMENT_REFERENCE_META = '_okoskabet_shipment_reference';
+
+/**
+ * Meta holding the id of the order the reference above was written for.
+ *
+ * Order meta gets copied: a duplicate-order plugin copies all of it, and a
+ * subscription renewal copies its parent's. A copied reference names the
+ * *other* order's shipment, and trusting it would cancel or overwrite that
+ * shipment from the copy. The id comes along in the copy unchanged, so a
+ * reference whose id is not the order's own is recognised as not its own.
+ */
+const OKO_SHIPMENT_REFERENCE_FOR_META = '_okoskabet_shipment_reference_for';
+
+/**
+ * The reference this order itself was booked under, or '' if it has none.
+ *
+ * A reference copied over from another order is not this order's, and reads
+ * as none.
+ */
+function oko_booked_reference(\WC_Order $order): string
+{
+	$for       = $order->get_meta(OKO_SHIPMENT_REFERENCE_FOR_META, true);
+	$reference = $order->get_meta(OKO_SHIPMENT_REFERENCE_META, true);
+
+	return is_numeric($for) && (int) $for === $order->get_id() && is_string($reference) ? $reference : '';
+}
+
+/** Keep the reference this order was booked under, as its own. */
+function oko_keep_booked_reference(\WC_Order $order, string $reference): void
+{
+	$order->update_meta_data(OKO_SHIPMENT_REFERENCE_META, $reference);
+	$order->update_meta_data(OKO_SHIPMENT_REFERENCE_FOR_META, (string) $order->get_id());
+}
+
+/**
+ * The reference Økoskabet knows this order by.
+ *
+ * What it was booked under, or — for an order booked before that was kept, or
+ * not booked yet — its number, which is what it was or will be booked under.
+ */
+function oko_shipment_reference(\WC_Order $order): string
+{
+	$booked = oko_booked_reference($order);
+
+	return $booked !== '' ? $booked : (string) $order->get_order_number();
+}
+
+/**
+ * The order booked with Økoskabet under this reference, and never another.
+ *
+ * This used to be `wc_get_order($reference)`, which reads the reference as an
+ * order *id*. With a numbering plugin the number is not the id, so the order
+ * was not found — or, where some other order had that id, that order was the
+ * one completed and charged.
+ *
+ * Every candidate is checked here in PHP, whatever found it: the posts data
+ * store quietly ignores some of what `wc_get_orders()` is asked to filter on,
+ * and a lookup that trusted the query would hand back the wrong order without
+ * a word.
+ *
+ * @return \WC_Order|\WP_Error 404 when no order has the reference, 409 when
+ *                             more than one could and there is no telling which.
+ */
+function oko_order_for_shipment_reference(string $reference)
+{
+	// Booked since the reference was kept: the order says so itself.
+	$found = $reference === '' ? array() : array_filter(
+		oko_orders_by_ids(oko_order_ids_with_meta(OKO_SHIPMENT_REFERENCE_META, $reference)),
+		static fn(\WC_Order $order): bool => oko_booked_reference($order) === $reference
+	);
+
+	// Booked before that: the reference was its number then, so it is found
+	// by number now — and only an order this plugin booked. A number is not
+	// forever: renumber the shop while a parcel is on its way, and the old
+	// number can turn up on a new order Økoskabet never heard of, which would
+	// then be completed and charged for the parcel.
+	if (empty($found) && $reference !== '') {
+		$found = array_filter(
+			oko_orders_by_ids(oko_order_ids_numbered($reference)),
+			static fn(\WC_Order $order): bool => (string) $order->get_order_number() === $reference
+				// Booked under some other reference: Økoskabet knows it by that.
+				&& oko_booked_reference($order) === ''
+				&& oko_booked_by_plugin($order)
+		);
+	}
+
+	if (count($found) > 1) {
+		return new \WP_Error('order_ambiguous', 'More than one order has this shipment reference', array('status' => 409));
+	}
+	if (empty($found)) {
+		return new \WP_Error('order_not_found', 'Order not found', array('status' => 404));
+	}
+
+	// Found by number: given the reference to keep, so the next webhook finds
+	// it directly, even if the number has changed by then.
+	$order = reset($found);
+	if (oko_booked_reference($order) === '') {
+		oko_keep_booked_reference($order, $reference);
+		$order->save_meta_data();
+	}
+
+	return $order;
+}
+
+/**
+ * Whether this plugin booked the order with Økoskabet.
+ *
+ * `billing_okoskabet_done` is written by the one booking path there has ever
+ * been, and only once Økoskabet has accepted the shipment. Versions before
+ * March 2026 wrote it with `update_post_meta()`, which on a shop using
+ * WooCommerce's own order tables lands beside the order rather than on it,
+ * so it is read from there as well.
+ */
+function oko_booked_by_plugin(\WC_Order $order): bool
+{
+	return ! empty($order->get_meta('billing_okoskabet_done', true))
+		|| ! empty(get_post_meta($order->get_id(), 'billing_okoskabet_done', true));
+}
+
+/**
+ * Ids of orders that may carry this number. Candidates only: the caller
+ * checks each one's number itself.
+ *
+ * @param string $number
+ * @return int[]
+ */
+function oko_order_ids_numbered(string $number): array
+{
+	$ids = array();
+
+	// No numbering plugin: the number is the id. Asked directly rather than
+	// left to the hook below, because a numbering plugin that answers the
+	// hook may answer it with its own lookup only.
+	if (preg_match('/^\d+$/', $number)) {
+		$ids[] = (int) $number;
+	}
+
+	// The hook WooCommerce's own order tracking asks numbering plugins to
+	// answer, turning a number a customer typed into an order id.
+	$ids[] = (int) apply_filters('woocommerce_shortcode_order_tracking_order_id', $number);
+
+	/**
+	 * Meta keys a numbering plugin keeps an order's number under.
+	 *
+	 * Searched for orders booked before the reference was kept on the order.
+	 * Some plugins store only the counter and pad or prefix it on display, so
+	 * the number's bare digits are searched as well. A key that matches the
+	 * wrong order does no harm: every candidate's number is checked.
+	 *
+	 * @param string[] $keys
+	 */
+	$keys = (array) apply_filters('oko_order_number_meta_keys', array(
+		'_order_number',                    // Sequential Order Numbers (SkyVerge, WebToffee)
+		'_order_number_formatted',          // Sequential Order Numbers Pro
+		'_alg_wc_full_custom_order_number', // Custom Order Numbers for WooCommerce
+		'_alg_wc_custom_order_number',
+		'_wcj_order_number',                // Booster for WooCommerce
+	));
+
+	$values = array($number);
+	if (preg_match('/(\d+)\D*$/', $number, $digits)) {
+		$values[] = ltrim($digits[1], '0');
+	}
+	$values = array_unique(array_filter($values, static fn(string $value): bool => $value !== ''));
+
+	foreach ($keys as $key) {
+		foreach ($values as $value) {
+			$ids = array_merge($ids, oko_order_ids_with_meta((string) $key, $value));
+		}
+	}
+
+	return $ids;
+}
+
+/**
+ * Ids of orders carrying a meta value, from either order storage.
+ *
+ * `meta_key`/`meta_value` rather than `meta_query`: the posts data store drops
+ * a `meta_query` on the floor and returns every order. The caller checks each
+ * result anyway. Trashed orders are included, as `wc_get_order()` always did.
+ *
+ * @param string $key
+ * @param string $value
+ * @return int[]
+ */
+function oko_order_ids_with_meta(string $key, string $value): array
+{
+	static $statuses = null;
+	if ($statuses === null) {
+		$statuses = array_merge(array_keys(wc_get_order_statuses()), array('trash'));
+	}
+
+	// A handful is plenty, oldest first. Not every hit counts — the caller
+	// drops copies, whose meta names another order — and a copy is always
+	// newer than the order it was copied from. Newest first, five copies
+	// made while the parcel was on its way filled the handful, and the order
+	// they were copied from was answered 404.
+	return array_map('intval', (array) wc_get_orders(array(
+		'type'       => 'shop_order',
+		'status'     => $statuses,
+		'limit'      => 5,
+		'orderby'    => 'ID',
+		'order'      => 'ASC',
+		'return'     => 'ids',
+		'meta_key'   => $key,
+		'meta_value' => $value,
+	)));
+}
+
+/**
+ * Orders by id, leaving out anything that is not a plain order.
+ *
+ * `wc_get_order()` answers for every order type: a refund, or a subscription,
+ * which is a WC_Order too, and whose number is its id. A shipment is booked
+ * for neither.
+ *
+ * @param int[] $ids
+ * @return \WC_Order[]
+ */
+function oko_orders_by_ids(array $ids): array
+{
+	$orders = array();
+	foreach (array_unique($ids) as $id) {
+		$order = $id > 0 ? wc_get_order($id) : false;
+		if ($order instanceof \WC_Order && $order->get_type() === 'shop_order') {
+			$orders[] = $order;
+		}
+	}
+
+	return $orders;
+}
+
+/**
  * Whether Økoskabet wants the line totals on this shop's orders.
  *
  * It says so in its own configuration, and only while the shop uses offers in
@@ -3772,7 +4027,6 @@ function oko_lines_for(\WC_Order $parent, array $additions, ?array $merchant = n
  */
 function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 {
-	$order_number = $order->get_order_number();
 	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 	$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
 	// _billing_okoskabet_delivery_location stores the English label (from dropdown).
@@ -3868,7 +4122,8 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	$data = [
 		'locale'             => get_locale(),
 		'allow_invalid'      => true,
-		'shipment_reference' => (string) $order_number,
+		// What Økoskabet knows this order by; see oko_shipment_reference().
+		'shipment_reference' => oko_shipment_reference($order),
 		// The shop's own order id, so a support conversation has something
 		// the merchant recognises. Økoskabet keeps two: the bare number
 		// people search on, and the reference as the shop prints it (which
@@ -4044,7 +4299,14 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			return;
 		}
 
-		$response = oko_api_request($merchant, 'DELETE', '/api/v1/shipments/' . $order_number);
+		// The reference Økoskabet knows this order by, which is not always its
+		// number: a shop with a numbering plugin books under one and WooCommerce
+		// answers the other (#52).
+		$response = oko_api_request(
+			$merchant,
+			'DELETE',
+			'/api/v1/shipments/' . rawurlencode(oko_shipment_reference($order))
+		);
 
 		if (is_wp_error($response)) {
 			error_log('okoskabet_woocommerce_plugin: Error deleting order ' . $order_number . ': ' . $response->get_error_message());
@@ -4137,6 +4399,9 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		));
 
 		$order->update_meta_data('billing_okoskabet_done', true);
+
+		// The reference it went out under; see OKO_SHIPMENT_REFERENCE_META.
+		oko_keep_booked_reference($order, $data['shipment_reference']);
 
 		// Record what Økoskabet now has. Without this the save below would look
 		// like an edit and send the same order straight back a second time —
@@ -4977,10 +5242,12 @@ function oko_resend_shipment_on_update(int $order_id): void
 
 	$seen[$order_id] = true;
 
+	// The reference Økoskabet booked it under, not the order's number: a shop
+	// with a numbering plugin has two, and only one of them is ours (#52).
 	$response = oko_api_request(
 		$merchant,
 		'PUT',
-		'/api/v1/shipments/' . rawurlencode((string) $order->get_order_number()),
+		'/api/v1/shipments/' . rawurlencode(oko_shipment_reference($order)),
 		(string) wp_json_encode($changes)
 	);
 
