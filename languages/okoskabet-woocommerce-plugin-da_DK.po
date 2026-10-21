@@ -716,6 +716,9 @@ msgstr "webhook-funktionalitet er slået fra i plugin-indstillingerne, ELLER ord
 msgid "the merchant ID in the URL is unknown, OR the order referenced by shipment_reference does not exist."
 msgstr "merchant-ID'et i URL'en er ukendt, ELLER ordren der refereres af shipment_reference findes ikke."
 
+msgid "more than one order has the reference in shipment_reference, and none of them is touched. Check the orders for a copied Økoskabet reference."
+msgstr "mere end én ordre har referencen i shipment_reference, og ingen af dem bliver rørt. Tjek ordrerne for en kopieret Økoskabet-reference."
+
 msgid "the merchant has no webhook secret configured. Edit the merchant and paste a value."
 msgstr "merchanten har ingen webhook secret konfigureret. Rediger merchanten og indsæt en værdi."
 
