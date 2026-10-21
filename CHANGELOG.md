@@ -2,6 +2,31 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.5.3 - 2026-10-21
+
+Rettelse: beskeder fra Økoskabet kunne ramme den forkerte ordre.
+
+= Beskeder fra Økoskabet finder den rigtige ordre =
+
+Når Økoskabet sender besked om en levering — at pakken er scannet, er i
+skabet eller er leveret — slog pluginet ordren op på dens id. Men ordren er
+booket hos Økoskabet under sit ordrenummer, og i en butik med et plugin, der
+selv nummererer ordrerne, er de to forskellige. Beskeden fandt så enten
+ingen ordre, og intet skete — eller den fandt en anden ordre, der netop havde
+det id, og kunne afslutte den og trække pengene på den.
+
+Pluginet husker nu, hvilken reference hver ordre er booket under, og slår op
+på den. Ordrer booket før denne version findes på nummeret, men kun hvis det
+var pluginet selv, der bookede dem. Gør to ordrer krav på samme reference,
+svarer butikken Økoskabet, at den ikke kan afgøre hvilken, i stedet for at
+gætte.
+
+= Kopier og fornyelser rører ikke originalen =
+
+En kopi af en ordre eller en abonnementsfornyelse, der har fået referencen
+med over, kan ikke længere annullere eller overskrive den oprindelige ordres
+forsendelse.
+
 ## 1.5.2 - 2026-10-13
 
 Hastefejl: leveringsdatoen manglede for nye kunder.
