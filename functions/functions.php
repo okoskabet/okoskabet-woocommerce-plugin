@@ -2236,6 +2236,14 @@ function oko_addon_inherits_the_delivery($order, $data): void
 		return;
 	}
 
+	// Only when Økoskabet is carrying it. A customer who types the earlier
+	// order's number and then picks the shop's own courier pays that
+	// courier's freight; putting the goods on our delivery as well would send
+	// them twice, or send them with the wrong one.
+	if (! oko_order_is_ours($order)) {
+		return;
+	}
+
 	$parent = oko_addon_in_checkout()['order'];
 	if (! $parent instanceof \WC_Order) {
 		return;
@@ -2491,7 +2499,9 @@ function oko_write_shipment_contents(\WC_Order $parent, array $additions, array 
  *
  * @param \WC_Order           $order     The cancelled addition.
  * @param int                 $parent_id The order it rode along with.
- * @param array<string,mixed> $merchant  The merchant record.
+ * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
+ *                                       order's, and so is the account it is
+ *                                       written under. Kept for the callers.
  */
 function oko_take_addition_off_its_order($order, int $parent_id, array $merchant): void
 {
@@ -2499,6 +2509,10 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 	if (! $order instanceof \WC_Order || ! $parent instanceof \WC_Order) {
 		return;
 	}
+
+	// The shipment is the earlier order's, so it is written under that
+	// order's account — see oko_send_addition_to_its_order().
+	$merchant = oko_merchant_for_order($parent);
 
 	// An addition the order never took is nothing to take off it. That is a
 	// cancellation of an order Økoskabet was never told about — writing the
@@ -2548,7 +2562,9 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
  *
  * @param \WC_Order           $order     The addition.
  * @param int                 $parent_id The earlier order's WooCommerce id.
- * @param array<string,mixed> $merchant  The merchant record.
+ * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
+ *                                       order's, and so is the account it is
+ *                                       written under. Kept for the callers.
  */
 function oko_send_addition_to_its_order($order, int $parent_id, array $merchant): void
 {
@@ -2577,6 +2593,13 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 	}
 
 	$reference = oko_shipment_reference($parent);
+
+	// Under the earlier order's account, not this one's. The shipment being
+	// written is the earlier order's, and the addition's own basket can route
+	// to another merchant: its key then asked an account that has no such
+	// shipment, and the customer had been charged no freight for goods that
+	// were never booked.
+	$merchant = oko_merchant_for_order($parent);
 
 	// Asked again here, not only in the checkout. A bank transfer is marked
 	// paid days after it was ordered, and by then the delivery may have left
@@ -4293,7 +4316,14 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 	// (stamped at checkout_create_order time), falling back to a routing pass
 	// over the order's items. This keeps existing orders working after an
 	// upgrade — they resolve to the default merchant.
-	$merchant = oko_merchant_for_order($order);
+	//
+	// An addition is written onto the earlier order's shipment, under that
+	// order's account, so that is the account whose key decides. Asking the
+	// addition's own basket stopped an addition that routed to an account
+	// still without a key, although the delivery it rides on was fine.
+	$parent_id    = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+	$addon_parent = $parent_id !== 0 && $parent_id !== $order->get_id() ? wc_get_order($parent_id) : false;
+	$merchant     = oko_merchant_for_order($addon_parent instanceof \WC_Order ? $addon_parent : $order);
 
 	if (empty($merchant['api_key'])) {
 		error_log("okoskabet_woocommerce_plugin: API key not set for order {$order_number}, merchant=" . (string) ($merchant['id'] ?? '?'));
@@ -4305,7 +4335,6 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// it rode along with. Deleting under its own reference would answer 404
 		// and leave the goods on that delivery, so the shop would refund a
 		// customer for things the packing room still has on its list.
-		$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
 		if ($parent_id !== 0) {
 			oko_take_addition_off_its_order($order, $parent_id, $merchant);
 			return;
@@ -4352,7 +4381,6 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// backoffice gets nothing new, which is the point: there is one box,
 		// one freight and one shipment, and the packing room sees the extra
 		// goods on the list they already have.
-		$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
 		if ($parent_id !== 0) {
 			oko_send_addition_to_its_order($order, $parent_id, $merchant);
 			return;
