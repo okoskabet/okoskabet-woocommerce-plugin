@@ -4,6 +4,8 @@ use Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableControlle
 use Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer;
 use okoskabet_woocommerce_plugin\Integrations\Merchants;
 
+require_once __DIR__ . '/BooksWithOkoskabet.php';
+
 /**
  * A webhook acts on the order that was booked under its reference, and on no
  * other.
@@ -26,6 +28,8 @@ use okoskabet_woocommerce_plugin\Integrations\Merchants;
  * lookup has to hold in both.
  */
 abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCase {
+
+	use BooksWithOkoskabet;
 
 	const SECRET = 'a-webhook-secret';
 
@@ -105,7 +109,7 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 
 	// ------------------------------------------------------------- helpers
 
-	/** A paid order waiting for its parcel, numbered by the plugin if given a number. */
+	/** A paid order, numbered by the plugin if given a number. Not booked with Økoskabet. */
 	protected function order( string $number = '' ): \WC_Order {
 		$order = new \WC_Order();
 		$order->set_status( 'processing' );
@@ -260,7 +264,7 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 	 */
 	public function test_an_order_booked_before_the_fix_is_found_by_its_number() {
 		$reference = sprintf( '%09d', $this->unused_id() );
-		$order     = $this->order( $reference );
+		$order     = $this->book_before_the_reference_was_kept( $this->order( $reference ) );
 
 		$response = $this->delivered( $reference );
 
@@ -268,10 +272,14 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 		$this->assertSame( 'completed', $this->status_of( $order ) );
 	}
 
-	/** The same, where the id lookup used to land on a stranger. */
+	/**
+	 * The same, where the id lookup used to land on a stranger. The stranger
+	 * was booked too, under its own number, so being booked is not what
+	 * tells the two apart: the number is.
+	 */
 	public function test_an_old_order_whose_id_is_the_reference_is_left_alone() {
-		$bystander = $this->order( 'B-' . wp_generate_password( 6, false ) );
-		$intended  = $this->order( (string) $bystander->get_id() );
+		$bystander = $this->book_before_the_reference_was_kept( $this->order( 'B-' . wp_generate_password( 6, false ) ) );
+		$intended  = $this->book_before_the_reference_was_kept( $this->order( (string) $bystander->get_id() ) );
 
 		$response = $this->delivered( (string) $bystander->get_id() );
 
@@ -280,9 +288,9 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 		$this->assertSame( 'completed', $this->status_of( $intended ) );
 	}
 
-	/** A reference that is some order's id, but nobody's number, is nobody's. */
+	/** A reference that is some order's id, but nobody's number, is nobody's — booked or not. */
 	public function test_an_id_that_is_no_orders_number_is_not_found() {
-		$bystander = $this->order( 'B-' . wp_generate_password( 6, false ) );
+		$bystander = $this->book_before_the_reference_was_kept( $this->order( 'B-' . wp_generate_password( 6, false ) ) );
 
 		$response = $this->delivered( (string) $bystander->get_id() );
 
@@ -314,6 +322,7 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 		add_filter( 'woocommerce_shortcode_order_tracking_order_id', $tracking, 5 );
 
 		try {
+			$order    = $this->book_before_the_reference_was_kept( $order );
 			$response = $this->delivered( $reference );
 		} finally {
 			remove_filter( 'woocommerce_order_number', $own_number, 20 );
@@ -371,6 +380,46 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 		$this->assertCount( 1, $puts, 'a new delivery date is an edit Økoskabet is told about' );
 		$this->assertStringEndsWith( '/api/v1/shipments/' . $reference, $puts[0]['url'] );
 		$this->assertSame( $reference, json_decode( $puts[0]['body'], true )['shipment_reference'] );
+	}
+
+	/**
+	 * A shop renumbered while a parcel was on its way. The order booked under
+	 * its id before the reference was kept has a new number now, and a new
+	 * order Økoskabet never heard of has the old one. Only the plugin's own
+	 * booking makes an order the one the reference names, so the newcomer is
+	 * not completed — or charged — for a parcel that was never its own.
+	 */
+	public function test_a_renumbered_shop_does_not_hand_an_old_reference_to_a_new_order() {
+		remove_filter( 'woocommerce_order_number', array( $this, 'numbering_plugin' ), 10 );
+		$old       = $this->book_before_the_reference_was_kept( $this->order() );
+		$reference = (string) $old->get_id();
+		add_filter( 'woocommerce_order_number', array( $this, 'numbering_plugin' ), 10, 2 );
+
+		$old->update_meta_data( '_order_number', 'WEB-' . $old->get_id() );
+		$old->save();
+		$newcomer = $this->order( $reference );
+
+		$response = $this->delivered( $reference );
+
+		$this->assertSame( 404, $this->status( $response ) );
+		$this->assertSame( 'processing', $this->status_of( $newcomer ), 'an order the plugin never booked is never the one a webhook names' );
+		$this->assertSame( 'processing', $this->status_of( $old ) );
+	}
+
+	/**
+	 * Versions before March 2026 wrote the booking mark with
+	 * `update_post_meta()`. With WooCommerce's own order tables that put it
+	 * beside the order, not on it — and it still counts.
+	 */
+	public function test_an_order_marked_booked_by_a_very_old_version_is_found() {
+		$reference = sprintf( '%09d', $this->unused_id() );
+		$order     = $this->order( $reference );
+		update_post_meta( $order->get_id(), 'billing_okoskabet_done', true );
+
+		$response = $this->delivered( $reference );
+
+		$this->assertSame( 200, $this->status( $response ) );
+		$this->assertSame( 'completed', $this->status_of( $order ) );
 	}
 
 	/** Copy an order's meta onto another, the way a duplicate-order plugin or a renewal does. */
@@ -479,9 +528,7 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 	 */
 	public function test_an_old_order_found_by_number_keeps_the_reference() {
 		$reference = 'OLD-' . $this->unused_id();
-		$order     = $this->order( $reference );
-		$order->update_meta_data( 'billing_okoskabet_done', true );
-		$order->save();
+		$order     = $this->book_before_the_reference_was_kept( $this->order( $reference ) );
 		$order->update_status( 'on-hold' );
 
 		$this->assertSame( 200, $this->status( $this->delivered( $reference ) ) );
@@ -498,7 +545,7 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 	/** A trashed order is still found, as before, and left as it is. */
 	public function test_a_trashed_order_is_found_and_left_alone() {
 		$reference = sprintf( '%09d', $this->unused_id() );
-		$order     = $this->order( $reference );
+		$order     = $this->book_before_the_reference_was_kept( $this->order( $reference ) );
 		$id        = $order->get_id();
 		$order->delete( false ); // To the trash; this also zeroes the object's id.
 
@@ -544,10 +591,12 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 		$other = new \Oko_Test_Other_Order();
 		$other->set_status( 'processing' );
 		$other->set_date_paid( time() );
+		// Marked booked, as a subscription is once it has copied its parent order's meta.
+		$other->update_meta_data( 'billing_okoskabet_done', true );
 		$other->save();
 		$this->assertInstanceOf( \Oko_Test_Other_Order::class, wc_get_order( $other->get_id() ), 'the stand-in has to load as its own type' );
 
-		$booked = $this->order( (string) $other->get_id() );
+		$booked = $this->book_before_the_reference_was_kept( $this->order( (string) $other->get_id() ) );
 
 		$response = $this->delivered( (string) $other->get_id() );
 
@@ -559,7 +608,7 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 	/** A shop without a numbering plugin goes on as before: number and id are one. */
 	public function test_a_shop_without_a_numbering_plugin_is_unchanged() {
 		remove_filter( 'woocommerce_order_number', array( $this, 'numbering_plugin' ), 10 );
-		$order = $this->order();
+		$order = $this->book_before_the_reference_was_kept( $this->order() );
 
 		$response = $this->delivered( (string) $order->get_id() );
 

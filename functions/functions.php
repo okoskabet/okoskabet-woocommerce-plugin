@@ -2390,13 +2390,17 @@ function oko_order_for_shipment_reference(string $reference)
 	);
 
 	// Booked before that: the reference was its number then, so it is found
-	// by number now.
+	// by number now — and only an order this plugin booked. A number is not
+	// forever: renumber the shop while a parcel is on its way, and the old
+	// number can turn up on a new order Økoskabet never heard of, which would
+	// then be completed and charged for the parcel.
 	if (empty($found) && $reference !== '') {
 		$found = array_filter(
 			oko_orders_by_ids(oko_order_ids_numbered($reference)),
 			static fn(\WC_Order $order): bool => (string) $order->get_order_number() === $reference
 				// Booked under some other reference: Økoskabet knows it by that.
 				&& oko_booked_reference($order) === ''
+				&& oko_booked_by_plugin($order)
 		);
 	}
 
@@ -2410,12 +2414,27 @@ function oko_order_for_shipment_reference(string $reference)
 	// Found by number: given the reference to keep, so the next webhook finds
 	// it directly, even if the number has changed by then.
 	$order = reset($found);
-	if (oko_booked_reference($order) === '' && ! empty($order->get_meta('billing_okoskabet_done', true))) {
+	if (oko_booked_reference($order) === '') {
 		oko_keep_booked_reference($order, $reference);
 		$order->save_meta_data();
 	}
 
 	return $order;
+}
+
+/**
+ * Whether this plugin booked the order with Økoskabet.
+ *
+ * `billing_okoskabet_done` is written by the one booking path there has ever
+ * been, and only once Økoskabet has accepted the shipment. Versions before
+ * March 2026 wrote it with `update_post_meta()`, which on a shop using
+ * WooCommerce's own order tables lands beside the order rather than on it,
+ * so it is read from there as well.
+ */
+function oko_booked_by_plugin(\WC_Order $order): bool
+{
+	return ! empty($order->get_meta('billing_okoskabet_done', true))
+		|| ! empty(get_post_meta($order->get_id(), 'billing_okoskabet_done', true));
 }
 
 /**

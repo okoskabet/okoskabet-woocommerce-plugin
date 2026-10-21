@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/BooksWithOkoskabet.php';
+
 /**
  * The webhook acts on the signed body, and on nothing else.
  *
@@ -13,6 +15,8 @@
  * See GHSA-4qrw-5q76-hwp3.
  */
 class WebhookSignedBodyTest extends \Codeception\TestCase\WPTestCase {
+
+	use BooksWithOkoskabet;
 
 	const SECRET = 'a-webhook-secret';
 
@@ -32,12 +36,13 @@ class WebhookSignedBodyTest extends \Codeception\TestCase\WPTestCase {
 		update_option( O_TEXTDOMAIN . '-settings', $settings );
 	}
 
+	/** An order the plugin booked with Økoskabet. */
 	private function order( string $status = 'processing' ): \WC_Order {
 		$order = new \WC_Order();
 		$order->set_status( $status );
 		$order->save();
 
-		return $order;
+		return $this->book_with_okoskabet( $order );
 	}
 
 	/** The body Økoskabet sends when a shipment reaches a step. */
