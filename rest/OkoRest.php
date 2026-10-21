@@ -302,6 +302,19 @@ class OkoRest extends Base
 	}
 
 	/**
+	 * One query value as text, or nothing.
+	 *
+	 * `zip[]=1` is a request anyone can make, and casting the array that
+	 * arrives to a string is a PHP warning in the shop's log and a lookup for
+	 * a postcode called "Array".
+	 *
+	 * @param mixed $value
+	 */
+	private static function query_text($value): string {
+		return is_scalar($value) ? (string) $value : '';
+	}
+
+	/**
 	 * Parse a comma-separated list of integers into a sanitised array of
 	 * positive product IDs. Defensive against any input shape.
 	 */
@@ -384,8 +397,8 @@ class OkoRest extends Base
 		$request_url = \add_query_arg(array(
 			'delivery_dates'         => 'true',
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'zipcode'                => rawurlencode((string) $params['zip']),
-			'address'                => rawurlencode((string) ($params['address'] ?? '')),
+			'zipcode'                => rawurlencode(self::query_text($params['zip'] ?? '')),
+			'address'                => rawurlencode(self::query_text($params['address'] ?? '')),
 		), Merchants::api_url_for($merchant) . '/api/v1/sheds/');
 
 		$response = \wp_remote_get($request_url, array(
@@ -484,7 +497,7 @@ class OkoRest extends Base
 
 		$request_url = \add_query_arg(array(
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'postal_code'            => rawurlencode((string) $params['zip']),
+			'postal_code'            => rawurlencode(self::query_text($params['zip'] ?? '')),
 		), Merchants::api_url_for($merchant) . '/api/v1/home_delivery');
 
 		$response = \wp_remote_get($request_url, array(

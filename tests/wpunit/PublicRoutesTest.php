@@ -59,6 +59,19 @@ class PublicRoutesTest extends \Codeception\TestCase\WPTestCase
 		$this->assertNotSame('366', (string) ($query['maximum_days_in_future'] ?? ''));
 	}
 
+	/** A postcode sent as a list is no postcode, not "Array". */
+	public function test_a_postcode_sent_as_a_list_is_not_read_as_text(): void
+	{
+		$request = new \WP_REST_Request('GET', '/wp/v2/okoskabet/home_delivery');
+		$request->set_param('zip', array('8000'));
+
+		( new OkoRest() )->get_home_delivery($request);
+
+		$this->assertNotEmpty($this->urls);
+		parse_str((string) parse_url($this->urls[0], PHP_URL_QUERY), $query);
+		$this->assertSame('', $query['postal_code'] ?? null);
+	}
+
 	/** The webhook's merchant is the one in the URL, not one named in the query. */
 	public function test_the_query_string_cannot_choose_the_merchant(): void
 	{
