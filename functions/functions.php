@@ -4014,6 +4014,32 @@ function oko_lines_for(\WC_Order $parent, array $additions, ?array $merchant = n
 }
 
 /**
+ * The note for the driver: where to leave it, and what the customer wrote.
+ *
+ * Always in English: the dropdown stores its English label, and the free text
+ * follows it.
+ *
+ * @param \WC_Order $order
+ */
+function oko_logistics_note(\WC_Order $order): string
+{
+	// _billing_okoskabet_delivery_location stores the English label (from dropdown).
+	$order_delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
+	// _billing_okoskabet_delivery_note stores the free-text note from the customer.
+	$order_delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+
+	$logistics_note_parts = array();
+	if (!empty($order_delivery_location)) {
+		$logistics_note_parts[] = $order_delivery_location; // Already stored in English.
+	}
+	if (!empty($order_delivery_note)) {
+		$logistics_note_parts[] = $order_delivery_note;
+	}
+
+	return implode(' — ', $logistics_note_parts);
+}
+
+/**
  * Everything Økoskabet is told about an order, in one place.
  *
  * Built once and used twice — when the order is first sent, and again when it
@@ -4029,21 +4055,7 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 {
 	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 	$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
-	// _billing_okoskabet_delivery_location stores the English label (from dropdown).
-	$order_delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
-	// _billing_okoskabet_delivery_note stores the free-text note from the customer.
-	$order_delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
-
-	// Build the logistics note sent to Økoskabet's API.
-	// Always in English: combine dropdown selection and free-text note.
-	$logistics_note_parts = array();
-	if (!empty($order_delivery_location)) {
-		$logistics_note_parts[] = $order_delivery_location; // Already stored in English.
-	}
-	if (!empty($order_delivery_note)) {
-		$logistics_note_parts[] = $order_delivery_note;
-	}
-	$logistics_note = implode(' — ', $logistics_note_parts);
+	$logistics_note = oko_logistics_note($order);
 
 	// A missing date is not the same as "not our order".
 	//
@@ -4945,6 +4957,60 @@ function oko_shipment_fingerprint(array $payload): string
 }
 
 /**
+ * The fingerprint 1.5.2 would have taken of this order as it stands.
+ *
+ * 1.5.2 kept a fingerprint and nothing else, taken of a payload shaped a
+ * little differently from today's: six keys on a line, the shipment named by
+ * the order's number, an untrimmed recipient, the second address line as
+ * typed, the delivery note repeated as `location` on the address — and only
+ * the language and the products address left out of the hash, so the note and
+ * `allow_invalid` are in it. Rebuilt here from today's payload so an order that
+ * has not moved since 1.5.2 sent it can be told apart from one that has.
+ *
+ * An order with additions was never 1.5.2's to send, and answers nothing.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $payload Today's payload for it, whole.
+ */
+function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload): string
+{
+	if (oko_addition_ids($order) !== array()) {
+		return '';
+	}
+
+	$payload['shipment_reference'] = (string) $order->get_order_number();
+
+	$payload['line_items'] = array_map(static function (array $line): array {
+		return array(
+			'product_id'    => $line['product_id'] ?? null,
+			'variant_id'    => $line['variant_id'] ?? null,
+			'name'          => $line['name'] ?? '',
+			'variant_title' => $line['variant_title'] ?? null,
+			'sku'           => $line['sku'] ?? '',
+			'quantity'      => $line['quantity'] ?? 0,
+		);
+	}, (array) ($payload['line_items'] ?? array()));
+
+	if (isset($payload['home_delivery'])) {
+		$recipient = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
+
+		$payload['customer']['recipient_name'] = $recipient;
+		$payload['home_delivery']              = array_filter(array(
+			'recipient_name' => $recipient,
+			'address_1'      => $order->get_shipping_address_1(),
+			'address_2'      => $order->get_shipping_address_2(),
+			'city'           => $order->get_shipping_city(),
+			'postal_code'    => $order->get_shipping_postcode(),
+			'location'       => oko_logistics_note($order),
+		));
+	}
+
+	unset($payload['locale'], $payload['webshop_products_url']);
+
+	return md5((string) wp_json_encode($payload));
+}
+
+/**
  * The parts of a payload whose fields the other end takes one at a time.
  *
  * Only the customer. Everything else that looks like an object is read as a
@@ -5213,10 +5279,14 @@ function oko_resend_shipment_on_update(int $order_id): void
 
 	if (is_array($sent)) {
 		$changes = oko_payload_changes($sent, $comparable);
-	} elseif (md5((string) wp_json_encode($comparable)) === $sent_fingerprint) {
+	} elseif (oko_shipment_fingerprint($comparable) === $sent_fingerprint
+		|| oko_fingerprint_as_1_5_2($order, $payload) === $sent_fingerprint) {
 		// Sent by a version that recorded a fingerprint and not the payload.
 		// Nothing has moved, so this is the free moment to write down what
 		// Økoskabet holds — after this the order compares like any other.
+		//
+		// Asked in 1.5.2's terms too, or every open order would be sent whole
+		// on its first save after the update — see oko_fingerprint_as_1_5_2().
 		$order->update_meta_data(OKO_SENT_META, $comparable);
 		$order->save_meta_data();
 		return;
