@@ -40,6 +40,9 @@ class MerchantWithoutKeyTest extends \Codeception\TestCase\WPTestCase
 	public function tearDown(): void
 	{
 		remove_all_filters('pre_http_request');
+		foreach (array('default', 'anden') as $id) {
+			delete_transient(o_configuration_transient_key($id));
+		}
 		delete_option(Merchants::OPTION_KEY);
 		Merchants::purge_config_cache();
 		parent::tearDown();
