@@ -1400,7 +1400,6 @@ class Merchants extends Base {
 			return;
 		}
 
-		$paged    = 1;
 		$per_page = 200;
 
 		// Defensive ceiling so a misconfigured callsite can never spin
@@ -1409,11 +1408,17 @@ class Merchants extends Base {
 		// at that size. Larger stores can re-run the rename — the loop
 		// is idempotent.
 		$safety_limit = 1000;
+		$batches      = 0;
+		$seen         = array();
 
-		while ( $paged <= $safety_limit ) {
+		// Always the first page. Every order rewritten here stops matching
+		// the query, so the next batch is the first page again — asking for
+		// page two skipped the 200 orders that had moved up into page one,
+		// and a shop with more than 200 orders kept every other batch under
+		// the old ID, where each of their webhooks answers 403.
+		while ( $batches++ < $safety_limit ) {
 			$orders = wc_get_orders( array(
 				'limit'        => $per_page,
-				'paged'        => $paged,
 				'meta_key'     => Merchant_Router::ORDER_META_KEY,
 				'meta_value'   => $old,
 				'meta_compare' => '=',
@@ -1426,18 +1431,25 @@ class Merchants extends Base {
 				break;
 			}
 
+			// An order whose save does not stick — another plugin putting the
+			// old id back — comes back in every batch. It is passed over rather
+			// than allowed to stop the rename, and a batch with nothing new in
+			// it at all is the end: asking again would only loop.
+			$new_in_batch = 0;
+
 			foreach ( $orders as $order ) {
-				if ( ! $order instanceof \WC_Order ) {
+				if ( ! $order instanceof \WC_Order || isset( $seen[ $order->get_id() ] ) ) {
 					continue;
 				}
+				$seen[ $order->get_id() ] = true;
+				$new_in_batch++;
 				$order->update_meta_data( Merchant_Router::ORDER_META_KEY, $new );
 				$order->save();
 			}
 
-			if ( count( $orders ) < $per_page ) {
+			if ( $new_in_batch === 0 || count( $orders ) < $per_page ) {
 				break;
 			}
-			$paged++;
 		}
 	}
 
