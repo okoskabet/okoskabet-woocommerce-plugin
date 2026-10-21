@@ -5,6 +5,8 @@ namespace okoskabet_woocommerce_plugin\Tests\WPUnit\Integrations;
 use okoskabet_woocommerce_plugin\Integrations\Merchants;
 use okoskabet_woocommerce_plugin\Rest\OkoRest;
 
+require_once __DIR__ . '/../BooksWithOkoskabet.php';
+
 /**
  * The events do not arrive in the order the parcel moves.
  *
@@ -21,6 +23,8 @@ use okoskabet_woocommerce_plugin\Rest\OkoRest;
  * and the finishing step has come, and never before both.
  */
 class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
+
+	use \BooksWithOkoskabet;
 
 	const SECRET = 'SECRET';
 
@@ -95,7 +99,7 @@ class WebhookEventOrderTest extends \Codeception\TestCase\WPTestCase {
 		$order->set_status( $status );
 		$order->save();
 
-		return $order;
+		return $this->book_with_okoskabet( $order );
 	}
 
 	/** One step, sent and signed the way Økoskabet sends it. */
