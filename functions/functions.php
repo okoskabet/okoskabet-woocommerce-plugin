@@ -4304,16 +4304,14 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 	// (stamped at checkout_create_order time), falling back to a routing pass
 	// over the order's items. This keeps existing orders working after an
 	// upgrade — they resolve to the default merchant.
-	$merchant = oko_merchant_for_order($order);
-
+	//
 	// An addition is written onto the earlier order's shipment, under that
 	// order's account, so that is the account whose key decides. Asking the
 	// addition's own basket stopped an addition that routed to an account
 	// still without a key, although the delivery it rides on was fine.
-	$addon_parent = wc_get_order((int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true));
-	if ($addon_parent instanceof \WC_Order && $addon_parent->get_id() !== $order->get_id()) {
-		$merchant = oko_merchant_for_order($addon_parent);
-	}
+	$parent_id    = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+	$addon_parent = $parent_id !== 0 && $parent_id !== $order->get_id() ? wc_get_order($parent_id) : false;
+	$merchant     = oko_merchant_for_order($addon_parent instanceof \WC_Order ? $addon_parent : $order);
 
 	if (empty($merchant['api_key'])) {
 		error_log("okoskabet_woocommerce_plugin: API key not set for order {$order_number}, merchant=" . (string) ($merchant['id'] ?? '?'));
@@ -4325,7 +4323,6 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// it rode along with. Deleting under its own reference would answer 404
 		// and leave the goods on that delivery, so the shop would refund a
 		// customer for things the packing room still has on its list.
-		$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
 		if ($parent_id !== 0) {
 			oko_take_addition_off_its_order($order, $parent_id, $merchant);
 			return;
@@ -4372,7 +4369,6 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// backoffice gets nothing new, which is the point: there is one box,
 		// one freight and one shipment, and the packing room sees the extra
 		// goods on the list they already have.
-		$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
 		if ($parent_id !== 0) {
 			oko_send_addition_to_its_order($order, $parent_id, $merchant);
 			return;
