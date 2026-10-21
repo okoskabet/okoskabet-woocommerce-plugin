@@ -39,7 +39,7 @@ class AdditionsFollowTheDeliveryTest extends \Codeception\TestCase\WPTestCase {
 	 * comes after would otherwise read the configuration this one never set.
 	 */
 	public function tearDown(): void {
-		oko_forget_merchant_configurations();
+		// Also drops the memo inside oko_merchant_configuration().
 		\okoskabet_woocommerce_plugin\Integrations\Merchants::purge_config_cache();
 		parent::tearDown();
 	}
