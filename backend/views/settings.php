@@ -181,7 +181,7 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 	$cmb->add_field(
 		array(
 			'name'    => __('Ask for flat, floor and door', O_TEXTDOMAIN),
-			'desc'    => __('Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself ("Byagervej 194, 1. tv") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice. Never shown when address line 2 is set to Hidden in WooCommerce\'s checkout settings, or when the shop offers no home delivery.', O_TEXTDOMAIN),
+			'desc'    => __('Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself ("Byagervej 194, 1. tv") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice.', O_TEXTDOMAIN),
 			'id'      => '_ask_for_floor',
 			'type'    => 'checkbox',
 		)
