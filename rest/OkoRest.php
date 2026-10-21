@@ -302,6 +302,18 @@ class OkoRest extends Base
 	}
 
 	/**
+	 * The merchant id the route itself names, or '' on the legacy route.
+	 *
+	 * From the URL and nowhere else: `get_param()` lets the query string and a
+	 * JSON body speak over the route.
+	 */
+	private static function route_merchant_id(\WP_REST_Request $request): string {
+		$id = $request->get_url_params()['merchant_id'] ?? '';
+
+		return is_string($id) ? $id : '';
+	}
+
+	/**
 	 * One query value as text, or nothing.
 	 *
 	 * `zip[]=1` is a request anyone can make, and casting the array that
@@ -809,7 +821,7 @@ class OkoRest extends Base
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
 		// From the route and nothing else; see handle_webhook().
-		$merchant = Merchants::get(Merchant_Router::sanitize_id((string) ($request->get_url_params()['merchant_id'] ?? '')));
+		$merchant = Merchants::get(Merchant_Router::sanitize_id(self::route_merchant_id($request)));
 		if (!$merchant) {
 			return new \WP_Error('unknown_merchant', 'Unknown merchant', array('status' => 404));
 		}
@@ -915,7 +927,7 @@ class OkoRest extends Base
 				$has_sig ? 'yes' : 'no',
 				isset($diag_params['event']) ? $diag_params['event'] : '(none)',
 				isset($diag_params['shipment_reference']) ? $diag_params['shipment_reference'] : '(none)',
-				($request->get_url_params()['merchant_id'] ?? '') ?: '(default-route)'
+				self::route_merchant_id($request) ?: '(default-route)'
 			));
 			error_log('Økoskabet webhook headers (redacted): ' . wp_json_encode($redacted));
 		}
@@ -926,8 +938,8 @@ class OkoRest extends Base
 		// `/webhook/a?merchant_id=b` was checked against b's secret, and a
 		// `merchant_id` field ever added to Økoskabet's body would have sent
 		// every webhook to the wrong merchant.
-		$merchant_id_param = $request->get_url_params()['merchant_id'] ?? '';
-		if (is_string($merchant_id_param) && $merchant_id_param !== '') {
+		$merchant_id_param = self::route_merchant_id($request);
+		if ($merchant_id_param !== '') {
 			$merchant = Merchants::get(Merchant_Router::sanitize_id($merchant_id_param));
 			if (!$merchant) {
 				if (defined('WP_DEBUG') && WP_DEBUG) {
