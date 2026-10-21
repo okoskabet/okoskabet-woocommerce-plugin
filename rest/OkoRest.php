@@ -377,11 +377,15 @@ class OkoRest extends Base
 			$maximum_days_in_future = $default_days;
 		}
 
+		// Encoded: `add_query_arg()` puts values in as they are, so a postcode
+		// of "8000&maximum_days_in_future=366" from the public route became a
+		// second parameter on our call to Økoskabet, made with the merchant's
+		// key — and an address with an "&" in it was cut short.
 		$request_url = \add_query_arg(array(
 			'delivery_dates'         => 'true',
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'zipcode'                => $params['zip'],
-			'address'                => $params['address'] ?? '',
+			'zipcode'                => rawurlencode((string) $params['zip']),
+			'address'                => rawurlencode((string) ($params['address'] ?? '')),
 		), Merchants::api_url_for($merchant) . '/api/v1/sheds/');
 
 		$response = \wp_remote_get($request_url, array(
@@ -480,7 +484,7 @@ class OkoRest extends Base
 
 		$request_url = \add_query_arg(array(
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'postal_code'            => $params['zip'],
+			'postal_code'            => rawurlencode((string) $params['zip']),
 		), Merchants::api_url_for($merchant) . '/api/v1/home_delivery');
 
 		$response = \wp_remote_get($request_url, array(
@@ -791,7 +795,8 @@ class OkoRest extends Base
 	public function handle_products(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
-		$merchant = Merchants::get(Merchant_Router::sanitize_id((string) $request->get_param('merchant_id')));
+		// From the route and nothing else; see handle_webhook().
+		$merchant = Merchants::get(Merchant_Router::sanitize_id((string) ($request->get_url_params()['merchant_id'] ?? '')));
 		if (!$merchant) {
 			return new \WP_Error('unknown_merchant', 'Unknown merchant', array('status' => 404));
 		}
@@ -903,7 +908,12 @@ class OkoRest extends Base
 		}
 
 		// --- Step 0: Resolve which merchant the request is for ---
-		$merchant_id_param = $request->get_param('merchant_id');
+		// The merchant named in the URL, and only there. `get_param()` lets the
+		// query string and a JSON body speak over the route, so
+		// `/webhook/a?merchant_id=b` was checked against b's secret, and a
+		// `merchant_id` field ever added to Økoskabet's body would have sent
+		// every webhook to the wrong merchant.
+		$merchant_id_param = $request->get_url_params()['merchant_id'] ?? '';
 		if (is_string($merchant_id_param) && $merchant_id_param !== '') {
 			$merchant = Merchants::get(Merchant_Router::sanitize_id($merchant_id_param));
 			if (!$merchant) {
