@@ -2069,7 +2069,9 @@ function oko_addon_parent_order(string $number, string $email): array
 	// shows "#1042" where the id is something else, and an absint() of the
 	// printed number lands on another of this customer's orders, which passes
 	// the email check because it is theirs too.
-	$order = oko_order_for_reference($number);
+	// Looked up without writing anything. This runs for anyone filling in a
+	// checkout, on every recalculation, before the email has been checked.
+	$order = oko_order_for_reference($number, false);
 	if ($order === null) {
 		return $refused('unknown');
 	}
@@ -2294,16 +2296,18 @@ function oko_addition_ids(\WC_Order $parent): array
  * order: their address rewritten, their order noted on.
  *
  * @param string $reference The shipment reference.
+ * @param bool   $remember  Whether an order found by its number may be given
+ *                          the reference to keep; see the lookup itself.
  * @return \WC_Order|null
  */
-function oko_order_for_reference(string $reference): ?\WC_Order
+function oko_order_for_reference(string $reference, bool $remember = true): ?\WC_Order
 {
 	// One lookup, in `oko_order_for_shipment_reference()`. This used to read
 	// the reference as an order id and check the number afterwards, which
 	// never hit the wrong order but could not find one at a shop whose
 	// numbering plugin makes id and number differ — Avokadokontoret's, and
 	// their webhooks answered 404 (#52).
-	$found = oko_order_for_shipment_reference($reference);
+	$found = oko_order_for_shipment_reference($reference, $remember);
 
 	if ($found instanceof \WC_Order) {
 		return $found;
@@ -3657,10 +3661,14 @@ function oko_shipment_reference(\WC_Order $order): string
  * and a lookup that trusted the query would hand back the wrong order without
  * a word.
  *
+ * @param string $reference
+ * @param bool   $remember Whether an order found by its number is given the
+ *                         reference to keep. Only for a caller that is
+ *                         Økoskabet: the checkout asks on behalf of anyone.
  * @return \WC_Order|\WP_Error 404 when no order has the reference, 409 when
  *                             more than one could and there is no telling which.
  */
-function oko_order_for_shipment_reference(string $reference)
+function oko_order_for_shipment_reference(string $reference, bool $remember = true)
 {
 	// Booked since the reference was kept: the order says so itself.
 	$found = $reference === '' ? array() : array_filter(
@@ -3680,6 +3688,11 @@ function oko_order_for_shipment_reference(string $reference)
 				// Booked under some other reference: Økoskabet knows it by that.
 				&& oko_booked_reference($order) === ''
 				&& oko_booked_by_plugin($order)
+				// An addition is marked as sent, but never under a number of
+				// its own: its goods went onto another order's shipment. Found
+				// here, a renumbered shop could have one completed and charged
+				// for some older order's parcel.
+				&& (string) $order->get_meta(OKO_ADDON_PARENT_ID_META, true) === ''
 		);
 	}
 
@@ -3693,7 +3706,7 @@ function oko_order_for_shipment_reference(string $reference)
 	// Found by number: given the reference to keep, so the next webhook finds
 	// it directly, even if the number has changed by then.
 	$order = reset($found);
-	if (oko_booked_reference($order) === '') {
+	if ($remember && oko_booked_reference($order) === '') {
 		oko_keep_booked_reference($order, $reference);
 		$order->save_meta_data();
 	}
