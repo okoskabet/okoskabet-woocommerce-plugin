@@ -1493,8 +1493,13 @@ class Delivery_Exceptions extends Base {
 		// each rule.
 		$product_meta = array();
 		foreach ( $product_ids as $pid ) {
+			// Products the shop sells, and nothing else. The ids come from a
+			// public route, and any post's title — a draft, a private page —
+			// would otherwise be read out to whoever asked for it.
 			$post = get_post( $pid );
-			if ( ! $post ) {
+			if ( ! $post
+				|| ! in_array( $post->post_type, array( 'product', 'product_variation' ), true )
+				|| $post->post_status !== 'publish' ) {
 				continue;
 			}
 			$terms   = self::product_terms( (int) $pid );

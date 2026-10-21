@@ -302,6 +302,31 @@ class OkoRest extends Base
 	}
 
 	/**
+	 * The merchant id the route itself names, or '' on the legacy route.
+	 *
+	 * From the URL and nowhere else: `get_param()` lets the query string and a
+	 * JSON body speak over the route.
+	 */
+	private static function route_merchant_id(\WP_REST_Request $request): string {
+		$id = $request->get_url_params()['merchant_id'] ?? '';
+
+		return is_string($id) ? $id : '';
+	}
+
+	/**
+	 * One query value as text, or nothing.
+	 *
+	 * `zip[]=1` is a request anyone can make, and casting the array that
+	 * arrives to a string is a PHP warning in the shop's log and a lookup for
+	 * a postcode called "Array".
+	 *
+	 * @param mixed $value
+	 */
+	private static function query_text($value): string {
+		return is_scalar($value) ? (string) $value : '';
+	}
+
+	/**
 	 * Parse a comma-separated list of integers into a sanitised array of
 	 * positive product IDs. Defensive against any input shape.
 	 */
@@ -377,11 +402,15 @@ class OkoRest extends Base
 			$maximum_days_in_future = $default_days;
 		}
 
+		// Encoded: `add_query_arg()` puts values in as they are, so a postcode
+		// of "8000&maximum_days_in_future=366" from the public route became a
+		// second parameter on our call to Økoskabet, made with the merchant's
+		// key — and an address with an "&" in it was cut short.
 		$request_url = \add_query_arg(array(
 			'delivery_dates'         => 'true',
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'zipcode'                => $params['zip'],
-			'address'                => $params['address'] ?? '',
+			'zipcode'                => rawurlencode(self::query_text($params['zip'] ?? '')),
+			'address'                => rawurlencode(self::query_text($params['address'] ?? '')),
 		), Merchants::api_url_for($merchant) . '/api/v1/sheds/');
 
 		$response = \wp_remote_get($request_url, array(
@@ -480,7 +509,7 @@ class OkoRest extends Base
 
 		$request_url = \add_query_arg(array(
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'postal_code'            => $params['zip'],
+			'postal_code'            => rawurlencode(self::query_text($params['zip'] ?? '')),
 		), Merchants::api_url_for($merchant) . '/api/v1/home_delivery');
 
 		$response = \wp_remote_get($request_url, array(
@@ -791,7 +820,8 @@ class OkoRest extends Base
 	public function handle_products(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
-		$merchant = Merchants::get(Merchant_Router::sanitize_id((string) $request->get_param('merchant_id')));
+		// From the route and nothing else; see handle_webhook().
+		$merchant = Merchants::get(Merchant_Router::sanitize_id(self::route_merchant_id($request)));
 		if (!$merchant) {
 			return new \WP_Error('unknown_merchant', 'Unknown merchant', array('status' => 404));
 		}
@@ -900,14 +930,19 @@ class OkoRest extends Base
 				$has_sig ? 'yes' : 'no',
 				isset($diag_params['event']) ? $diag_params['event'] : '(none)',
 				isset($diag_params['shipment_reference']) ? $diag_params['shipment_reference'] : '(none)',
-				$request->get_param('merchant_id') ?: '(default-route)'
+				self::route_merchant_id($request) ?: '(default-route)'
 			));
 			error_log('Økoskabet webhook headers (redacted): ' . wp_json_encode($redacted));
 		}
 
 		// --- Step 0: Resolve which merchant the request is for ---
-		$merchant_id_param = $request->get_param('merchant_id');
-		if (is_string($merchant_id_param) && $merchant_id_param !== '') {
+		// The merchant named in the URL, and only there. `get_param()` lets the
+		// query string and a JSON body speak over the route, so
+		// `/webhook/a?merchant_id=b` was checked against b's secret, and a
+		// `merchant_id` field ever added to Økoskabet's body would have sent
+		// every webhook to the wrong merchant.
+		$merchant_id_param = self::route_merchant_id($request);
+		if ($merchant_id_param !== '') {
 			$merchant = Merchants::get(Merchant_Router::sanitize_id($merchant_id_param));
 			if (!$merchant) {
 				if (defined('WP_DEBUG') && WP_DEBUG) {
