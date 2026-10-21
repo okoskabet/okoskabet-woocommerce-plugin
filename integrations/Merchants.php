@@ -1407,7 +1407,7 @@ class Merchants extends Base {
 		// is idempotent.
 		$safety_limit = 1000;
 		$batches      = 0;
-		$last_first   = 0;
+		$seen         = array();
 
 		// Always the first page. Every order rewritten here stops matching
 		// the query, so the next batch is the first page again — asking for
@@ -1429,23 +1429,23 @@ class Merchants extends Base {
 				break;
 			}
 
-			// The same first order twice means nothing was rewritten — a save
-			// that did not stick — and asking again would only loop.
-			$first = $orders[0] instanceof \WC_Order ? $orders[0]->get_id() : 0;
-			if ( $first === $last_first ) {
-				break;
-			}
-			$last_first = $first;
+			// An order whose save does not stick — another plugin putting the
+			// old id back — comes back in every batch. It is passed over rather
+			// than allowed to stop the rename, and a batch with nothing new in
+			// it at all is the end: asking again would only loop.
+			$new_in_batch = 0;
 
 			foreach ( $orders as $order ) {
-				if ( ! $order instanceof \WC_Order ) {
+				if ( ! $order instanceof \WC_Order || isset( $seen[ $order->get_id() ] ) ) {
 					continue;
 				}
+				$seen[ $order->get_id() ] = true;
+				$new_in_batch++;
 				$order->update_meta_data( Merchant_Router::ORDER_META_KEY, $new );
 				$order->save();
 			}
 
-			if ( count( $orders ) < $per_page ) {
+			if ( $new_in_batch === 0 || count( $orders ) < $per_page ) {
 				break;
 			}
 		}
