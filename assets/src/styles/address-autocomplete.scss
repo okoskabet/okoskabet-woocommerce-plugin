@@ -1,0 +1,80 @@
+// Address suggestions under the checkout's street address field. Kept plain so
+// it sits in WooCommerce's default checkout and in most themes: the field's own
+// font and colour, a white panel with a light border, the highlighted row in
+// the theme's link colour where the theme sets one.
+
+.okoskabet-address-wrapper {
+	position: relative;
+	display: block;
+}
+
+.okoskabet-address-popup {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	z-index: 1000;
+	margin-top: 2px;
+	background: #fff;
+	color: #1e1e1e;
+	border: 1px solid rgba(0, 0, 0, 0.2);
+	border-radius: 3px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+	font-size: inherit;
+	line-height: 1.4;
+	text-align: left;
+
+	&[hidden] {
+		display: none;
+	}
+}
+
+.okoskabet-address-heading {
+	padding: 0.6em 0.75em 0.3em;
+	font-size: 0.85em;
+	font-weight: 600;
+
+	&[hidden] {
+		display: none;
+	}
+}
+
+.okoskabet-address-list {
+	max-height: 18em;
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+	-webkit-overflow-scrolling: touch;
+}
+
+// Tall enough to hit with a thumb.
+.okoskabet-address-option {
+	min-height: 44px;
+	margin: 0;
+	padding: 0.65em 0.75em;
+	box-sizing: border-box;
+	cursor: pointer;
+	list-style: none;
+
+	& + & {
+		border-top: 1px solid rgba(0, 0, 0, 0.06);
+	}
+
+	&.is-active {
+		background: #f0f0f1;
+		box-shadow: inset 3px 0 0 var(--wp--preset--color--primary, #2271b1);
+	}
+}
+
+.okoskabet-address-status {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
