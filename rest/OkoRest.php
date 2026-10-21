@@ -1124,6 +1124,56 @@ class OkoRest extends Base
 			return new \WP_Error('merchant_mismatch', 'Order belongs to a different merchant', array('status' => 403));
 		}
 
+		$capture_result = self::settle_order($order, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete);
+
+		// Every addition riding on this delivery is settled the same way. An
+		// addition is its own WooCommerce order with its own payment, but it
+		// has no shipment of its own, so no webhook ever names it: without
+		// this its card was never charged on a capture-on-event gateway, and
+		// it stayed "processing" after the box it was packed in was delivered.
+		$additions = array();
+		foreach (\oko_additions_to($order, $order) as $addition) {
+			self::settle_order($addition, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete);
+			$additions[(string) $addition->get_id()] = $addition->get_status();
+		}
+
+		if (defined('WP_DEBUG') && WP_DEBUG) {
+			error_log(sprintf(
+				'Økoskabet webhook processed: Merchant=%s, RawEvent=%s, InternalEvent=%s, Order=%s (id %d), Capture=%s, Complete=%s',
+				$merchant['id'] ?? '?',
+				$raw_event,
+				$internal_event,
+				$shipment_reference,
+				$order->get_id(),
+				$triggers_capture ? 'yes' : 'no',
+				$triggers_complete ? 'yes' : 'no'
+			));
+		}
+
+		return array(
+			'success'        => true,
+			'message'        => 'Webhook processed',
+			'event'          => $internal_event,
+			'raw_event'      => $raw_event,
+			'order_id'       => $shipment_reference,
+			'merchant_id'    => $merchant['id'] ?? '',
+			'capture_result' => $capture_result,
+			'new_status'     => $order->get_status(),
+			'additions'      => $additions,
+			'delivery'       => $delivery_written_back,
+		);
+	}
+
+	/**
+	 * Steps 6 and 7 for one order: capture if the event is a capture trigger,
+	 * complete if it is a completion trigger — with every guard both steps
+	 * have always had.
+	 *
+	 * @param \WC_Order $order
+	 * @return array<string,mixed>|null The capture result, when one was tried.
+	 */
+	private static function settle_order(\WC_Order $order, string $internal_event, string $gateway_hint, bool $triggers_capture, bool $triggers_complete): ?array
+	{
 		$capture_result = null;
 
 		// --- Step 6: Capture payment if this event is a capture trigger ---
@@ -1156,7 +1206,7 @@ class OkoRest extends Base
 				if (defined('WP_DEBUG') && WP_DEBUG) {
 					error_log(sprintf(
 						'Økoskabet webhook: not completing order %s — status "%s", paid: %s',
-						$shipment_reference,
+						$order->get_order_number(),
 						$order->get_status(),
 						$order->is_paid() ? 'yes' : 'no'
 					));
@@ -1170,29 +1220,6 @@ class OkoRest extends Base
 			}
 		}
 
-		if (defined('WP_DEBUG') && WP_DEBUG) {
-			error_log(sprintf(
-				'Økoskabet webhook processed: Merchant=%s, RawEvent=%s, InternalEvent=%s, Order=%s (id %d), Capture=%s, Complete=%s',
-				$merchant['id'] ?? '?',
-				$raw_event,
-				$internal_event,
-				$shipment_reference,
-				$order->get_id(),
-				$triggers_capture ? 'yes' : 'no',
-				$triggers_complete ? 'yes' : 'no'
-			));
-		}
-
-		return array(
-			'success'        => true,
-			'message'        => 'Webhook processed',
-			'event'          => $internal_event,
-			'raw_event'      => $raw_event,
-			'order_id'       => $shipment_reference,
-			'merchant_id'    => $merchant['id'] ?? '',
-			'capture_result' => $capture_result,
-			'new_status'     => $order->get_status(),
-			'delivery'       => $delivery_written_back,
-		);
+		return $capture_result;
 	}
 }
