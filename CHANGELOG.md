@@ -34,12 +34,6 @@ til Behandler for at prøve igen, eller send eller refundér varerne på anden
 vis. Det samme gælder, når Økoskabet afviser varerne, eller den første ordre
 ikke kan læses.
 
-= Etagefeltet respekterer butikkens kasse =
-
-»Spørg om lejlighed, etage og dør« lægger ikke længere en anden adresselinje
-ind, når butikken har sat adresselinje 2 til Skjult i WooCommerces
-kasseindstillinger, eller når butikken ikke tilbyder hjemmelevering.
-
 = Installation kun fra en udgivelse =
 
 README henviser ikke længere nye installationer til `main.zip`, men kun til den
