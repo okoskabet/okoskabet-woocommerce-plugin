@@ -2812,7 +2812,13 @@ function oko_merchant_for_order($order): array
 	//
 	// The record is handed back even without a key, so a caller that logs a
 	// missing key can say whose. Callers test the key, not the array.
-	return empty($merchant['api_key']) ? o_get_merchant() : $merchant;
+	//
+	// Only "no account" falls back, never "an account without a key". An
+	// order routed to a merchant whose key is not filled in yet is that
+	// merchant's order; sending it under the default account's key booked it
+	// in somebody else's packing room. 1.5.2 logged it and left it, and so
+	// does this.
+	return $merchant === array() ? o_get_merchant() : $merchant;
 }
 
 /**
