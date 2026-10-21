@@ -825,6 +825,11 @@ msgid ""
 "Økoskabet has not been told about this order."
 msgstr ""
 
+msgid ""
+"The order is on hold for the shop to decide: set it to processing to try "
+"again, or send or refund the goods some other way."
+msgstr ""
+
 #. translators: 1: the addition's order number, 2: the date it was placed.
 #: functions/functions.php:2495
 #, php-format
