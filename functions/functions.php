@@ -2815,11 +2815,10 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// order would be tied to a stranger's shipment and never sent. The
 		// customer's email is the one thing the answer carries that says whose
 		// it is; anything else stays a failure the shop can see.
+		$their_email    = is_array($shipment) ? strtolower(trim((string) ($shipment['shipment']['customer']['email'] ?? ''))) : '';
 		$already_booked = $http_code === 200
-			&& is_array($shipment)
-			&& !empty($shipment['shipment'])
-			&& strtolower(trim((string) ($shipment['shipment']['customer']['email'] ?? ''))) !== ''
-			&& strtolower(trim((string) ($shipment['shipment']['customer']['email'] ?? ''))) === strtolower(trim((string) $order->get_billing_email()));
+			&& $their_email !== ''
+			&& $their_email === strtolower(trim((string) $order->get_billing_email()));
 
 		if ($http_code !== 201 && !$already_booked) {
 			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
