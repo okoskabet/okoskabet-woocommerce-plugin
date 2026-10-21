@@ -1115,7 +1115,7 @@ class OkoRest extends Base
 				error_log(sprintf(
 					'Økoskabet webhook: REJECTED — order %s belongs to merchant "%s" but webhook came in for "%s"',
 					$shipment_reference,
-					(string) $order->get_meta(Merchant_Router::ORDER_META_KEY, true) ?: Merchants::default_id(),
+					\oko_order_merchant_id($order),
 					$merchant['id']
 				));
 			}

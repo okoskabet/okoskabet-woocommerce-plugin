@@ -4749,16 +4749,21 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 function oko_order_belongs_to_merchant(\WC_Order $order, array $merchant): bool
 {
 	$merchant_id = (string) ($merchant['id'] ?? '');
-	if ($merchant_id === '') {
-		return true;
-	}
 
+	return $merchant_id === '' || oko_order_merchant_id($order) === $merchant_id;
+}
+
+/**
+ * The merchant an order is stamped with, or the default one for an order
+ * from before the stamp.
+ *
+ * @param \WC_Order $order
+ */
+function oko_order_merchant_id(\WC_Order $order): string
+{
 	$owner = sanitize_key((string) $order->get_meta(\okoskabet_woocommerce_plugin\Integrations\Merchant_Router::ORDER_META_KEY, true));
-	if ($owner === '') {
-		$owner = \okoskabet_woocommerce_plugin\Integrations\Merchants::default_id();
-	}
 
-	return $owner === $merchant_id;
+	return $owner !== '' ? $owner : \okoskabet_woocommerce_plugin\Integrations\Merchants::default_id();
 }
 
 /**
