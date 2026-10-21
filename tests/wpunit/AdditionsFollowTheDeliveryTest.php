@@ -33,6 +33,17 @@ class AdditionsFollowTheDeliveryTest extends \Codeception\TestCase\WPTestCase {
 		update_option( O_TEXTDOMAIN . '-settings', $settings );
 	}
 
+	/**
+	 * What this request was told about the account is dropped again. The memo
+	 * lasts the PHP process, which here is the whole suite, and a test that
+	 * comes after would otherwise read the configuration this one never set.
+	 */
+	public function tearDown(): void {
+		oko_forget_merchant_configurations();
+		\okoskabet_woocommerce_plugin\Integrations\Merchants::purge_config_cache();
+		parent::tearDown();
+	}
+
 	public function test_a_delivered_box_completes_its_additions_too(): void {
 		$parent   = $this->booked( 'processing' );
 		$addition = $this->addition_to( $parent, 'processing' );
