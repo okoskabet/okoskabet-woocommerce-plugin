@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/BooksWithOkoskabet.php';
+
 /**
  * Looking an order up by its number, from the checkout, changes nothing.
  *
@@ -13,6 +15,8 @@
  */
 class LookupWithoutSideEffectsTest extends \Codeception\TestCase\WPTestCase
 {
+	use BooksWithOkoskabet;
+
 	public function test_the_checkout_lookup_writes_nothing_on_the_order(): void
 	{
 		$order = $this->booked_before_references_were_kept('someone@example.com');
@@ -47,15 +51,14 @@ class LookupWithoutSideEffectsTest extends \Codeception\TestCase\WPTestCase
 		$this->assertInstanceOf(\WP_Error::class, $found);
 	}
 
-	/** Booked by 1.5.2 or older: marked as sent, no reference kept. */
+	/** Booked by 1.5.2 or older, through the plugin's own booking path. */
 	private function booked_before_references_were_kept(string $email): \WC_Order
 	{
-		$order = wc_create_order();
+		$order = new \WC_Order();
 		$order->set_billing_email($email);
-		$order->update_meta_data('billing_okoskabet_done', 'yes');
-		$order->update_meta_data('_billing_okoskabet_delivery_date', gmdate('Y-m-d', strtotime('+5 days')));
+		$order->set_status('processing');
 		$order->save();
 
-		return wc_get_order($order->get_id());
+		return $this->book_before_the_reference_was_kept($order);
 	}
 }
