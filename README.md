@@ -21,10 +21,12 @@ Published by **Foodshipper**.
 
 ## Installation
 
-1. Download the plugin ZIP — either from the
-   [latest GitHub release](https://github.com/okoskabet/okoskabet-woocommerce-plugin/releases/latest)
-   or, if you want the absolute newest commit, the
-   [main branch archive](https://github.com/okoskabet/okoskabet-woocommerce-plugin/archive/refs/heads/main.zip).
+1. Download `okoskabet-woocommerce-plugin-X.Y.Z.zip` from the
+   [latest GitHub release](https://github.com/okoskabet/okoskabet-woocommerce-plugin/releases/latest).
+   Take the attached plugin zip, not GitHub's *Source code* archives: those
+   hold the whole repository, and their folder name is not the plugin's.
+   `main` is where work is gathered before a release, so it can hold changes
+   that are not yet reviewed or released — never install from it.
 2. In WP-Admin go to **Plugins → Add New → Upload Plugin** and select the ZIP.
 3. Click **Install Now** and then **Activate**.
 4. A new menu item **Økoskabet WooCommerce Plugin** appears in the sidebar.
