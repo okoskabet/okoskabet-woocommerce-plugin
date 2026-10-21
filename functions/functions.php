@@ -4993,7 +4993,6 @@ function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload): string
 
 	if (isset($payload['home_delivery'])) {
 		$recipient = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
-		$location  = oko_logistics_note($order);
 
 		$payload['customer']['recipient_name'] = $recipient;
 		$payload['home_delivery']              = array_filter(array(
@@ -5002,7 +5001,7 @@ function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload): string
 			'address_2'      => $order->get_shipping_address_2(),
 			'city'           => $order->get_shipping_city(),
 			'postal_code'    => $order->get_shipping_postcode(),
-			'location'       => $location !== '' ? $location : null,
+			'location'       => oko_logistics_note($order),
 		));
 	}
 
@@ -5286,13 +5285,8 @@ function oko_resend_shipment_on_update(int $order_id): void
 		// Nothing has moved, so this is the free moment to write down what
 		// Økoskabet holds — after this the order compares like any other.
 		//
-		// Asked in 1.5.2's own terms as well. Every open order a shop has on
-		// the day it updates was fingerprinted by 1.5.2, whose payload had no
-		// tags, pictures or properties on its lines, a `location` on the
-		// address and the note inside the hash. Measured against today's
-		// payload none of them ever matched, so the first save of each one —
-		// a webhook completing it is enough — sent the whole order, over
-		// whatever the packing room had corrected. Seen on staging 21/10.
+		// Asked in 1.5.2's terms too, or every open order would be sent whole
+		// on its first save after the update — see oko_fingerprint_as_1_5_2().
 		$order->update_meta_data(OKO_SENT_META, $comparable);
 		$order->save_meta_data();
 		return;
