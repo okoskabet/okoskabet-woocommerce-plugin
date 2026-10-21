@@ -4712,6 +4712,14 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 		return array();
 	}
 
+	// Only an order of the account the webhook came in for. The status half
+	// of the webhook checks this before it touches anything, and this half ran
+	// in front of that check: a webhook for one merchant rewrote the address
+	// of another merchant's order and was then answered 403 for it.
+	if (! oko_order_belongs_to_merchant($order, $merchant)) {
+		return array();
+	}
+
 	// Read fresh. The webhook is the signal, not the source: it says which
 	// fields moved, and a single changed floor cannot be merged into an
 	// address WooCommerce keeps as two composed lines. The remembered copy is
@@ -4766,6 +4774,36 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	));
 
 	return $changed;
+}
+
+/**
+ * Whether an order is one of this merchant's, as a webhook has to ask it.
+ *
+ * The stamp written at checkout says whose an order is. An order without one
+ * predates the stamp and belongs to the default merchant. A merchant record
+ * with no id — the legacy single-merchant fallback — owns everything.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $merchant
+ */
+function oko_order_belongs_to_merchant(\WC_Order $order, array $merchant): bool
+{
+	$merchant_id = (string) ($merchant['id'] ?? '');
+
+	return $merchant_id === '' || oko_order_merchant_id($order) === $merchant_id;
+}
+
+/**
+ * The merchant an order is stamped with, or the default one for an order
+ * from before the stamp.
+ *
+ * @param \WC_Order $order
+ */
+function oko_order_merchant_id(\WC_Order $order): string
+{
+	$owner = sanitize_key((string) $order->get_meta(\okoskabet_woocommerce_plugin\Integrations\Merchant_Router::ORDER_META_KEY, true));
+
+	return $owner !== '' ? $owner : \okoskabet_woocommerce_plugin\Integrations\Merchants::default_id();
 }
 
 /**

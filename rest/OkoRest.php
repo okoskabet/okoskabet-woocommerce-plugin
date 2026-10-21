@@ -1108,16 +1108,14 @@ class OkoRest extends Base
 		// leaking the other secret, but cheap to enforce.) Orders
 		// without a recorded merchant predate the migration — treat
 		// those as belonging to the default merchant.
-		$order_merchant_id = sanitize_key((string) $order->get_meta(Merchant_Router::ORDER_META_KEY, true));
-		if ($order_merchant_id === '') {
-			$order_merchant_id = Merchants::default_id();
-		}
-		if (! empty($merchant['id']) && $order_merchant_id !== $merchant['id']) {
+		// The same question the delivery write-back above asks, answered by
+		// the same function, so the two halves of one webhook cannot disagree.
+		if (! \oko_order_belongs_to_merchant($order, $merchant)) {
 			if (defined('WP_DEBUG') && WP_DEBUG) {
 				error_log(sprintf(
 					'Økoskabet webhook: REJECTED — order %s belongs to merchant "%s" but webhook came in for "%s"',
 					$shipment_reference,
-					$order_merchant_id,
+					\oko_order_merchant_id($order),
 					$merchant['id']
 				));
 			}
