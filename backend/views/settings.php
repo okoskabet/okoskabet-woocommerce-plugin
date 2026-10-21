@@ -423,6 +423,7 @@ curl -X POST "<?php echo $test_webhook_url; // already escaped above ?>" \
 			<li><strong>401 Unauthorized</strong> — <?php esc_html_e( 'invalid or missing HMAC signature.', O_TEXTDOMAIN ); ?></li>
 			<li><strong>403 Forbidden</strong> — <?php esc_html_e( 'webhook functionality is disabled in plugin settings, OR the order belongs to a different merchant than the one in the webhook URL.', O_TEXTDOMAIN ); ?></li>
 			<li><strong>404 Not Found</strong> — <?php esc_html_e( 'the merchant ID in the URL is unknown, OR the order referenced by shipment_reference does not exist.', O_TEXTDOMAIN ); ?></li>
+			<li><strong>409 Conflict</strong> — <?php esc_html_e( 'more than one order has the reference in shipment_reference, and none of them is touched. Check the orders for a copied Økoskabet reference.', O_TEXTDOMAIN ); ?></li>
 			<li><strong>500 Internal Server Error</strong> — <?php esc_html_e( 'the merchant has no webhook secret configured. Edit the merchant and paste a value.', O_TEXTDOMAIN ); ?></li>
 			<li><strong>503 Service Unavailable</strong> — <?php esc_html_e( 'WooCommerce is not loaded.', O_TEXTDOMAIN ); ?></li>
 		</ul>

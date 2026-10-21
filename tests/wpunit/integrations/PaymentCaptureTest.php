@@ -6,6 +6,8 @@ use okoskabet_woocommerce_plugin\Integrations\Merchants;
 use okoskabet_woocommerce_plugin\Integrations\Payment_Capture;
 use okoskabet_woocommerce_plugin\Rest\OkoRest;
 
+require_once __DIR__ . '/../BooksWithOkoskabet.php';
+
 /**
  * Tests for Payment_Capture::capture(), which Økoskabet's capture webhook
  * calls when a parcel reaches the configured capture event.
@@ -16,6 +18,8 @@ use okoskabet_woocommerce_plugin\Rest\OkoRest;
  * capture, and the order would be reported paid before any money arrived.
  */
 class PaymentCaptureTest extends \Codeception\TestCase\WPTestCase {
+
+	use \BooksWithOkoskabet;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -181,7 +185,7 @@ class PaymentCaptureTest extends \Codeception\TestCase\WPTestCase {
 		$settings['_webhook_enabled'] = 'on';
 		update_option( O_TEXTDOMAIN . '-settings', $settings );
 
-		$order = $this->order( 'bacs', 'on-hold' );
+		$order = $this->book_with_okoskabet( $this->order( 'bacs', 'on-hold' ) );
 		$body  = wp_json_encode( array(
 			'event'              => 'reservation_updated',
 			'shipment_reference' => (string) $order->get_id(),
