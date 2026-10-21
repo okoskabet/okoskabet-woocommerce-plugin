@@ -4000,11 +4000,21 @@ function oko_recipient_name(\WC_Order $order): string
  * the floor on the street line has nothing to gain from a second field and
  * something to lose — see where the field is drawn.
  *
+ * And never in two shops, even when ticked (Marc, 21/10):
+ *
+ * - one that has set address line 2 to "Hidden" in WooCommerce's own checkout
+ *   settings. That is the shop saying it does not want the line, and our
+ *   setting does not overrule it;
+ * - one that only offers sheds or pickup points. A floor is for a door, and
+ *   only a home delivery comes to one.
+ *
  * @return bool
  */
 function oko_shop_asks_for_the_floor(): bool
 {
-	return ! empty(o_get_settings()['_ask_for_floor']);
+	return ! empty(o_get_settings()['_ask_for_floor'])
+		&& get_option('woocommerce_checkout_address_2_field', 'optional') !== 'hidden'
+		&& o_check_configuration('home_delivery');
 }
 
 /**

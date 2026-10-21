@@ -21,12 +21,61 @@ class FloorFieldTest extends \Codeception\TestCase\WPTestCase
 		add_filter('o_get_settings', static function ($settings) {
 			return array_merge((array) $settings, array('_ask_for_floor' => 'on'));
 		});
+		$this->given_methods(array('shed', 'home_delivery'));
 	}
 
 	public function tearDown(): void
 	{
 		remove_all_filters('o_get_settings');
+		delete_option('woocommerce_checkout_address_2_field');
+		delete_transient(o_configuration_transient_key('default'));
+		oko_forget_merchant_configurations();
 		parent::tearDown();
+	}
+
+	/**
+	 * A shop that hid the line in WooCommerce's own settings has said it does
+	 * not want it, and ticking ours does not overrule that (Marc, 21/10).
+	 */
+	public function test_a_line_the_shop_hid_in_woocommerce_stays_hidden(): void
+	{
+		update_option('woocommerce_checkout_address_2_field', 'hidden');
+
+		$this->assertArrayNotHasKey('billing_address_2', $this->checkout_without_a_second_line()['billing']);
+	}
+
+	/** Optional or required there, it is the shop that took it away: we give it back. */
+	public function test_a_line_optional_in_woocommerce_is_given_back(): void
+	{
+		update_option('woocommerce_checkout_address_2_field', 'optional');
+
+		$this->assertArrayHasKey('billing_address_2', $this->checkout_without_a_second_line()['billing']);
+	}
+
+	/** A floor is for a door, and only a home delivery comes to one. */
+	public function test_a_shop_with_only_sheds_is_not_asked_for_a_floor(): void
+	{
+		$this->given_methods(array('shed', 'store_pickup'));
+
+		$this->assertArrayNotHasKey('billing_address_2', $this->checkout_without_a_second_line()['billing']);
+	}
+
+	/** @return array<string,array<string,mixed>> */
+	private function checkout_without_a_second_line(): array
+	{
+		return custom_override_checkout_fields(array(
+			'billing'  => array('billing_address_1' => array('label' => 'Gadenavn og nr')),
+			'shipping' => array('shipping_address_1' => array('label' => 'Gadenavn og nr')),
+		));
+	}
+
+	/** @param string[] $codes What Økoskabet's /configuration says the shop offers. */
+	private function given_methods(array $codes): void
+	{
+		set_transient(o_configuration_transient_key('default'), array(
+			'shipping_methods' => array_map(static fn(string $code): array => array('method_code' => $code), $codes),
+		), 60);
+		oko_forget_merchant_configurations();
 	}
 
 	/**
