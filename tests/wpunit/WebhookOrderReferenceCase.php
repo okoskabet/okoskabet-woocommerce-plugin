@@ -418,6 +418,27 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 		$this->assertSame( 'processing', $this->status_of( $copy ) );
 	}
 
+	/**
+	 * However many copies there are. The lookup asks for a handful of orders
+	 * carrying the reference and drops the copies afterwards, so the copies
+	 * must never be able to fill the handful and leave the original out.
+	 */
+	public function test_many_copies_do_not_hide_the_original() {
+		$reference = 'ORIG-' . $this->unused_id();
+		$original  = $this->book( $this->order_to_book( $reference ) );
+		for ( $day = 1; $day <= 6; $day++ ) {
+			$copy = $this->copy_meta( $original, $this->order( 'C-' . wp_generate_password( 6, false ) ), array( OKO_SHIPMENT_REFERENCE_META, OKO_SHIPMENT_REFERENCE_FOR_META, 'billing_okoskabet_done' ) );
+			// A copy is made after its original, here one a day.
+			$copy->set_date_created( time() + $day * DAY_IN_SECONDS );
+			$copy->save();
+		}
+
+		$response = $this->delivered( $reference );
+
+		$this->assertSame( 200, $this->status( $response ) );
+		$this->assertSame( 'completed', $this->status_of( $original ) );
+	}
+
 	/** Cancelling the copy must not cancel the original's shipment. */
 	public function test_cancelling_a_copy_leaves_the_originals_shipment_alone() {
 		$reference = 'ORIG-' . $this->unused_id();

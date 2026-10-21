@@ -2491,11 +2491,17 @@ function oko_order_ids_with_meta(string $key, string $value): array
 		$statuses = array_merge(array_keys(wc_get_order_statuses()), array('trash'));
 	}
 
-	// More than one hit is already a conflict, so a handful is plenty.
+	// A handful is plenty, oldest first. Not every hit counts — the caller
+	// drops copies, whose meta names another order — and a copy is always
+	// newer than the order it was copied from. Newest first, five copies
+	// made while the parcel was on its way filled the handful, and the order
+	// they were copied from was answered 404.
 	return array_map('intval', (array) wc_get_orders(array(
 		'type'       => 'shop_order',
 		'status'     => $statuses,
 		'limit'      => 5,
+		'orderby'    => 'ID',
+		'order'      => 'ASC',
 		'return'     => 'ids',
 		'meta_key'   => $key,
 		'meta_value' => $value,
