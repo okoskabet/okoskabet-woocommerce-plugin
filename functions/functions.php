@@ -2803,7 +2803,14 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		$http_code = wp_remote_retrieve_response_code($response);
 		$shipment = json_decode(wp_remote_retrieve_body($response), true);
 
-		if ($http_code !== 201) {
+		// 200 with the shipment is Økoskabet saying it has this one already: a
+		// first attempt that went through while its answer did not reach us
+		// (a timeout), and the order arriving here again. That is booked, not
+		// failed — failing it threw the customer's checkout and marked a paid
+		// order as failed for a delivery that was on its way.
+		$already_booked = $http_code === 200 && is_array($shipment) && !empty($shipment['shipment']);
+
+		if ($http_code !== 201 && !$already_booked) {
 			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
 			$order->update_status('failed', $error_text);
 			throw new \Exception($error_text);
