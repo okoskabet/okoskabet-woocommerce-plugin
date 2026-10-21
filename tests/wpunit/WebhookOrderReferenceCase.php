@@ -379,7 +379,14 @@ abstract class WebhookOrderReferenceCase extends \Codeception\TestCase\WPTestCas
 		$puts = $this->requests_by( 'PUT' );
 		$this->assertCount( 1, $puts, 'a new delivery date is an edit Økoskabet is told about' );
 		$this->assertStringEndsWith( '/api/v1/shipments/' . $reference, $puts[0]['url'] );
-		$this->assertSame( $reference, json_decode( $puts[0]['body'], true )['shipment_reference'] );
+
+		// The URL names the shipment; the body carries only what moved. It
+		// used to repeat the reference, back when an edit sent the whole
+		// order — a resend now sends the difference and nothing else, so the
+		// date is what is here and the reference is not.
+		$sent = json_decode( $puts[0]['body'], true );
+		$this->assertArrayNotHasKey( 'shipment_reference', $sent );
+		$this->assertSame( '2026-10-30', $sent['delivery_date'] );
 	}
 
 	/**

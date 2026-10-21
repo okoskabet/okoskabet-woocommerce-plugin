@@ -127,6 +127,71 @@ function o_shipping_methods_transient_key(string $merchant_id): string
 }
 
 /**
+ * A call to a merchant's Økoskabet, with the parts every one of them shares.
+ *
+ * The key, the timeout and the content type were written out at each of the
+ * places that talk to Økoskabet, which is a place to change the day one of
+ * them has to move — and a chance for them to drift apart unnoticed. The
+ * answer is handed back untouched: what a refusal means differs at every call
+ * site, and only the caller knows.
+ *
+ * @param array<string,mixed> $merchant The merchant record.
+ * @param string              $method   `GET`, `POST`, `PUT` or `DELETE`.
+ * @param string              $path     The path under the account's API root.
+ * @param string|null         $body     An encoded body, or null for none.
+ * @param int                 $timeout  Seconds to wait.
+ * @return array<string,mixed>|\WP_Error The answer, as WordPress gives it.
+ */
+function oko_api_request(array $merchant, string $method, string $path, ?string $body = null, int $timeout = 15)
+{
+	$headers = array('Authorization' => (string) ($merchant['api_key'] ?? ''));
+
+	$args = array(
+		'method'  => $method,
+		'timeout' => $timeout,
+		'headers' => $headers,
+	);
+
+	// Only with something to describe. `Content-Type: application/json` on a
+	// request with no body at all is zero bytes claiming to be JSON, which a
+	// strict parser is entitled to refuse.
+	if ($body !== null) {
+		$args['headers']['Content-Type'] = 'application/json';
+		$args['body']                    = $body;
+	}
+
+	return wp_remote_request(o_merchant_api_url($merchant) . $path, $args);
+}
+
+/**
+ * The one holder for the configurations answered during this request.
+ *
+ * A memo that lasts a request is right for a checkout recalculating on every
+ * keystroke and wrong for the request that has just saved new settings, so it
+ * has to be droppable: `Merchants::purge_config_cache()` dropped the stored
+ * copy, and the one held here outlived it.
+ *
+ * A holder both functions bind by reference, rather than a static inside the
+ * getter reached through a merchant id nobody can have. A getter that also
+ * means "forget everything" is a getter that lies about what it returns.
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function &oko_merchant_configuration_memo(): array
+{
+	static $asked = array();
+
+	return $asked;
+}
+
+/** Drop what this request has already been told, so the next read asks again. */
+function oko_forget_merchant_configurations(): void
+{
+	$asked = &oko_merchant_configuration_memo();
+	$asked = array();
+}
+
+/**
  * What this merchant's Økoskabet account says about itself.
  *
  * One answer, cached for five minutes per merchant and memoised for the
@@ -144,7 +209,7 @@ function o_shipping_methods_transient_key(string $merchant_id): string
  */
 function oko_merchant_configuration(string $merchant_id): array
 {
-	static $asked = array();
+	$asked = &oko_merchant_configuration_memo();
 
 	if (array_key_exists($merchant_id, $asked)) {
 		return $asked[$merchant_id];
@@ -164,16 +229,17 @@ function oko_merchant_configuration(string $merchant_id): array
 		return array();
 	}
 
-	$response = wp_remote_get(o_merchant_api_url($merchant) . '/api/v1/configuration', array(
-		'timeout' => 10,
-		'headers' => array(
-			'Authorization' => $merchant['api_key'],
-		),
-	));
+	$response = oko_api_request($merchant, 'GET', '/api/v1/configuration', null, 10);
 
 	if (is_wp_error($response)
 		|| wp_remote_retrieve_response_code($response) !== 200
 		|| empty(wp_remote_retrieve_body($response))) {
+		// Remembered too, briefly. The memo above only lasts the request, and
+		// a checkout recalculates on every keystroke — so an Økoskabet that is
+		// down cost a ten-second wait per letter the customer typed. Far
+		// shorter than a good answer is kept: the shop is back to normal
+		// within half a minute of Økoskabet being back.
+		set_transient($transient_key, array(), 30);
 		$asked[$merchant_id] = array();
 		return array();
 	}
@@ -228,6 +294,43 @@ function oko_merchant_statuses(string $merchant_id): array
 		'fulfilled'          => __('Fulfilled', O_TEXTDOMAIN),
 		'removed'            => __('Removed', O_TEXTDOMAIN),
 	);
+}
+
+/**
+ * The steps a shop can hang a choice on, in the order an order passes them.
+ *
+ * Printing the label is not a step a shipment passes — it is the moment the
+ * boxes come into being — so it is the one entry that is ours rather than
+ * Økoskabet's. It used to be written in front of the whole list, which put
+ * it before "Registered" and read as though a label were printed before the
+ * order existed. It belongs where it happens: after the order is registered,
+ * before it is packed.
+ *
+ * After `registered` wherever that step is, rather than at a fixed index: the
+ * list comes from the merchant's own account and Økoskabet may add a step to
+ * it without a plugin release.
+ *
+ * @param string $merchant_id
+ * @return array<string,string>
+ */
+function oko_merchant_events(string $merchant_id): array
+{
+	$label_printed = array('label_printed' => __('Label printed', O_TEXTDOMAIN));
+	$statuses      = oko_merchant_statuses($merchant_id);
+
+	if (! array_key_exists('registered', $statuses)) {
+		return $label_printed + $statuses;
+	}
+
+	$events = array();
+	foreach ($statuses as $code => $name) {
+		$events[$code] = $name;
+		if ($code === 'registered') {
+			$events += $label_printed;
+		}
+	}
+
+	return $events;
 }
 
 /**
@@ -843,9 +946,6 @@ const OKO_DATE_MODE_REQUIRED = 'required';
 /** A date where Økoskabet delivers; a postcode it doesn't is ordered without one. */
 const OKO_DATE_MODE_WHEN_AVAILABLE = 'when_available';
 
-/** Meta marking an order placed, on purpose, without a delivery date. */
-const OKO_WITHOUT_DATE_META = '_okoskabet_without_delivery_date';
-
 /**
  * The "postcodes Økoskabet doesn't cover" setting on a home-delivery method.
  *
@@ -938,7 +1038,7 @@ function oko_print_delivery_date_mode($rate): void
 /** Which "what's new" notice a shop has dismissed. */
 const OKO_WHATS_NEW_OPTION = 'okoskabet_whats_new_dismissed';
 /** Bumped when there is something new to tell shops about. */
-const OKO_WHATS_NEW_KEY = 'split-delivery-flip-v1';
+const OKO_WHATS_NEW_KEY = 'address-suggestions-v1';
 
 add_action('admin_notices', 'oko_render_whats_new_notice');
 add_action('admin_init', 'oko_dismiss_whats_new_notice');
@@ -963,6 +1063,7 @@ function oko_render_whats_new_notice(): void
 		__('Shipping methods in a row of their own at checkout.', O_TEXTDOMAIN),
 		__('Split delivery: a basket that needs more than one delivery day offers the customer two buttons — split it into one order per day, or see exactly which items to take out so the rest arrives together. The button wording is yours to set.', O_TEXTDOMAIN),
 		__('Delivery exceptions: each rule can be turned around to cover every product OTHER than the categories and tags you picked.', O_TEXTDOMAIN),
+		__('Address suggestions: the checkout suggests addresses from the address register while the customer types, including floor and door.', O_TEXTDOMAIN),
 	);
 	?>
 	<div class="notice notice-info">
@@ -1109,10 +1210,36 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		// Filling the cell: the two buttons side by side in equal halves, one
 		// under the other when the cell is too narrow, and the note spanning
 		// the same width above them. Never wider than the cell it sits in.
-		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;';
+		choice.style.cssText='position:absolute;left:'+pad+';right:'+pad+';bottom:16px;display:grid;gap:8px;';
 		var bs=choice.querySelectorAll('.okoskabet-pre-order-toggle');
 		for(var j=0;j<bs.length;j++){bs[j].style.margin='0';bs[j].style.whiteSpace='normal';}
 		th.appendChild(choice);
+
+		// How narrow a column may get before the two buttons go one above the
+		// other. A fixed figure cannot know the shop's own wording or the
+		// theme's type size: "FORUDBESTILLING" is one word, so where it does
+		// not fit it does not wrap either — it runs out of its own button, as
+		// it did on a phone. So measure the widest label on one line and let
+		// that be the floor.
+		//
+		// After the move into the shipping cell, not before: until then the
+		// buttons sit in their own row, which is served hidden, and a hidden
+		// element measures zero. Measuring first answered 0 for both buttons
+		// and quietly left the old fixed figure in force.
+		//
+		// And measured at max-content, because a button in the grid is already
+		// stretched to the full cell: read as it stands, the widest label came
+		// back as the whole cell, which would have put the two buttons under
+		// each other at every width.
+		var floor=0;
+		for(j=0;j<bs.length;j++){
+			bs[j].style.whiteSpace='nowrap';
+			bs[j].style.width='max-content';
+			floor=Math.max(floor,Math.ceil(bs[j].getBoundingClientRect().width));
+			bs[j].style.width='';
+			bs[j].style.whiteSpace='normal';
+		}
+		choice.style.gridTemplateColumns='repeat(auto-fit,minmax(min(100%,'+(floor||150)+'px),1fr))';
 		th.style.paddingBottom=(choice.offsetHeight+32)+'px';
 
 		// In line with the date picker next to it, once there is one: the
@@ -1171,6 +1298,63 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		shipping.parentNode.insertBefore(row,shipping.nextSibling);
 	}
 
+	// What the customer has typed, carried across the reload above.
+	//
+	// Pressing Forudbestilling in the middle of filling the form used to empty
+	// it: the page came back from the server, and a name, an address and a
+	// phone number went with it. WooCommerce remembers some of the address in
+	// the session, but not the name, the e-mail or the phone, and the customer
+	// had no way of knowing which. So the form is written down just before the
+	// reload and put back when the page returns.
+	//
+	// sessionStorage, not a cookie: it stays in this tab, never goes to the
+	// server, and is gone when the tab closes. Only what the customer typed
+	// into this very form, and only to hand it straight back to them.
+	var KEEP='okoskabet_typed';
+	// The fields the choice itself decides, which the server sends back filled.
+	var DECIDED=['billing_okoskabet_pre_order','billing_okoskabet_delivery_date','billing_okoskabet_shed_id','billing_okoskabet_pickup_location_id'];
+	function okoskabetFields(){
+		var form=document.querySelector('form.checkout, form[name="checkout"]');
+		return form?form.querySelectorAll('input[type=text],input[type=email],input[type=tel],input[type=number],textarea'):[];
+	}
+	function okoskabetKeepTyped(){
+		try{
+			var out={},fs=okoskabetFields();
+			for(var i=0;i<fs.length;i++){
+				// Named one by one, not matched on "okoskabet": the choice
+				// being made decides these four and the server fills them in
+				// again, but it decides nothing about the flat the customer
+				// typed or the order they are adding to. Matching on the name
+				// threw those away too.
+				if(!fs[i].name||DECIDED.indexOf(fs[i].name)>-1||!fs[i].value){continue;}
+				out[fs[i].name]=fs[i].value;
+			}
+			sessionStorage.setItem(KEEP,JSON.stringify(out));
+		}catch(err){}
+	}
+	function okoskabetRestoreTyped(){
+		var saved;
+		try{
+			saved=sessionStorage.getItem(KEEP);
+			sessionStorage.removeItem(KEEP);
+		}catch(err){return;}
+		if(!saved){return;}
+		try{saved=JSON.parse(saved);}catch(err){return;}
+		var fs=okoskabetFields(),touched=false;
+		for(var i=0;i<fs.length;i++){
+			// Never over the server's own answer: it knows things the customer
+			// does not type, and a field it filled is a field it meant.
+			if(!fs[i].name||fs[i].value||!saved[fs[i].name]){continue;}
+			fs[i].value=saved[fs[i].name];
+			touched=true;
+		}
+		// The address decides the shipping and the days, so the recalculation
+		// has to see it. Without this the customer gets their address back and
+		// prices worked out for the one before it.
+		if(touched&&window.jQuery){window.jQuery(document.body).trigger('update_checkout');}
+	}
+	okoskabetRestoreTyped();
+
 	if(window.okoskabetPreOrderBound){return;}
 	window.okoskabetPreOrderBound=true;
 	document.addEventListener('click',function(e){
@@ -1189,7 +1373,7 @@ function oko_print_checkout_layout_script(string $separate_label): void
 		// that banner sits above the form, which WooCommerce does not rebuild
 		// on a recalculation. Reload carrying the choice, so the whole page
 		// agrees about which kind of order this is.
-		if(SPLIT_ON){window.location.href=wanted==='1'?PRE_ORDER_URL:NORMAL_URL;return;}
+		if(SPLIT_ON){okoskabetKeepTyped();window.location.href=wanted==='1'?PRE_ORDER_URL:NORMAL_URL;return;}
 		if(window.okoskabetWarmDeliveryDates){window.okoskabetWarmDeliveryDates();}
 		if(window.jQuery){window.jQuery(document.body).trigger('update_checkout');}
 	},true);
@@ -1704,18 +1888,12 @@ add_filter('woocommerce_package_rates', function (array $rates, array $package):
         return $rates;
     }
 
-    $oko_method_map = array(
-        'hey_okoskabet_shipping_shed'         => 'shed',
-        'hey_okoskabet_shipping_home'         => 'home_delivery',
-        'hey_okoskabet_shipping_store_pickup' => 'store_pickup',
-    );
-
     foreach ($rates as $rate_id => $rate) {
         $method_id = isset($rate->method_id) ? (string) $rate->method_id : '';
-        if (!isset($oko_method_map[$method_id])) {
+        if (!isset(OKO_SHIPPING_METHOD_KINDS[$method_id])) {
             continue;
         }
-        $oko_method = $oko_method_map[$method_id];
+        $oko_method = OKO_SHIPPING_METHOD_KINDS[$method_id];
         if (!o_merchant_supports_method($merchant_id, $oko_method)) {
             unset($rates[$rate_id]);
         }
@@ -1770,8 +1948,1000 @@ function oko_fee_tax_ratio(string $tax_class): float
 	return oko_tax_ratio(static fn(): array => WC_Tax::get_rates($tax_class));
 }
 
-add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
+// Late, so the fields are the ones the customer will actually see. Whether we
+// add a field of our own depends on whether the shop has one, and a shop that
+// removes its second address line at a later priority than ours would leave
+// the customer with neither: we would see it there, add nothing, and it would
+// then be taken away.
+add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields', 1000);
 add_filter('woocommerce_checkout_get_value', 'oko_checkout_starts_without_last_orders_choice', 10, 2);
+
+/**
+ * One posted value as a string, whatever was posted.
+ *
+ * A form field can arrive as an array — `billing_order_id[]=` is a request
+ * anyone can make — and casting that to a string is a PHP warning on the
+ * checkout rather than an answer. Anything that is not a scalar is nothing.
+ *
+ * @param mixed $value The posted value.
+ * @return string
+ */
+function oko_posted_string($value): string
+{
+	return is_scalar($value) ? trim((string) $value) : '';
+}
+
+/** The checkout fields a shop may ask the earlier order's number in. */
+const OKO_ADDON_FIELDS = array('billing_order_id', 'billing_okoskabet_addon_order');
+
+/**
+ * One checkout field as it stands in the form being rendered.
+ *
+ * Read from the posted form, so it is already there while the shipping rates
+ * are worked out: WooCommerce sends the whole form as `post_data` on every
+ * recalculation, and that is also where the pre-order flag is read from. The
+ * first name that is present wins, which is how a shop's own field and ours
+ * can answer the same question.
+ *
+ * @param string ...$names The field names to try, in order.
+ * @return string What the customer typed, or an empty string.
+ */
+function oko_posted_checkout_field(string ...$names): string
+{
+	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
+	foreach ($names as $name) {
+		if (isset($_POST[$name])) {
+			return oko_posted_string(wp_unslash($_POST[$name]));
+		}
+	}
+
+	if (! isset($_POST['post_data']) || ! is_string($_POST['post_data'])) {
+		return '';
+	}
+
+	// Parsed once however many fields are asked for: the form arrives as one
+	// string, and parsing it per field was two passes over the whole checkout.
+	static $parsed = null;
+	static $parsed_from = null;
+	$raw = wp_unslash($_POST['post_data']);
+	// phpcs:enable WordPress.Security.NonceVerification
+
+	if ($parsed_from !== $raw) {
+		$parsed = array();
+		parse_str($raw, $parsed);
+		$parsed_from = $raw;
+	}
+
+	foreach ($names as $name) {
+		if (isset($parsed[$name])) {
+			return oko_posted_string($parsed[$name]);
+		}
+	}
+
+	return '';
+}
+
+/** The earlier order's number as the checkout has it, in either shop's field. */
+function oko_addon_number_in_checkout(): string
+{
+	return oko_posted_checkout_field(...OKO_ADDON_FIELDS);
+}
+
+/** The email the checkout is being filled in with, which an addition is matched on. */
+function oko_addon_email_in_checkout(): string
+{
+	$email = oko_posted_checkout_field('billing_email');
+	if ($email !== '' || ! function_exists('WC') || ! WC()->customer) {
+		return $email;
+	}
+
+	return (string) WC()->customer->get_billing_email();
+}
+
+/**
+ * The order an addition would be added to, if it can still take one.
+ *
+ * An addition rides along with a delivery already booked: the customer pays no
+ * second freight, and the goods are packed with the first order. That only
+ * holds while the first order is still ours to change — before the merchant
+ * has sent it. Past that there is nothing to ride along with, and the checkout
+ * says so rather than quietly promising a delivery that cannot happen.
+ *
+ * Refusals are deliberately quiet about why, except to the customer: a number
+ * that belongs to somebody else answers exactly as a number that does not
+ * exist, so a checkout cannot be used to find out what orders a shop has.
+ *
+ * @param string $number The earlier order's number, as the customer typed it.
+ * @param string $email  The email on the checkout, which must match.
+ * @return array{order:?\WC_Order,reason:string} The order, or why not.
+ */
+function oko_addon_parent_order(string $number, string $email): array
+{
+	$refused = static function (string $reason): array {
+		return array('order' => null, 'reason' => $reason);
+	};
+
+	$number = trim($number);
+	if ($number === '') {
+		return $refused('');
+	}
+
+	// The email check below would not catch a wrong order: a numbering plugin
+	// shows "#1042" where the id is something else, and an absint() of the
+	// printed number lands on another of this customer's orders, which passes
+	// the email check because it is theirs too.
+	// Looked up without writing anything. This runs for anyone filling in a
+	// checkout, on every recalculation, before the email has been checked.
+	$order = oko_order_for_reference($number, false);
+	if ($order === null) {
+		return $refused('unknown');
+	}
+
+	// The customer's own order, and nobody else's.
+	$email = strtolower(trim($email));
+	if ($email === '' || strtolower((string) $order->get_billing_email()) !== $email) {
+		return $refused('unknown');
+	}
+
+	// It has to be an Økoskabet delivery to ride along with.
+	$delivery_date = (string) $order->get_meta('_billing_okoskabet_delivery_date', true);
+	if ($delivery_date === '') {
+		return $refused('not_a_delivery');
+	}
+
+	// And the merchant must not have sent it yet.
+	if (! oko_order_can_still_take_more($order, $delivery_date)) {
+		return $refused('too_late');
+	}
+
+	return array('order' => $order, 'reason' => '');
+}
+
+/**
+ * The order this checkout would be added to, worked out once per request.
+ *
+ * Asked by the rate filter, the order being created and the checkout notice,
+ * and each answer costs a call to Økoskabet. One answer per request, so a
+ * checkout that recalculates does not ask three times.
+ *
+ * @return array{order:?\WC_Order,reason:string}
+ */
+function oko_addon_in_checkout(): array
+{
+	static $answer = null;
+	static $asked_for = null;
+
+	$number = oko_addon_number_in_checkout();
+	if ($answer !== null && $asked_for === $number) {
+		return $answer;
+	}
+
+	$asked_for = $number;
+	$answer    = oko_addon_parent_order($number, oko_addon_email_in_checkout());
+
+	return $answer;
+}
+
+add_filter('woocommerce_cart_shipping_packages', 'oko_addon_in_the_package');
+
+/**
+ * Put the addition into the package, so the rates are worked out again.
+ *
+ * WooCommerce keeps a package's rates in the session under a hash of the
+ * package, and a checkout that recalculates reuses them unless that hash
+ * changes. Our field is not part of a package, so zeroing the freight had no
+ * effect until something else — an address, an item — happened to change: the
+ * customer saw the full freight on an order that rides along for nothing.
+ *
+ * @param array<int,array<string,mixed>> $packages The shipping packages.
+ * @return array<int,array<string,mixed>>
+ */
+function oko_addon_in_the_package(array $packages): array
+{
+	// The answer, not the number the customer is still typing. WooCommerce
+	// hashes the package to decide whether the rates may be reused, so putting
+	// the digits in meant a whole rate calculation per keystroke — and a
+	// number that turns out not to count would still have thrown the rates
+	// away. Two states: this basket rides along, or it does not.
+	$rides_along = oko_addon_in_checkout()['order'] !== null;
+	if (! $rides_along) {
+		return $packages;
+	}
+
+	foreach ($packages as $i => $package) {
+		$packages[$i]['okoskabet_addon'] = '1';
+	}
+
+	return $packages;
+}
+
+add_filter('woocommerce_package_rates', 'oko_addon_rides_along_for_free', 20, 2);
+
+/**
+ * An addition pays no second freight.
+ *
+ * The goods go in the box already booked, so there is nothing to charge for.
+ * Only our own methods are zeroed: another shipping method on the same
+ * checkout is somebody else's price, and a plugin that quietly made it free
+ * would be taking money out of the shop's till.
+ *
+ * @param array<string,\WC_Shipping_Rate> $rates   The rates on offer.
+ * @param array<string,mixed>             $package The package (unused).
+ * @return array<string,\WC_Shipping_Rate>
+ */
+function oko_addon_rides_along_for_free(array $rates, array $package): array
+{
+	if (oko_addon_in_checkout()['order'] === null) {
+		return $rates;
+	}
+
+	foreach ($rates as $rate) {
+		if ($rate instanceof \WC_Shipping_Rate && strpos($rate->get_method_id(), 'hey_okoskabet_') === 0) {
+			$rate->set_cost(0);
+			$rate->set_taxes(array());
+		}
+	}
+
+	return $rates;
+}
+
+add_action('woocommerce_review_order_before_shipping', 'oko_addon_say_if_it_is_too_late');
+
+/**
+ * Tell the customer when the earlier order can no longer take anything.
+ *
+ * Said where the freight is about to be charged, because that is the thing
+ * that changes: the order still goes through, with its own delivery and the
+ * shop's ordinary price. Silence here would be a customer expecting a free
+ * ride and finding a second delivery charge after paying.
+ */
+function oko_addon_say_if_it_is_too_late(): void
+{
+	$answer = oko_addon_in_checkout();
+	if ($answer['order'] !== null || $answer['reason'] === '') {
+		return;
+	}
+
+	// Not before there is an email to check against. The email field comes
+	// after the address in the form, so a customer who fills the order number
+	// first would otherwise be told their own order number is not recognised,
+	// for as long as it takes them to reach the field below.
+	if ($answer['reason'] === 'unknown' && oko_addon_email_in_checkout() === '') {
+		return;
+	}
+
+	// "Already sent" is not always true — the order may be cancelled, or past
+	// the day's cutoff — and a shop should not tell a customer something that
+	// is not so. What they need is the same either way: it cannot take more.
+	$message = $answer['reason'] === 'too_late'
+		? __('That order can no longer take anything more. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN)
+		: __('We cannot find that order number on your email address. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN);
+
+	echo '<tr class="okoskabet-addon-notice"><td colspan="2">' . esc_html($message) . '</td></tr>';
+}
+
+add_action('woocommerce_checkout_create_order', 'oko_addon_inherits_the_delivery', 25, 2);
+
+/**
+ * An addition is delivered with the order it belongs to, not on its own.
+ *
+ * The customer chose the day, the shed and the pickup point once already; the
+ * addition rides in that same box, so asking again could only produce a second
+ * answer that cannot be honoured. Copied onto the order rather than looked up
+ * later, so the order says for itself what was agreed.
+ *
+ * @param \WC_Order           $order The order being created.
+ * @param array<string,mixed> $data  Posted checkout data (unused).
+ */
+function oko_addon_inherits_the_delivery($order, $data): void
+{
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	// Only when Økoskabet is carrying it. A customer who types the earlier
+	// order's number and then picks the shop's own courier pays that
+	// courier's freight; putting the goods on our delivery as well would send
+	// them twice, or send them with the wrong one.
+	if (! oko_order_is_ours($order)) {
+		return;
+	}
+
+	$parent = oko_addon_in_checkout()['order'];
+	if (! $parent instanceof \WC_Order) {
+		return;
+	}
+
+	// The id, and only the id. A shop with a numbering plugin prints "#1042"
+	// where the id is something else, and the goods are looked up again by
+	// this value when the addition is sent — an absint() of the printed number
+	// would find the wrong order, or none, and the whole shipment would be
+	// rewritten with only the addition's goods on it. The number the notes
+	// show is read off the order the id finds, so the two can never disagree
+	// about which order this belongs to.
+	$order->update_meta_data(OKO_ADDON_PARENT_ID_META, (string) $parent->get_id());
+
+	foreach (array(
+		'_billing_okoskabet_delivery_date',
+		'_billing_okoskabet_shed_id',
+		'_billing_okoskabet_pickup_location_id',
+	) as $key) {
+		$order->update_meta_data($key, (string) $parent->get_meta($key, true));
+	}
+}
+
+/** The earlier order's id, written on the addition once it is settled. */
+const OKO_ADDON_PARENT_ID_META = '_okoskabet_addon_of_id';
+
+/** The additions an order already carries, in the order they were added. */
+const OKO_ADDITIONS_META = '_okoskabet_additions';
+
+/**
+ * The ids of the additions an order carries, as ids.
+ *
+ * Read in four places, three of which cast and one of which did not. One
+ * reader so they cannot disagree about the shape.
+ *
+ * @param \WC_Order $parent
+ * @return array<int,int>
+ */
+function oko_addition_ids(\WC_Order $parent): array
+{
+	return array_values(array_filter(
+		array_map('intval', (array) $parent->get_meta(OKO_ADDITIONS_META, true)),
+		static function (int $id): bool {
+			return $id > 0;
+		}
+	));
+}
+
+/**
+ * The order a shipment reference names, and only that order.
+ *
+ * `wc_get_order()` takes an id; a reference is the number the shop prints.
+ * A numbering plugin makes those two different values — id 5500 printing as
+ * 1042 — so the number is looked up and then checked against what the order
+ * found actually prints. Without the check a reference lands on a stranger's
+ * order: their address rewritten, their order noted on.
+ *
+ * @param string $reference The shipment reference.
+ * @param bool   $remember  Whether an order found by its number may be given
+ *                          the reference to keep; see the lookup itself.
+ * @return \WC_Order|null
+ */
+function oko_order_for_reference(string $reference, bool $remember = true): ?\WC_Order
+{
+	// One lookup, in `oko_order_for_shipment_reference()`. This used to read
+	// the reference as an order id and check the number afterwards, which
+	// never hit the wrong order but could not find one at a shop whose
+	// numbering plugin makes id and number differ — Avokadokontoret's, and
+	// their webhooks answered 404 (#52).
+	$found = oko_order_for_shipment_reference($reference, $remember);
+
+	if ($found instanceof \WC_Order) {
+		return $found;
+	}
+
+	// Two orders claim the reference. Both callers here read `null` as "no
+	// such order", which is the right answer — we cannot say which one — but
+	// it is not the same thing as not finding one, and the shop would have no
+	// way to tell the two apart. The webhook answers 409 for this; these
+	// paths say it to the log.
+	if (is_wp_error($found)) {
+		error_log(sprintf(
+			'okoskabet_woocommerce_plugin: reference %s matches more than one order; treated as unknown',
+			$reference
+		));
+	}
+
+	return null;
+}
+
+/**
+ * The additions already on an order, oldest first.
+ *
+ * Kept as a list on the order being added to, written when an addition
+ * actually reaches Økoskabet. A query over the additions' own meta would say
+ * the same thing, but it answers differently depending on order storage and
+ * status, and this is read on the path that rewrites a shipment's whole
+ * contents — it has to be the same answer every time.
+ *
+ * Only additions that got through are in it, so an addition that failed is
+ * never resurrected into a delivery the shop was told had not gone.
+ *
+ * @param \WC_Order $parent The order being added to.
+ * @param \WC_Order $except The addition being sent right now.
+ * @return array<int,\WC_Order>
+ */
+function oko_additions_to($parent, $except): array
+{
+	if (! $parent instanceof \WC_Order) {
+		return array();
+	}
+
+	$except_id = $except instanceof \WC_Order ? $except->get_id() : 0;
+	$ids       = oko_addition_ids($parent);
+
+	$orders = array();
+	foreach ($ids as $id) {
+		if ((int) $id === $except_id) {
+			continue;
+		}
+
+		$order = wc_get_order((int) $id);
+		if ($order instanceof \WC_Order) {
+			$orders[] = $order;
+		}
+	}
+
+	return $orders;
+}
+
+/**
+ * Remember that an addition made it onto the order.
+ *
+ * Written only after Økoskabet has taken it, so the list is what the shipment
+ * actually holds rather than what was attempted.
+ *
+ * @param \WC_Order $parent   The order added to.
+ * @param \WC_Order $addition The addition.
+ */
+function oko_remember_addition($parent, $addition): void
+{
+	if (! $parent instanceof \WC_Order || ! $addition instanceof \WC_Order) {
+		return;
+	}
+
+	$ids = oko_addition_ids($parent);
+	if (in_array($addition->get_id(), $ids, true)) {
+		return;
+	}
+
+	$ids[] = $addition->get_id();
+	$parent->update_meta_data(OKO_ADDITIONS_META, $ids);
+	$parent->save();
+}
+
+/**
+ * And forget it again, once its goods are off the shipment.
+ *
+ * @param \WC_Order $parent   The order added to.
+ * @param \WC_Order $addition The addition.
+ */
+function oko_forget_addition($parent, $addition): void
+{
+	if (! $parent instanceof \WC_Order || ! $addition instanceof \WC_Order) {
+		return;
+	}
+
+	$ids = array_values(array_diff(oko_addition_ids($parent), array($addition->get_id())));
+
+	$parent->update_meta_data(OKO_ADDITIONS_META, $ids);
+	$parent->save();
+}
+
+/**
+ * An addition's goods, each line named as one.
+ *
+ * A packer who has already picked this order will not pick it again, so the
+ * extra goods have to announce themselves on the line itself — the slip prints
+ * the order's own title, and that is the one thing we decide. The product is
+ * found by its id, so this is what the paper says and nothing more.
+ *
+ * @param \WC_Order $order The addition.
+ * @return array<int,array<string,mixed>>
+ */
+function oko_addition_lines($order, ?array $merchant = null): array
+{
+	if (! $order instanceof \WC_Order) {
+		return array();
+	}
+
+	return array_map(static function (array $line): array {
+		$line['name'] = sprintf(
+			/* translators: %s: the product's name. */
+			__('ADDITION — %s', O_TEXTDOMAIN),
+			$line['name']
+		);
+
+		return $line;
+	}, oko_order_line_items($order, $merchant));
+}
+
+/**
+ * Write the delivery's whole list of goods, and a line saying what changed.
+ *
+ * `PUT /shipments/{reference}` replaces the lines it is given, and no endpoint
+ * answers with the lines a shipment already has — so the whole list goes every
+ * time one of them changes, rebuilt from the WooCommerce orders that make it
+ * up. Nothing else edits a shipment's lines: the backoffice screens only show
+ * them, and the other two writers are the subscription engine and the Shopify
+ * app, neither of which touches a WooCommerce order's shipment.
+ *
+ * The note is read in the same breath and the line added to what is already
+ * there, because a PUT replaces that too and the customer's own message is in
+ * it. The remembered copy is dropped afterwards: what we just wrote is not
+ * what it says any more, and the next addition has to read the note we left.
+ *
+ * @param \WC_Order            $parent    The order holding the delivery.
+ * @param array<int,\WC_Order> $additions Its additions, oldest first.
+ * @param array<string,mixed>  $merchant  The merchant record.
+ * @param string               $note_line What the packing room is told.
+ * @return int The HTTP status, or 0 when nothing could be sent at all.
+ */
+function oko_write_shipment_contents(\WC_Order $parent, array $additions, array $merchant, string $note_line): int
+{
+	// What Økoskabet booked it under, which is not always its number: a shop
+	// with a numbering plugin has two, and only one of them is ours (#52).
+	$reference = oko_shipment_reference($parent);
+
+	$body = array('line_items' => oko_lines_for($parent, $additions, $merchant));
+
+	$shipment = oko_shipment_at_okoskabet($reference, $merchant);
+	if ($shipment !== null) {
+		$notes         = (string) ($shipment['notes'] ?? '');
+		$body['notes'] = $notes !== '' ? $notes . "\n" . $note_line : $note_line;
+	}
+
+	$encoded = wp_json_encode($body);
+	if ($encoded === false) {
+		return 0;
+	}
+
+	$response = oko_api_request($merchant, 'PUT', '/api/v1/shipments/' . rawurlencode($reference), $encoded);
+
+	oko_forget_shipment($reference, $merchant);
+
+	return is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+}
+
+/**
+ * Take a cancelled addition's goods off the delivery they rode along with.
+ *
+ * The list is sent again without it. Only then is it dropped from the order's
+ * own list — a write that did not get through leaves the goods where they are,
+ * and the shop should see that rather than a record saying they are gone.
+ *
+ * @param \WC_Order           $order     The cancelled addition.
+ * @param int                 $parent_id The order it rode along with.
+ * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
+ *                                       order's, and so is the account it is
+ *                                       written under. Kept for the callers.
+ */
+function oko_take_addition_off_its_order($order, int $parent_id, array $merchant): void
+{
+	$parent = wc_get_order($parent_id);
+	if (! $order instanceof \WC_Order || ! $parent instanceof \WC_Order) {
+		return;
+	}
+
+	// The shipment is the earlier order's, so it is written under that
+	// order's account — see oko_send_addition_to_its_order().
+	$merchant = oko_merchant_for_order($parent);
+
+	// An addition the order never took is nothing to take off it. That is a
+	// cancellation of an order Økoskabet was never told about — writing the
+	// shipment again would be a call that changes nothing, and a note saying
+	// goods were removed that were never there.
+	if (! in_array($order->get_id(), oko_addition_ids($parent), true)) {
+		return;
+	}
+
+	$reference = oko_shipment_reference($parent);
+	$code      = oko_write_shipment_contents(
+		$parent,
+		oko_additions_to($parent, $order),
+		$merchant,
+		sprintf(
+			/* translators: %s: the cancelled addition's order number. */
+			__('ADDITION: order %s was cancelled. Its goods have been taken off the list.', O_TEXTDOMAIN),
+			$order->get_order_number()
+		)
+	);
+
+	if ($code !== 200) {
+		$order->add_order_note(sprintf(
+			/* translators: 1: the order the addition rode along with, 2: the HTTP status or 0 when unreachable. */
+			__('The goods could not be taken off order %1$s (%2$s). They may still be on that delivery.', O_TEXTDOMAIN),
+			$reference,
+			(string) $code
+		));
+		return;
+	}
+
+	oko_forget_addition($parent, $order);
+
+	$order->add_order_note(sprintf(
+		/* translators: %s: the order the addition rode along with. */
+		__('The goods were taken off order %s.', O_TEXTDOMAIN),
+		$reference
+	));
+}
+
+/**
+ * Put an addition's goods on the shipment they ride along with.
+ *
+ * A refusal leaves the WooCommerce order alone and unmarked, so the shop sees
+ * an order that did not reach Økoskabet rather than one that silently did not
+ * get its goods. The note says which order was meant.
+ *
+ * @param \WC_Order           $order     The addition.
+ * @param int                 $parent_id The earlier order's WooCommerce id.
+ * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
+ *                                       order's, and so is the account it is
+ *                                       written under. Kept for the callers.
+ */
+function oko_send_addition_to_its_order($order, int $parent_id, array $merchant): void
+{
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	// The earlier order's goods have to be sent again with the addition's: a
+	// PUT replaces the shipment's lines, so a list that is missing them would
+	// delete them. If that order cannot be read, nothing is sent at all —
+	// better an order the shop can see did not go through than a delivery
+	// quietly emptied of what the customer first bought.
+	//
+	// By id, never by the number the customer typed. A shop with a numbering
+	// plugin prints "#1042" where the id is something else entirely, and an
+	// absint() of the printed number would find a stranger's order — whose
+	// goods would then be the whole of this shipment.
+	$parent = wc_get_order($parent_id);
+	if (! $parent instanceof \WC_Order) {
+		$order->add_order_note(sprintf(
+			/* translators: %s: the earlier order's id. */
+			__('Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
+			(string) $parent_id
+		));
+		return;
+	}
+
+	$reference = oko_shipment_reference($parent);
+
+	// Under the earlier order's account, not this one's. The shipment being
+	// written is the earlier order's, and the addition's own basket can route
+	// to another merchant: its key then asked an account that has no such
+	// shipment, and the customer had been charged no freight for goods that
+	// were never booked.
+	$merchant = oko_merchant_for_order($parent);
+
+	// Asked again here, not only in the checkout. A bank transfer is marked
+	// paid days after it was ordered, and by then the delivery may have left
+	// the merchant — the customer would have been charged no freight for goods
+	// with nothing left to ride along with.
+	$delivery_date = (string) $parent->get_meta('_billing_okoskabet_delivery_date', true);
+	if ($delivery_date === '' || ! oko_order_can_still_take_more($parent, $delivery_date)) {
+		$order->add_order_note(sprintf(
+			/* translators: %s: the earlier order's number. */
+			__('Order %s can no longer take anything more, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
+			$reference
+		));
+		return;
+	}
+
+	// Every addition this order has, not only the one being sent. A PUT
+	// replaces the lines, so building the list from the parent and this
+	// addition alone deleted the goods of any addition before it — a customer
+	// who adds twice to the same Christmas delivery paid for the first lot and
+	// would never have received it.
+	$additions   = oko_additions_to($parent, $order);
+	$additions[] = $order;
+
+	$code = oko_write_shipment_contents($parent, $additions, $merchant, sprintf(
+		/* translators: 1: the addition's order number, 2: the date it was placed. */
+		__('ADDITION: order %1$s was added %2$s. Its goods are at the bottom of the list.', O_TEXTDOMAIN),
+		$order->get_order_number(),
+		date_i18n((string) get_option('date_format'))
+	));
+
+	if ($code !== 200) {
+		$order->add_order_note(sprintf(
+			/* translators: 1: the earlier order's number, 2: the HTTP status or 0 when unreachable. */
+			__('The goods could not be added to order %1$s (%2$s). Økoskabet has not been told about this order.', O_TEXTDOMAIN),
+			$reference,
+			(string) $code
+		));
+		return;
+	}
+
+	oko_remember_addition($parent, $order);
+
+	$order->update_meta_data('billing_okoskabet_done', 'yes');
+	$order->add_order_note(sprintf(
+		/* translators: %s: the earlier order's number. */
+		__('The goods were added to order %s. No separate delivery.', O_TEXTDOMAIN),
+		$reference
+	));
+	$order->save();
+}
+
+/**
+ * The shipment in an answer from Økoskabet, whichever way it is wrapped.
+ *
+ * `GET /shipments/{reference}` answers with the shipment itself, while `POST`
+ * and `PUT` answer with it under `shipment` beside the errors. Reading only the
+ * wrapped shape made every `GET` look like a shipment with no status at all —
+ * which, on an addition, read as "that order has already been sent" and
+ * refused every one of them.
+ *
+ * @param string $body The response body.
+ * @return array<string,mixed>|null The shipment, or null when there is none.
+ */
+function oko_shipment_from_body(string $body): ?array
+{
+	$decoded = json_decode($body, true);
+	if (! is_array($decoded)) {
+		return null;
+	}
+
+	if (isset($decoded['shipment']) && is_array($decoded['shipment'])) {
+		return $decoded['shipment'];
+	}
+
+	return isset($decoded['shipment_reference']) ? $decoded : null;
+}
+
+/** The key the shipment is remembered under, and the way to forget it. */
+function oko_shipment_transient_key(string $reference, array $merchant): string
+{
+	return O_TEXTDOMAIN . '_shipment_' . md5(((string) ($merchant['id'] ?? '')) . '|' . $reference);
+}
+
+/** Forget a remembered shipment, when we know it has changed. */
+function oko_forget_shipment(string $reference, array $merchant): void
+{
+	delete_transient(oko_shipment_transient_key($reference, $merchant));
+}
+
+/**
+ * The shipment as Økoskabet has it, asked once.
+ *
+ * Both the status and the note are read from it, and a checkout that
+ * recalculates asks again on every keystroke once an order number is in the
+ * field — so the answer is held for a minute. A minute is short enough that a
+ * delivery leaving the merchant is noticed while the customer is still
+ * filling the form, and long enough that typing an address does not cost a
+ * round trip a letter.
+ *
+ * `null` says we could not ask. The callers then refuse rather than guess.
+ *
+ * @param string              $reference The shipment reference.
+ * @param array<string,mixed> $merchant  The merchant record.
+ * @return array<string,mixed>|null
+ */
+function oko_shipment_at_okoskabet(string $reference, array $merchant): ?array
+{
+	$key    = oko_shipment_transient_key($reference, $merchant);
+	$cached = get_transient($key);
+	if (is_array($cached)) {
+		return isset($cached[OKO_NO_ANSWER]) ? null : $cached;
+	}
+
+	$response = oko_api_request($merchant, 'GET', '/api/v1/shipments/' . rawurlencode($reference), null, 10);
+
+	$shipment = is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200
+		? null
+		: oko_shipment_from_body(wp_remote_retrieve_body($response));
+
+	// A no is remembered as well, and that is the half of this that the
+	// customer feels. Only a good answer used to be kept, so an Økoskabet that
+	// was down — or a number that is nobody's shipment, which is most of what
+	// gets typed into that field — cost a fresh ten-second wait on every
+	// recalculation, and the checkout recalculates as the customer types. Half
+	// a minute is short enough that an order being created right now is found
+	// while they are still filling in the form.
+	set_transient(
+		$key,
+		$shipment ?? array(OKO_NO_ANSWER => true),
+		$shipment === null ? 30 : MINUTE_IN_SECONDS
+	);
+
+	return $shipment;
+}
+
+/** Marks a remembered "we asked and got nothing", as against a shipment. */
+const OKO_NO_ANSWER = 'oko_no_answer';
+
+/**
+ * The second address line for the delivery, wherever the customer wrote it.
+ *
+ * The shipping address first, as it should be. But a shop whose checkout has
+ * no second shipping line never gets one: WooCommerce copies billing to
+ * shipping only for the fields the shipping form has, so the floor sits on the
+ * invoice address and the delivery address goes to the register without it —
+ * which is what it refuses a block of flats for.
+ *
+ * The fallback only applies when the two addresses are the same street, which
+ * is the case it was written for: one address, written once, and only the
+ * invoice form had somewhere to put the floor. An order sent somewhere else
+ * is a different building, and its own second line is the only one that
+ * belongs to it — carrying "2. sal" from the invoice address to a workplace
+ * across town is a flat that does not exist there, which the register
+ * refuses, or worse one that does.
+ *
+ * @param \WC_Order $order The order.
+ * @return string
+ */
+function oko_second_address_line($order): string
+{
+	if (! $order instanceof \WC_Order) {
+		return '';
+	}
+
+	$shipping = trim((string) $order->get_shipping_address_2());
+	if ($shipping !== '') {
+		return $shipping;
+	}
+
+	// Not once Økoskabet has given us the delivery. The fallback exists for a
+	// checkout with no second shipping line, where the flat is only in the
+	// billing address — and it must not outlive the moment somebody corrected
+	// the delivery by hand. A backoffice that takes the flat off a delivery
+	// clears the shipping line, and without this the customer's old billing
+	// flat walked straight back into the next payload: written into the
+	// record of what Økoskabet accepted, so the two ends disagreed about the
+	// address with nothing to say so, and the shop's next address edit sent
+	// the flat back over the correction.
+	if (! empty($order->get_meta(OKO_ADDRESS_FROM_OKOSKABET_META, true))) {
+		return '';
+	}
+
+	$same_address = oko_same_line($order->get_shipping_address_1(), $order->get_billing_address_1())
+		&& oko_same_line($order->get_shipping_postcode(), $order->get_billing_postcode());
+
+	return $same_address ? trim((string) $order->get_billing_address_2()) : '';
+}
+
+/**
+ * Meta marking a delivery address that came from Økoskabet's own backoffice.
+ *
+ * What it switches off is the billing fallback in `oko_second_address_line()`,
+ * and nothing else: an address somebody corrected by hand is the address, and
+ * what the customer typed in another field months ago is not a second opinion.
+ */
+const OKO_ADDRESS_FROM_OKOSKABET_META = '_okoskabet_address_written_back';
+
+/** Two written forms of one line, give or take case and spacing. */
+function oko_same_line(string $one, string $other): bool
+{
+	$tidy = static function (string $value): string {
+		return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $value) ?? ''));
+	};
+
+	return $tidy($one) === $tidy($other);
+}
+
+/**
+ * The Økoskabet account an order belongs to.
+ *
+ * The same resolution the order itself was sent with — the stamp written at
+ * checkout first, the order's own items after it — so an addition is weighed
+ * against the account that holds the delivery, not whichever one happens to be
+ * the default.
+ *
+ * @param \WC_Order $order The order.
+ * @return array<string,mixed> The merchant record, or an empty array.
+ */
+function oko_merchant_for_order($order): array
+{
+	$merchant = array();
+
+	if ($order instanceof \WC_Order
+		&& class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
+		$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_order($order);
+		$merchant = (array) ($resolved['merchant'] ?? array());
+	}
+
+	// The router answers nothing for an order whose items name no account, and
+	// the default one is what such an order is sent under. Answering "no
+	// account" instead would refuse every addition for a shop with one account
+	// and no routing rules — which is most of them.
+	//
+	// The record is handed back even without a key, so a caller that logs a
+	// missing key can say whose. Callers test the key, not the array.
+	//
+	// Only "no account" falls back, never "an account without a key". An
+	// order routed to a merchant whose key is not filled in yet is that
+	// merchant's order; sending it under the default account's key booked it
+	// in somebody else's packing room. 1.5.2 logged it and left it, and so
+	// does this.
+	return $merchant === array() ? o_get_merchant() : $merchant;
+}
+
+/**
+ * Whether an order can still have goods added to it.
+ *
+ * Two bounds, and Økoskabet publishes both. The cutoff — `order_cutoff` in
+ * `/configuration`, the same one the date endpoints apply — says when ordering
+ * for that delivery day closes; past it the merchant is already picking. And
+ * the shipment's own status says whether it has left them, whatever the clock
+ * says, because a day that has not closed is no help once the box is gone.
+ *
+ * Unreachable means no. The alternative is promising a free ride on a delivery
+ * we cannot see, and the customer pays for that with goods that never arrive.
+ *
+ * @param \WC_Order $order         The earlier order.
+ * @param string    $delivery_date Its delivery date, `Y-m-d`.
+ * @return bool
+ */
+function oko_order_can_still_take_more($order, string $delivery_date): bool
+{
+	if (! $order instanceof \WC_Order) {
+		return false;
+	}
+
+	$merchant = oko_merchant_for_order($order);
+	if (empty($merchant['api_key'])) {
+		return false;
+	}
+
+	if (! oko_before_cutoff_for($delivery_date, $merchant)) {
+		return false;
+	}
+
+	return oko_shipment_still_with_merchant($order, $merchant);
+}
+
+/**
+ * Whether the shop is still taking orders for a delivery day.
+ *
+ * `order_cutoff` is a time of day and a number of days before delivery. The
+ * last moment is that many days before the delivery date, at that time, in
+ * Økoskabet's own time zone — which is the one that moves with daylight
+ * saving, so the hour is read there rather than converted.
+ *
+ * A configuration we could not fetch, or one with no cutoff set, answers no:
+ * this decides whether to promise free delivery, and a guess in the customer's
+ * favour is a guess the packing room pays for.
+ *
+ * @param string               $delivery_date `Y-m-d`.
+ * @param array<string,mixed>  $merchant      The merchant record.
+ * @return bool
+ */
+function oko_before_cutoff_for(string $delivery_date, array $merchant): bool
+{
+	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
+	$cutoff        = (array) ($configuration['order_cutoff'] ?? array());
+
+	$time = (string) ($cutoff['time'] ?? '');
+	$days = $cutoff['days_before_delivery'] ?? null;
+	if ($time === '' || $days === null) {
+		return false;
+	}
+
+	try {
+		$zone = new \DateTimeZone((string) ($cutoff['time_zone'] ?? 'Europe/Copenhagen'));
+		$last = new \DateTimeImmutable($delivery_date . ' ' . $time, $zone);
+		$last = $last->modify('-' . (int) $days . ' days');
+
+		return new \DateTimeImmutable('now', $zone) < $last;
+	} catch (\Exception $e) {
+		return false;
+	}
+}
+
+/**
+ * Whether the merchant still has the shipment, as Økoskabet sees it.
+ *
+ * Anything past `registered` has been handled — scanned, packed, on its way —
+ * and nothing can be added to it any more. A shipment Økoskabet does not know
+ * is one that never arrived, and that cannot be ridden along with either.
+ *
+ * @param \WC_Order           $order    The earlier order.
+ * @param array<string,mixed> $merchant The merchant record.
+ * @return bool
+ */
+function oko_shipment_still_with_merchant($order, array $merchant): bool
+{
+	if (! $order instanceof \WC_Order || empty($merchant['api_key'])) {
+		return false;
+	}
+
+	$shipment = oko_shipment_at_okoskabet(oko_shipment_reference($order), $merchant);
+
+	return $shipment !== null && (string) ($shipment['status'] ?? '') === 'registered';
+}
 
 /**
  * Whether the customer is placing a pre-order, as the checkout form says:
@@ -1780,17 +2950,7 @@ add_filter('woocommerce_checkout_get_value', 'oko_checkout_starts_without_last_o
  */
 function oko_is_pre_order_checkout(): bool
 {
-	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
-	if (isset($_POST['billing_okoskabet_pre_order'])) {
-		return (string) wp_unslash($_POST['billing_okoskabet_pre_order']) === '1';
-	}
-	if (isset($_POST['post_data']) && is_string($_POST['post_data'])) {
-		$fields = array();
-		parse_str(wp_unslash($_POST['post_data']), $fields);
-		return (string) ($fields['billing_okoskabet_pre_order'] ?? '') === '1';
-	}
-	// phpcs:enable WordPress.Security.NonceVerification
-	return false;
+	return oko_posted_checkout_field('billing_okoskabet_pre_order') === '1';
 }
 
 /**
@@ -1876,13 +3036,7 @@ function oko_cart_can_pre_order(): bool
 		return false;
 	}
 
-	$product_ids = array();
-	foreach (WC()->cart->get_cart() as $item) {
-		$pid = (int) ($item['product_id'] ?? 0);
-		if ($pid > 0) {
-			$product_ids[] = $pid;
-		}
-	}
+	$product_ids = oko_cart_product_ids();
 
 	return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days($product_ids);
 }
@@ -1897,13 +3051,7 @@ function oko_cart_is_pre_order_only(): bool
 		return false;
 	}
 
-	$product_ids = array();
-	foreach (WC()->cart->get_cart() as $item) {
-		$pid = (int) ($item['product_id'] ?? 0);
-		if ($pid > 0) {
-			$product_ids[] = $pid;
-		}
-	}
+	$product_ids = oko_cart_product_ids();
 
 	return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_is_pre_order_only($product_ids);
 }
@@ -1944,13 +3092,7 @@ function oko_pre_order_cart_has_date(): ?bool
 		$postcode = trim((string) WC()->customer->get_billing_postcode());
 	}
 
-	$product_ids = array();
-	foreach (WC()->cart->get_cart() as $item) {
-		$pid = (int) ($item['product_id'] ?? 0);
-		if ($pid > 0) {
-			$product_ids[] = $pid;
-		}
-	}
+	$product_ids = oko_cart_product_ids();
 	if (empty($product_ids)) {
 		return null;
 	}
@@ -2021,18 +3163,7 @@ function oko_cart_product_ids(): array
  */
 function oko_posted_delivery_date(): string
 {
-	// phpcs:disable WordPress.Security.NonceVerification -- read-only; WooCommerce verifies the checkout.
-	if (isset($_POST['billing_okoskabet_delivery_date'])) {
-		return sanitize_text_field((string) wp_unslash($_POST['billing_okoskabet_delivery_date']));
-	}
-	if (isset($_POST['post_data']) && is_string($_POST['post_data'])) {
-		$fields = array();
-		parse_str(wp_unslash($_POST['post_data']), $fields);
-		return sanitize_text_field((string) ($fields['billing_okoskabet_delivery_date'] ?? ''));
-	}
-	// phpcs:enable WordPress.Security.NonceVerification
-
-	return '';
+	return sanitize_text_field(oko_posted_checkout_field('billing_okoskabet_delivery_date'));
 }
 
 /**
@@ -2057,6 +3188,13 @@ function oko_checkout_starts_without_last_orders_choice($value, $input)
 		'billing_okoskabet_shed_id',
 		'billing_okoskabet_pickup_location_id',
 		'billing_okoskabet_pre_order',
+		// Which order an addition belongs to, in either shop's field. Left to
+		// come back, the next ordinary order opens with the last one's number
+		// still in it — and rides along with a delivery the customer never
+		// meant to add to, for no freight. Seen on Gaardmester's staging: a
+		// fresh checkout opened with 87893 already there.
+		'billing_order_id',
+		'billing_okoskabet_addon_order',
 	);
 	// A pre-order the customer asked for on this page is not a leftover. The
 	// field has to say so, or the banner would render as a pre-order while the
@@ -2071,6 +3209,37 @@ function oko_checkout_starts_without_last_orders_choice($value, $input)
 	}
 	return $value;
 }
+
+/**
+ * The order this one is an addition to, as the customer wrote it.
+ *
+ * A shop's own field first — gaardmester.dk has `billing_order_id`, labelled
+ * "Tillægsordre: Udfyld dit tidligere ordre-id her" — and our own field for the
+ * shops without one. Whatever the customer typed, unchanged: it is their word
+ * for which order this belongs to, and it is shown to a person, never resolved
+ * into anything on its own.
+ *
+ * @param \WC_Order $order Order to read.
+ * @return string The earlier order's number, or an empty string.
+ */
+function oko_order_addon_of($order): string
+{
+	if (! $order instanceof \WC_Order) {
+		return '';
+	}
+
+	// The same two fields the checkout asks in, as WooCommerce stores them.
+	foreach (OKO_ADDON_FIELDS as $field) {
+		$key = '_' . $field;
+		$value = trim((string) $order->get_meta($key, true));
+		if ($value !== '') {
+			return $value;
+		}
+	}
+
+	return '';
+}
+
 
 function custom_override_checkout_fields(array $fields): array
 {
@@ -2114,6 +3283,64 @@ function custom_override_checkout_fields(array $fields): array
 		'clear'       => true,
 	);
 
+	// Which order this one is an addition to. Gaardmester asks for it already,
+	// in a field of their own; this is for the shops that do not, so the
+	// question is asked the same way everywhere.
+	if (!isset($fields['billing']['billing_order_id'])) {
+		$fields['billing']['billing_okoskabet_addon_order'] = array(
+			'label'       => __('Adding to an earlier order? Write its order number here', O_TEXTDOMAIN),
+			'placeholder' => '',
+			'required'    => false,
+			'class'       => array('okoskabet-addon-order', 'form-row-wide'),
+			'clear'       => true,
+		);
+	}
+
+	// WooCommerce's own second address line, put back for a shop that has
+	// taken it away and asked us for it. The register refuses a block of flats
+	// given without a floor ("Etage findes ikke på adresse på husnummer"), and
+	// the order lands among the unprocessable ones.
+	//
+	// Off unless the shop turns it on, because there is a second way the floor
+	// arrives and it is already working: a customer with nowhere else to put
+	// it writes it on the street line — "Byagervej 194, 1. tv" — and
+	// Økoskabet's address client lifts the unit out of that line itself.
+	// gaardmester.dk delivers to blocks of flats that way today, with no
+	// second address line in their checkout at all. Handing such a shop one
+	// repairs nothing and adds a way to go wrong: a customer who writes the
+	// floor in both places sends "Byagervej 194, 1. tv, 1. tv", and the
+	// register refuses that outright.
+	//
+	// The shop's own field rather than one of ours, so there is one second
+	// address line and not two ideas of one: `get_shipping_address_2()` stays
+	// the only place it is read from, WooCommerce copies it to the shipping
+	// address by itself, and it is not among the fields our own checkout
+	// script leaves behind when the customer switches order type.
+	if (oko_shop_asks_for_the_floor()) {
+		$second_line = array(
+			'label'        => __('Flat, floor and door', O_TEXTDOMAIN),
+			'placeholder'  => __('e.g. 3. th', O_TEXTDOMAIN),
+			'required'     => false,
+			'class'        => array('form-row-wide'),
+			'autocomplete' => 'address-line2',
+			// Straight after the street, where WooCommerce itself puts it: the
+			// billing form is ordered by priority and the address is 50.
+			'priority'     => 55,
+		);
+
+		// Both forms, not only the billing one. WooCommerce copies billing to
+		// shipping for the fields the shipping form has, so a shop that removed it
+		// from both — gaardmester.dk does — would carry the floor on the invoice
+		// and nowhere else, and the delivery address would reach the register
+		// without it again. Measured on their staging: billing "3 th", shipping
+		// empty, and the order refused.
+		foreach (array('billing', 'shipping') as $form) {
+			if (isset($fields[$form]) && ! isset($fields[$form][$form . '_address_2'])) {
+				$fields[$form][$form . '_address_2'] = $second_line;
+			}
+		}
+	}
+
 	// "1" while the customer is placing a pre-order. Kept in the billing form
 	// rather than the order review, which WooCommerce rebuilds on every
 	// recalculation and would forget it in.
@@ -2124,6 +3351,24 @@ function custom_override_checkout_fields(array $fields): array
 		'class'       => array('okoskabet-pre-order form-row-wide'),
 		'clear'       => true,
 	);
+
+
+	// Filling this in has to recalculate the freight, whosever field it is.
+	// WooCommerce listens on `.update_totals_on_change input.input-text`, so
+	// the class belongs on the row around the field — measured in its own
+	// checkout.min.js. Without it a customer typed the order number, saw the
+	// full freight, and was charged the free one at submit.
+	foreach (OKO_ADDON_FIELDS as $field) {
+		if (! isset($fields['billing'][$field])) {
+			continue;
+		}
+
+		$classes = (array) ($fields['billing'][$field]['class'] ?? array());
+		if (! in_array('update_totals_on_change', $classes, true)) {
+			$classes[] = 'update_totals_on_change';
+		}
+		$fields['billing'][$field]['class'] = $classes;
+	}
 
 	return $fields;
 }
@@ -2137,6 +3382,7 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 	$delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
 	$delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
 	$pickup_location_id = $order->get_meta('_billing_okoskabet_pickup_location_id', true);
+	$delivery_location_source = $order->get_meta('_billing_okoskabet_delivery_location_source', true);
 
 	// Resolve the merchant that fulfilled the order. `resolve_for_order`
 	// prefers the stored stamp written at checkout, and only falls back
@@ -2181,7 +3427,13 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 		echo esc_html__('Økoskabet Delivery location', O_TEXTDOMAIN) . ': ' . esc_html($delivery_location) . "\n";
 	}
 	if (!empty($delivery_note)) {
-		echo esc_html__('Note to driver', O_TEXTDOMAIN) . ': ' . esc_html($delivery_note);
+		echo esc_html__('Note to driver', O_TEXTDOMAIN) . ': ' . esc_html($delivery_note) . "\n";
+	}
+	if (!empty($delivery_location_source)) {
+		// Tells us per-order which checkout path produced the location:
+		// dropdown / andet_text / default_fallback. Useful for triaging
+		// the rate at which the JS UI fails to render in the wild.
+		echo esc_html__('Location source', O_TEXTDOMAIN) . ': ' . esc_html($delivery_location_source);
 	}
 	echo '</pre>';
 }
@@ -2212,12 +3464,30 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
  * two apart cannot leave the variation off a label when the shop asks it to.
  * Shopify has always sent them apart; now so do we.
  *
- * @param \WC_Order $order
- * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,variant_title:string|null,sku:string,quantity:int}>
+ * @param \WC_Order           $order
+ * @param array<string,mixed>|null $merchant The account the order is sent
+ *                                           under; resolved from the order
+ *                                           when the caller has none.
+ * @return array<int,array{product_id:int|null,variant_id:int|null,name:string,variant_title:string|null,sku:string,quantity:int,tags:string[],properties:array,image:string}>
  */
-function oko_order_line_items(\WC_Order $order): array
+function oko_order_line_items(\WC_Order $order, ?array $merchant = null): array
 {
 	$lines = array();
+
+	// Handed down rather than resolved again: every caller that builds a
+	// payload already holds the merchant, and `Merchant_Router` walks every
+	// item and resolves the shipping zone for an order the checkout did not
+	// stamp. An order with three additions paid for that four times.
+	$merchant = $merchant ?? oko_merchant_for_order($order);
+
+	// Only in kroner. Økoskabet keeps the figure as an amount and nothing
+	// else — there is no currency beside it — so a shop selling in euros
+	// would have its offers reckoned on numbers read as kroner. Our shops are
+	// Danish; the day one is not, this is the line that has to be thought
+	// about rather than the one that quietly went wrong.
+	$with_totals = oko_shop_sends_line_totals($merchant)
+		&& $order->get_currency() === 'DKK';
+	$with_vat    = wc_prices_include_tax();
 
 	foreach ($order->get_items('line_item') as $item) {
 		// Minus whatever has been refunded. WooCommerce only lets a line be
@@ -2247,6 +3517,9 @@ function oko_order_line_items(\WC_Order $order): array
 		$sku           = '';
 		$name          = (string) $item->get_name();
 		$variant_title = null;
+		$tags          = array();
+		$properties    = array();
+		$image         = '';
 
 		if ($item instanceof \WC_Order_Item_Product) {
 			$product_id = (int) $item->get_product_id();
@@ -2257,6 +3530,23 @@ function oko_order_line_items(\WC_Order $order): array
 			$product = $item->get_product();
 			if ($product instanceof \WC_Product) {
 				$sku = (string) $product->get_sku();
+
+				// What the packing room needs to know about the goods, sent
+				// with the order instead of fetched back afterwards.
+				//
+				// Økoskabet used to ask the shop for this once the packing
+				// room opened the day. That call goes the other way — in to
+				// the shop — and it can be stopped before WordPress ever sees
+				// it, as it is at Gaardmester. Then there is no producer, no
+				// country of origin and no zone to sort the dispatch notes by,
+				// and nothing anywhere says why. Sent on the line it cannot be
+				// stopped: the order is already on its way out.
+				//
+				// Same keys and same shapes as the lookup answers with, so
+				// nothing has to be translated at the other end.
+				$tags       = oko_product_tags($product);
+				$properties = oko_product_properties($product);
+				$image      = oko_product_image_url($product);
 			}
 
 			// A variation line: the goods are the parent product, and what the
@@ -2295,14 +3585,26 @@ function oko_order_line_items(\WC_Order $order): array
 			}
 		}
 
-		$lines[] = array(
+		$line = array(
 			'product_id'    => $product_id > 0 ? $product_id : null,
 			'variant_id'    => $variant_id > 0 ? $variant_id : null,
 			'name'          => $name,
 			'variant_title' => $variant_title,
 			'sku'           => $sku,
 			'quantity'      => $quantity,
+			'tags'          => $tags,
+			'properties'    => $properties,
+			'image'         => $image,
 		);
+
+		// Left out rather than sent empty when the shop is not asked for it:
+		// an update that carries no `total` keeps the one the line already
+		// has, so an absent key is the only way to say nothing about money.
+		if ($with_totals) {
+			$line['total'] = oko_line_total($order, $item, $with_vat);
+		}
+
+		$lines[] = $line;
 	}
 
 	return $lines;
@@ -2378,10 +3680,14 @@ function oko_shipment_reference(\WC_Order $order): string
  * and a lookup that trusted the query would hand back the wrong order without
  * a word.
  *
+ * @param string $reference
+ * @param bool   $remember Whether an order found by its number is given the
+ *                         reference to keep. Only for a caller that is
+ *                         Økoskabet: the checkout asks on behalf of anyone.
  * @return \WC_Order|\WP_Error 404 when no order has the reference, 409 when
  *                             more than one could and there is no telling which.
  */
-function oko_order_for_shipment_reference(string $reference)
+function oko_order_for_shipment_reference(string $reference, bool $remember = true)
 {
 	// Booked since the reference was kept: the order says so itself.
 	$found = $reference === '' ? array() : array_filter(
@@ -2401,6 +3707,11 @@ function oko_order_for_shipment_reference(string $reference)
 				// Booked under some other reference: Økoskabet knows it by that.
 				&& oko_booked_reference($order) === ''
 				&& oko_booked_by_plugin($order)
+				// An addition is marked as sent, but never under a number of
+				// its own: its goods went onto another order's shipment. Found
+				// here, a renumbered shop could have one completed and charged
+				// for some older order's parcel.
+				&& (string) $order->get_meta(OKO_ADDON_PARENT_ID_META, true) === ''
 		);
 	}
 
@@ -2414,7 +3725,7 @@ function oko_order_for_shipment_reference(string $reference)
 	// Found by number: given the reference to keep, so the next webhook finds
 	// it directly, even if the number has changed by then.
 	$order = reset($found);
-	if (oko_booked_reference($order) === '') {
+	if ($remember && oko_booked_reference($order) === '') {
 		oko_keep_booked_reference($order, $reference);
 		$order->save_meta_data();
 	}
@@ -2551,6 +3862,216 @@ function oko_orders_by_ids(array $ids): array
 }
 
 /**
+ * Whether Økoskabet wants the line totals on this shop's orders.
+ *
+ * It says so in its own configuration, and only while the shop uses offers in
+ * the Track&Trace app: a share of what an offer sold is reckoned on what the
+ * lines came to, and a line price is kept for nothing else (Marc, 19 October
+ * 2026 — "priserne må kun bruges, når butikken har sagt ja til
+ * tilbudsdelen"). A shop that has not said yes is not asked for them, and an
+ * Økoskabet that has not heard of the field answers nothing, which reads the
+ * same way: the shop sends no prices until the day it is asked to.
+ *
+ * @param array<string,mixed> $merchant
+ */
+function oko_shop_sends_line_totals(array $merchant): bool
+{
+	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
+
+	return ! empty($configuration['send_line_totals']);
+}
+
+/**
+ * What a line came to, as this shop reports money.
+ *
+ * Økoskabet takes the line in the shop's own money after discounts, with VAT
+ * in it only where the shop's own prices have VAT in them — so the figure is
+ * read the way the shop would read it off the order, not converted into some
+ * convention of ours.
+ *
+ * Minus what has been refunded, for the reason the quantity is: WooCommerce
+ * only lets a line be edited while an order is pending or on hold, so on an
+ * order already sent, refunding is how a shop takes goods off it. The refund
+ * lines carry negative amounts, which is why they are subtracted by adding.
+ *
+ * Walked by hand rather than through `WC_Order::get_total_refunded_for_item()`,
+ * which the quantity above uses its sibling of. That accessor answers the
+ * amount without VAT, and WooCommerce has no sibling that answers the VAT for
+ * an item alone — `get_tax_refunded_for_item()` wants a tax-rate id. Using the
+ * accessor for one half and a walk for the other would read as two refund
+ * conventions in one sum; one walk answers both.
+ *
+ * @param \WC_Order      $order    The order the line belongs to.
+ * @param \WC_Order_Item  $item     The line itself. Untyped in the
+ *                                  signature because the class is
+ *                                  WooCommerce's and not loaded by the
+ *                                  analyser.
+ * @param bool            $with_vat Whether this shop's prices have VAT in
+ *                                  them.
+ * @return float The line in kroner, after discounts and refunds.
+ */
+function oko_line_total(\WC_Order $order, $item, bool $with_vat): float
+{
+	$total = (float) $item->get_total();
+	if ($with_vat) {
+		$total += (float) $item->get_total_tax();
+	}
+
+	$item_id = (int) $item->get_id();
+
+	foreach ($order->get_refunds() as $refund) {
+		foreach ($refund->get_items('line_item') as $refunded) {
+			if ((int) $refunded->get_meta('_refunded_item_id') !== $item_id) {
+				continue;
+			}
+
+			$total += (float) $refunded->get_total();
+			if ($with_vat) {
+				$total += (float) $refunded->get_total_tax();
+			}
+		}
+	}
+
+	return round($total, 2);
+}
+
+/**
+ * The name a delivery is addressed to, as WooCommerce holds it.
+ *
+ * One definition, because the write-back asks "do Økoskabet and the shop
+ * actually disagree about the name" by comparing against this exact string.
+ * Two spellings of it that drift apart — a different separator, one of them
+ * untrimmed — make every webhook rename every order.
+ *
+ * Trimmed for the same reason: a recipient of one word, which the write-back
+ * can produce by splitting "Pernille" into a first name and nothing, would
+ * otherwise be sent with a trailing space and stored that way.
+ */
+function oko_recipient_name(\WC_Order $order): string
+{
+	return trim($order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name());
+}
+
+/**
+ * Whether this shop wants us to ask for the flat, floor and door.
+ *
+ * Off unless the shop says otherwise. A shop whose customers already write
+ * the floor on the street line has nothing to gain from a second field and
+ * something to lose — see where the field is drawn.
+ *
+ * @return bool
+ */
+function oko_shop_asks_for_the_floor(): bool
+{
+	return ! empty(o_get_settings()['_ask_for_floor']);
+}
+
+/**
+ * The shipping methods this plugin puts in a checkout, and the kind of
+ * delivery each one is.
+ *
+ * One list. It was written out three times — here, in the rate filter, and
+ * again as labels on the packaging fee — and a fourth copy is how a method
+ * added later gets left out of one of them.
+ */
+const OKO_SHIPPING_METHOD_KINDS = array(
+	'hey_okoskabet_shipping_shed'         => 'shed',
+	'hey_okoskabet_shipping_home'         => 'home_delivery',
+	'hey_okoskabet_shipping_store_pickup' => 'store_pickup',
+);
+
+/**
+ * Whether Økoskabet is carrying this order.
+ *
+ * The shipping method the customer chose, and nothing else. A shop may sell
+ * with its own couriers beside ours — Gaardmester runs Shipmondo for part of
+ * what they send — and those orders are not ours to forward, whatever else
+ * they carry.
+ *
+ * @param \WC_Order $order
+ * @return bool
+ */
+function oko_order_is_ours(\WC_Order $order): bool
+{
+	foreach ($order->get_shipping_methods() as $shipping_method) {
+		if (isset(OKO_SHIPPING_METHOD_KINDS[$shipping_method->get_method_id()])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * An order's goods, with the goods of every addition riding along with it.
+ *
+ * The same list `oko_write_shipment_contents()` sends, built here for the
+ * paths that send the order on its own: the first POST, and every resend
+ * after an edit in the shop.
+ *
+ * @param \WC_Order $order
+ * @return array<int,array<string,mixed>>
+ */
+function oko_lines_with_additions(\WC_Order $order, ?array $merchant = null): array
+{
+	return oko_lines_for($order, oko_additions_to($order, null), $merchant);
+}
+
+/**
+ * An order's goods followed by the goods of the additions given.
+ *
+ * The one place the list is put together, because it is sent from two: the
+ * order on its own, and the write that puts an addition on it. Two builders
+ * would drift, and a PUT replaces what a shipment contains — the drift would
+ * be goods disappearing off a paid delivery.
+ *
+ * @param \WC_Order            $parent
+ * @param array<int,\WC_Order> $additions Oldest first.
+ * @param array<string,mixed>|null $merchant The parent's account.
+ * @return array<int,array<string,mixed>>
+ */
+function oko_lines_for(\WC_Order $parent, array $additions, ?array $merchant = null): array
+{
+	// The parent's merchant for the additions too: an addition rides on the
+	// parent's delivery, so it is sent under the account that delivery
+	// belongs to.
+	$merchant = $merchant ?? oko_merchant_for_order($parent);
+	$lines    = oko_order_line_items($parent, $merchant);
+
+	foreach ($additions as $addition) {
+		$lines = array_merge($lines, oko_addition_lines($addition, $merchant));
+	}
+
+	return $lines;
+}
+
+/**
+ * The note for the driver: where to leave it, and what the customer wrote.
+ *
+ * Always in English: the dropdown stores its English label, and the free text
+ * follows it.
+ *
+ * @param \WC_Order $order
+ */
+function oko_logistics_note(\WC_Order $order): string
+{
+	// _billing_okoskabet_delivery_location stores the English label (from dropdown).
+	$order_delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
+	// _billing_okoskabet_delivery_note stores the free-text note from the customer.
+	$order_delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+
+	$logistics_note_parts = array();
+	if (!empty($order_delivery_location)) {
+		$logistics_note_parts[] = $order_delivery_location; // Already stored in English.
+	}
+	if (!empty($order_delivery_note)) {
+		$logistics_note_parts[] = $order_delivery_note;
+	}
+
+	return implode(' — ', $logistics_note_parts);
+}
+
+/**
  * Everything Økoskabet is told about an order, in one place.
  *
  * Built once and used twice — when the order is first sent, and again when it
@@ -2559,32 +4080,34 @@ function oko_orders_by_ids(array $ids): array
  *
  * @param \WC_Order $order
  * @param array     $merchant The merchant this order routes to.
- * @return array|null Null when the order carries no delivery date, which means
- *                    it is not an Økoskabet order at all.
+ * @return array|null Null when the order is none of ours — no delivery date
+ *                    and none of our shipping methods.
  */
 function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 {
 	$order_shed = $order->get_meta('_billing_okoskabet_shed_id', true);
 	$order_delivery_date = $order->get_meta('_billing_okoskabet_delivery_date', true);
-	// _billing_okoskabet_delivery_location stores the English label (from dropdown).
-	$order_delivery_location = $order->get_meta('_billing_okoskabet_delivery_location', true);
-	// _billing_okoskabet_delivery_note stores the free-text note from the customer.
-	$order_delivery_note = $order->get_meta('_billing_okoskabet_delivery_note', true);
+	$logistics_note = oko_logistics_note($order);
 
-	// Build the logistics note sent to Økoskabet's API.
-	// Always in English: combine dropdown selection and free-text note.
-	$logistics_note_parts = array();
-	if (!empty($order_delivery_location)) {
-		$logistics_note_parts[] = $order_delivery_location; // Already stored in English.
-	}
-	if (!empty($order_delivery_note)) {
-		$logistics_note_parts[] = $order_delivery_note;
-	}
-	$logistics_note = implode(' — ', $logistics_note_parts);
-
-	// No date means this is not an Økoskabet order — unless it was placed
-	// without one on purpose, to be given a date by hand.
-	$without_date = empty($order_delivery_date) && $order->get_meta(OKO_WITHOUT_DATE_META, true) === 'yes';
+	// A missing date is not the same as "not our order".
+	//
+	// An order that carries one of our shipping methods is ours whatever else
+	// is missing, and it goes to Økoskabet without a date — where it lands
+	// among the unprocessable shipments and is given one by hand. It used to
+	// be dropped here instead, and that drop was completely silent: no note on
+	// the order, no line in the log, nothing at Økoskabet. Gaardmester's order
+	// 88587 of 17 October 2026 went that way, and it was found because the
+	// customer asked where the food was.
+	//
+	// Only the checkout writes the date, so an order that reaches this without
+	// one was not born in the checkout — a renewal, an import, an order typed
+	// in the admin. The checkout itself refuses to submit a home delivery with
+	// no date unless the postcode has no delivery days at all.
+	//
+	// An order with no method of ours is a different matter: the shop's own
+	// couriers carry those, and sending them would fill the packing room's
+	// list with orders it must not touch.
+	$without_date = empty($order_delivery_date) && oko_order_is_ours($order);
 	if (empty($order_delivery_date) && ! $without_date) {
 		return null;
 	}
@@ -2603,6 +4126,14 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		}
 	}
 
+	// A shed Økoskabet itself moved the order into counts as well, even though
+	// the shipping line the customer chose still says home delivery. That is
+	// what the write-back records, and the checkout clears this meta whenever
+	// home delivery is chosen — so a value here is a decision, never a
+	// leftover. Without it the next edit in the shop sent the order back as a
+	// home delivery and undid the move by hand.
+	$is_shed_delivery = $is_shed_delivery || trim((string) $order_shed) !== '';
+
 	if (!$is_shed_delivery) {
 		$order_shed = '';
 	}
@@ -2612,9 +4143,21 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	// shed reservation nor a delivery address. What it does carry is the
 	// place to collect from, chosen at checkout from the merchant's own
 	// pickup locations.
-	$order_pickup_location_id = $is_store_pickup
-		? $order->get_meta('_billing_okoskabet_pickup_location_id', true)
-		: '';
+	//
+	// Read before the decision, not after it, for the same reason the shed is:
+	// a collection Økoskabet itself moved the order to counts too, even though
+	// the shipping line the customer chose still says home delivery. Without
+	// it the next edit in the shop sent the order back as a home delivery and
+	// undid the move by hand — the shed had its guard and this did not.
+	$order_pickup_location_id = trim(
+		(string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)
+	);
+
+	$is_store_pickup = $is_store_pickup || $order_pickup_location_id !== '';
+
+	if (! $is_store_pickup) {
+		$order_pickup_location_id = '';
+	}
 
 
 	// One shipment, three shapes. Everything every shipment carries is
@@ -2643,7 +4186,13 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		// What the order contained. Økoskabet splits these into zones and
 		// prints them as packing slips; without them an order is a name
 		// with no contents.
-		'line_items'         => oko_order_line_items($order),
+		// The order's own goods, and every addition riding along with them. A
+		// PUT replaces the shipment's lines, so a resend built from this order
+		// alone deleted the additions — the very mistake the sending path
+		// below warns about, reached by another road. Avokadokontoret renamed
+		// a product on 17 October 2026 and the rename resent three orders;
+		// an addition on any of them would have lost its goods with no note.
+		'line_items'         => oko_lines_with_additions($order, $merchant),
 		// Where to ask us what those product ids are. The finished address
 		// rather than a base, because the route is keyed on the merchant
 		// id this plugin issues — handing over a base would leave
@@ -2663,6 +4212,10 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	if ($is_store_pickup) {
 		// A collection has no delivery target at all — the shop keeps the
 		// goods — so it names the place to collect from instead.
+		//
+		// And it is asked first, so that it beats a shed on the same order:
+		// both can be set when the shop's own checkout and a correction made
+		// here disagree, and the correction is the later word.
 		$data['shipment_type']      = 'store_pickup';
 		$data['pickup_location_id'] = $order_pickup_location_id !== '' ? (int) $order_pickup_location_id : null;
 	} elseif (!empty($order_shed)) {
@@ -2671,16 +4224,20 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 			'max_duration_days' => 1,
 		];
 	} else {
-		$recipient_name = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
+		$recipient_name = oko_recipient_name($order);
 		$data['customer']['recipient_name'] = $recipient_name;
+		// `location` used to be sent here as well, carrying the same text as
+		// the note below. Økoskabet has no such field — `HomeDelivery` holds a
+		// name and an address and nothing else — so the key was cast away
+		// unread on every order. It is gone, and with it the resend that a
+		// changed message used to set off: the payload no longer differs, so
+		// nothing is sent that would arrive carrying nothing.
 		$data['home_delivery'] = array_filter([
 			'recipient_name' => $recipient_name,
 			'address_1'      => $order->get_shipping_address_1(),
-			'address_2'      => $order->get_shipping_address_2(),
+			'address_2'      => oko_second_address_line($order),
 			'city'           => $order->get_shipping_city(),
 			'postal_code'    => $order->get_shipping_postcode(),
-			// Combined English location + free-text note, or null if empty.
-			'location'       => !empty($logistics_note) ? $logistics_note : null,
 		]);
 		// Send the logistics note (dropdown selection + free-text) as the API
 		// notes field so it appears in Økoskabet's Notes column. A message the
@@ -2699,6 +4256,59 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 }
 
 
+add_action('woocommerce_checkout_order_processed', 'oko_link_addon_to_earlier_order', 20, 3);
+
+/**
+ * Write the two orders onto each other, so an addition is not a loose order.
+ *
+ * The customer tells us the earlier order's number; nothing else connects the
+ * two, and a shop looking at either one has no way to see the other. A note on
+ * both is what makes them hang together where the shop actually works, and it
+ * survives everything: no new table, no meta to migrate, visible to any plugin
+ * that reads order notes.
+ *
+ * The earlier order is looked up only to write on it. A number that matches
+ * nothing — a typo, or an order from another shop — still leaves the note on
+ * this order, because what the customer told us is worth keeping either way.
+ *
+ * @param int       $order_id    The new order's id.
+ * @param array     $posted_data Posted checkout data (unused).
+ * @param \WC_Order $order       The new order.
+ */
+function oko_link_addon_to_earlier_order(int $order_id, array $posted_data, $order): void
+{
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	$addon_of = oko_order_addon_of($order);
+	if ($addon_of === '') {
+		return;
+	}
+
+	/* translators: %s: the earlier order's number, as the customer wrote it. */
+	$order->add_order_note(sprintf(__('Addition to order %s', O_TEXTDOMAIN), $addon_of));
+
+	// The other order is only written on when this really is an addition to
+	// it. The number the customer typed is their word; the id written at
+	// checkout is the one that was found, matched against their email and
+	// still open. Writing on the strength of the typed number alone put a note
+	// on whichever order happened to have that id — somebody else's, and even
+	// when the checkout had already refused the whole thing.
+	$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+	if ($parent_id === 0) {
+		return;
+	}
+
+	$earlier = wc_get_order($parent_id);
+	if (! $earlier instanceof \WC_Order || $earlier->get_id() === $order->get_id()) {
+		return;
+	}
+
+	/* translators: %s: the new order's number. */
+	$earlier->add_order_note(sprintf(__('Order %s is an addition to this one', O_TEXTDOMAIN), $order->get_order_number()));
+}
+
 add_action('woocommerce_order_status_changed', 'hey_after_order_placed', 10, 4);
 
 /**
@@ -2711,39 +4321,42 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 {
 	$order_number = $order->get_order_number();
 
-	// Resolve the merchant that should handle this order. We look at the
-	// order meta first (stamped at checkout_create_order time), falling
-	// back to a routing pass over the order's items. This keeps existing
-	// orders working after upgrade — they get resolved to the default
-	// merchant via Merchant_Router::resolve_for_order.
-	$merchant = null;
-	if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
-		$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_order($order);
-		$merchant = $resolved['merchant'] ?? null;
-	}
-	if (! $merchant) {
-		$merchant = o_get_merchant();
-	}
+	// The merchant that should handle this order: the order meta first
+	// (stamped at checkout_create_order time), falling back to a routing pass
+	// over the order's items. This keeps existing orders working after an
+	// upgrade — they resolve to the default merchant.
+	//
+	// An addition is written onto the earlier order's shipment, under that
+	// order's account, so that is the account whose key decides. Asking the
+	// addition's own basket stopped an addition that routed to an account
+	// still without a key, although the delivery it rides on was fine.
+	$parent_id    = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+	$addon_parent = $parent_id !== 0 && $parent_id !== $order->get_id() ? wc_get_order($parent_id) : false;
+	$merchant     = oko_merchant_for_order($addon_parent instanceof \WC_Order ? $addon_parent : $order);
 
 	if (empty($merchant['api_key'])) {
-		error_log("okoskabet_woocommerce_plugin: API key not set for order {$order_number}, merchant=" . ($merchant['id'] ?? '?'));
+		error_log("okoskabet_woocommerce_plugin: API key not set for order {$order_number}, merchant=" . (string) ($merchant['id'] ?? '?'));
 		return;
 	}
 
-	$api_url = o_merchant_api_url($merchant);
-	$api_key = (string) $merchant['api_key'];
-
 	if ($new_status === 'cancelled') {
-		$url = $api_url . '/api/v1/shipments/' . rawurlencode(oko_shipment_reference($order));
+		// An addition has no shipment of its own — its goods are on the order
+		// it rode along with. Deleting under its own reference would answer 404
+		// and leave the goods on that delivery, so the shop would refund a
+		// customer for things the packing room still has on its list.
+		if ($parent_id !== 0) {
+			oko_take_addition_off_its_order($order, $parent_id, $merchant);
+			return;
+		}
 
-		$response = wp_remote_request($url, array(
-			'method'  => 'DELETE',
-			'timeout' => 15,
-			'headers' => array(
-				'Content-Type'  => 'application/json',
-				'Authorization' => $api_key,
-			),
-		));
+		// The reference Økoskabet knows this order by, which is not always its
+		// number: a shop with a numbering plugin books under one and WooCommerce
+		// answers the other (#52).
+		$response = oko_api_request(
+			$merchant,
+			'DELETE',
+			'/api/v1/shipments/' . rawurlencode(oko_shipment_reference($order))
+		);
 
 		if (is_wp_error($response)) {
 			error_log('okoskabet_woocommerce_plugin: Error deleting order ' . $order_number . ': ' . $response->get_error_message());
@@ -2773,7 +4386,15 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 			return;
 		}
 
-		$url  = $api_url . '/api/v1/shipments/';
+		// An addition goes into the delivery it belongs to, not beside it. The
+		// backoffice gets nothing new, which is the point: there is one box,
+		// one freight and one shipment, and the packing room sees the extra
+		// goods on the list they already have.
+		if ($parent_id !== 0) {
+			oko_send_addition_to_its_order($order, $parent_id, $merchant);
+			return;
+		}
+
 		$data = oko_shipment_payload($order, $merchant);
 		if ($data === null) {
 			return;
@@ -2786,14 +4407,7 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		$is_store_pickup     = ($data['shipment_type'] ?? '') === 'store_pickup';
 		$order_shed          = (string) ($data['reservation']['shed_id'] ?? '');
 
-		$response = wp_remote_post($url, array(
-			'timeout' => 15,
-			'headers' => array(
-				'Content-Type'  => 'application/json',
-				'Authorization' => $api_key,
-			),
-			'body' => wp_json_encode($data),
-		));
+		$response = oko_api_request($merchant, 'POST', '/api/v1/shipments/', (string) wp_json_encode($data));
 
 		if (is_wp_error($response)) {
 			$order->update_status('failed', $response->get_error_message());
@@ -2803,7 +4417,24 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		$http_code = wp_remote_retrieve_response_code($response);
 		$shipment = json_decode(wp_remote_retrieve_body($response), true);
 
-		if ($http_code !== 201) {
+		// 200 with the shipment is Økoskabet saying it has this one already: a
+		// first attempt that went through while its answer did not reach us
+		// (a timeout), and the order arriving here again. That is booked, not
+		// failed — failing it threw the customer's checkout and marked a paid
+		// order as failed for a delivery that was on its way.
+		//
+		// Only when it is this order's shipment. A reference is the order's
+		// number, and a shop that has renumbered can hand a new order the number
+		// of an old delivery that is still live — read as "booked", the new
+		// order would be tied to a stranger's shipment and never sent. The
+		// customer's email is the one thing the answer carries that says whose
+		// it is; anything else stays a failure the shop can see.
+		$their_email    = is_array($shipment) ? strtolower(trim((string) ($shipment['shipment']['customer']['email'] ?? ''))) : '';
+		$already_booked = $http_code === 200
+			&& $their_email !== ''
+			&& $their_email === strtolower(trim((string) $order->get_billing_email()));
+
+		if ($http_code !== 201 && !$already_booked) {
 			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
 			$order->update_status('failed', $error_text);
 			throw new \Exception($error_text);
@@ -2839,15 +4470,430 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		oko_keep_booked_reference($order, $data['shipment_reference']);
 
 		// Record what Økoskabet now has. Without this the save below would look
-		// like an edit and send the same order straight back a second time.
-		$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($data));
+		// like an edit and send the same order straight back a second time —
+		// and the copy is what every later edit is measured against, so that
+		// only what actually moved is sent.
+		oko_remember_what_was_sent($order, $data);
 
 		$order->save();
 	}
 }
 
-/** Meta holding a fingerprint of what we last told Økoskabet about an order. */
+/**
+ * The fields of a shipment a change to which belongs back in the shop.
+ *
+ * The packing room moves a delivery to a shed, or back to the customer's
+ * door, or corrects an address — in Økoskabet's backoffice, where the shop
+ * cannot see it. WooCommerce then still holds what the customer ordered, and
+ * the next edit in the shop sends that back over the correction. Avokadokontoret
+ * renamed a product on 17 October 2026; the rename touched three orders, and
+ * two deliveries that had been moved to a shed by hand and back again were
+ * overwritten with the address they were ordered with.
+ */
+const OKO_DELIVERY_CHANGES = array(
+	'shipment_type',
+	'delivery_date',
+	'shed_id',
+	// Where the customer collects, for the third shape. A shed names its
+	// `shed_id` here and an address its street; a collection said nothing,
+	// because Økoskabet did not report it either — its webhook left a store
+	// pickup's destination out altogether, so a merchant moving an order from
+	// one of its shops to another told the shop nothing. Økoskabet now says
+	// it (delivery_backend#1978), and this is the half that listens.
+	'pickup_location_id',
+	'recipient_name',
+	'street_name',
+	'house_number',
+	'floor',
+	'door',
+	'supplementary_town',
+	'city',
+	'postal_code',
+);
+
+/**
+ * Whether a webhook's `changes` touch the delivery itself.
+ *
+ * @param array<string,mixed> $changes The `changes` map from the webhook.
+ * @return bool
+ */
+function oko_changes_touch_the_delivery(array $changes): bool
+{
+	return array_intersect_key($changes, array_flip(OKO_DELIVERY_CHANGES)) !== array();
+}
+
+/**
+ * Put Økoskabet's delivery back on the WooCommerce order.
+ *
+ * The webhook says which fields changed, not what the delivery now is, and a
+ * single changed `floor` cannot be merged into an address WooCommerce holds
+ * as two composed lines. So the shipment is read whole and written whole —
+ * one lookup, and the two ends agree afterwards rather than nearly agree.
+ *
+ * Nothing about money: not the shipping method, not the freight, not a line.
+ * A delivery moved to a shed is the packing room's business; re-pricing an
+ * order the customer has already paid is not, and a shop that saw its totals
+ * change by themselves would be right to stop trusting this.
+ *
+ * @param \WC_Order           $order    The order to write on.
+ * @param array<string,mixed> $shipment The shipment as Økoskabet has it.
+ * @return array<int,string> What was changed, for the order's own note.
+ */
+function oko_write_delivery_back(\WC_Order $order, array $shipment): array
+{
+	$changed = array();
+
+	$date = sanitize_text_field((string) ($shipment['delivery_date'] ?? ''));
+	if ($date !== '' && $date !== (string) $order->get_meta('_billing_okoskabet_delivery_date', true)) {
+		$order->update_meta_data('_billing_okoskabet_delivery_date', $date);
+		/* translators: %s: the new delivery date. */
+		$changed[] = sprintf(__('delivery date %s', O_TEXTDOMAIN), $date);
+	}
+
+	// Where the customer collects, when Økoskabet has moved the order to a
+	// collection — or nothing, when it has moved it away from one. Written
+	// like the shed below and read by the payload the same way, so a
+	// collection made by hand survives the shop's next edit.
+	$pickup = $shipment['pickup_location_id'] ?? null;
+	$pickup = ($pickup === null || $pickup === '') ? '' : (string) (int) $pickup;
+	if ($pickup !== (string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)) {
+		$order->update_meta_data('_billing_okoskabet_pickup_location_id', $pickup);
+		$changed[] = $pickup !== ''
+			? __('collection from the shop', O_TEXTDOMAIN)
+			: __('no longer a collection from the shop', O_TEXTDOMAIN);
+	}
+
+	$shed      = (array) (((array) ($shipment['shed_reservation'] ?? array()))['shed'] ?? array());
+	$shed_id   = isset($shed['id']) ? sanitize_text_field((string) $shed['id']) : '';
+	$shed_name = sanitize_text_field((string) ($shed['name'] ?? $shed_id));
+	if ($shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
+		$order->update_meta_data('_billing_okoskabet_shed_id', $shed_id);
+		$changed[] = $shed_id !== ''
+			/* translators: %s: the name of the Økoskab. */
+			? sprintf(__('delivery to Økoskab %s', O_TEXTDOMAIN), $shed_name)
+			: __('no longer a delivery to an Økoskab', O_TEXTDOMAIN);
+	}
+
+	// The name the box is delivered to. Økoskabet holds it as one name,
+	// WooCommerce as a first and a last, so it is written back only when the
+	// two actually disagree: a name of three words composes to the same
+	// string either way, and rewriting "Marc Seerup Hansen" as first "Marc",
+	// last "Seerup Hansen" would put a change nobody made on every order.
+	$home      = (array) ($shipment['home_delivery'] ?? array());
+	$recipient = isset($home['recipient_name']) ? sanitize_text_field((string) $home['recipient_name']) : '';
+	$held_name = oko_recipient_name($order);
+	if ($recipient !== '' && $recipient !== $held_name) {
+		$name = explode(' ', $recipient, 2);
+		$order->set_shipping_first_name($name[0]);
+		$order->set_shipping_last_name($name[1] ?? '');
+		/* translators: %s: the name the delivery is now addressed to. */
+		$changed[] = sprintf(__('recipient %s', O_TEXTDOMAIN), $recipient);
+	}
+
+	$address = (array) ($home['address'] ?? array());
+	// Named once, as an address, rather than field by field. The note is read
+	// by whoever runs the shop, and "shipping_address_1: Byagervej 194,
+	// shipping_address_2: 1 tv" is our own column names read out loud.
+	//
+	// Written through the named setters rather than `$order->{'set_' . $key}`:
+	// a dynamic method name is invisible to the analyser, and this is the path
+	// that rewrites a customer's delivery address.
+	$address_moved = false;
+	if ($address !== array()) {
+		$lines = oko_delivery_address_lines($address);
+		$held  = array(
+			'shipping_address_1' => $order->get_shipping_address_1(),
+			'shipping_address_2' => $order->get_shipping_address_2(),
+			'shipping_city'      => $order->get_shipping_city(),
+			'shipping_postcode'  => $order->get_shipping_postcode(),
+		);
+
+		$address_moved = $lines !== $held;
+
+		if ($address_moved) {
+			$order->set_shipping_address_1($lines['shipping_address_1']);
+			$order->set_shipping_address_2($lines['shipping_address_2']);
+			$order->set_shipping_city($lines['shipping_city']);
+			$order->set_shipping_postcode($lines['shipping_postcode']);
+		}
+
+		// Whether or not the lines moved. The fact that matters is that
+		// Økoskabet has given us the address — and the case this exists for is
+		// precisely the one where nothing moved: a flat taken off a delivery
+		// whose shipping line was empty all along, because the shop's checkout
+		// has no second line and the flat only ever lived in billing.
+		$order->update_meta_data(OKO_ADDRESS_FROM_OKOSKABET_META, true);
+	}
+
+	if ($address_moved) {
+		$changed[] = sprintf(
+			/* translators: %s: the delivery address, on one line. */
+			__('delivery address %s', O_TEXTDOMAIN),
+			oko_address_on_one_line($order)
+		);
+	}
+
+	return $changed;
+}
+
+/**
+ * An order's delivery address, written the way a person would say it.
+ *
+ * @param \WC_Order $order
+ * @return string
+ */
+function oko_address_on_one_line(\WC_Order $order): string
+{
+	$street = trim($order->get_shipping_address_1() . ' ' . $order->get_shipping_address_2());
+
+	return trim(implode(', ', array_filter(array(
+		trim($street),
+		trim($order->get_shipping_postcode() . ' ' . $order->get_shipping_city()),
+	), static function (string $part): bool {
+		return $part !== '';
+	})));
+}
+
+/**
+ * Økoskabet's address, as the two lines WooCommerce keeps it in.
+ *
+ * The register holds a street, a house number and a unit apart; WooCommerce
+ * holds a line and a second line. Composed the way the plugin's own sending
+ * is parsed at the other end, so writing this back and sending it again is a
+ * round trip and not a slow drift.
+ *
+ * `supplementary_town` — "Kirkendrup" in "Ærtebjerggårdvej 122, Kirkendrup,
+ * 5270 Odense N" — is a place name between the street and the postcode. It
+ * goes on the first line after the house number, which is where the register
+ * reads it from, and never on the second, which is the flat's.
+ *
+ * @param array<string,mixed> $address Økoskabet's address fields.
+ * @return array<string,string> The order's field name => value.
+ */
+function oko_delivery_address_lines(array $address): array
+{
+	// Sanitised, like everything else this plugin takes off the wire. The body
+	// is signed, so this is not about trust — it is that one unlucky field
+	// would otherwise go on an order and into a note rendered in wp-admin.
+	$field = static function (string $key) use ($address): string {
+		return trim(sanitize_text_field((string) ($address[$key] ?? '')));
+	};
+
+	$street = trim(implode(' ', array_filter(array(
+		$field('street_name'),
+		$field('house_number'),
+	), static function (string $part): bool {
+		return $part !== '';
+	})));
+
+	$town = $field('supplementary_town');
+	if ($town !== '') {
+		$street = trim($street . ', ' . $town);
+	}
+
+	$unit = trim(implode(' ', array_filter(array(
+		$field('floor'),
+		$field('door'),
+	), static function (string $part): bool {
+		return $part !== '';
+	})));
+
+	return array(
+		'shipping_address_1' => $street,
+		'shipping_address_2' => $unit,
+		'shipping_city'      => $field('city'),
+		'shipping_postcode'  => $field('postal_code'),
+	);
+}
+
+/**
+ * Take Økoskabet's delivery and put it on the order it belongs to.
+ *
+ * Called when a webhook says a delivery changed. The shipment is read once
+ * and written whole; the order gets a note naming what moved, so the shop can
+ * see that somebody at Økoskabet changed it and what to.
+ *
+ * It does not send anything back. Writing the order is itself an edit, and the
+ * resend would push Økoskabet's own change at Økoskabet — so the resend is
+ * held off for this save, and the fingerprint is moved forward to what the
+ * shipment now is. The next genuine edit in the shop is then a difference
+ * against the corrected delivery rather than against the one it replaced,
+ * which is the whole point: it is what stops a product rename from undoing
+ * the packing room's work.
+ *
+ * @param string              $reference The shipment reference, i.e. the order number.
+ * @param array<string,mixed> $merchant  The merchant record.
+ * @return array<int,string> What was changed, empty when nothing was.
+ */
+function oko_take_delivery_from_okoskabet(string $reference, array $merchant): array
+{
+	$order = oko_order_for_reference($reference);
+	if ($order === null) {
+		return array();
+	}
+
+	// Only an order of the account the webhook came in for. The status half
+	// of the webhook checks this before it touches anything, and this half ran
+	// in front of that check: a webhook for one merchant rewrote the address
+	// of another merchant's order and was then answered 403 for it.
+	if (! oko_order_belongs_to_merchant($order, $merchant)) {
+		return array();
+	}
+
+	// Read fresh. The webhook is the signal, not the source: it says which
+	// fields moved, and a single changed floor cannot be merged into an
+	// address WooCommerce keeps as two composed lines. The remembered copy is
+	// dropped first because the webhook is precisely the news that it is out
+	// of date; nothing is dropped afterwards, because this writes only in
+	// WooCommerce and leaves the shipment as it found it.
+	oko_forget_shipment($reference, $merchant);
+	$shipment = oko_shipment_at_okoskabet($reference, $merchant);
+	if ($shipment === null) {
+		$order->add_order_note(sprintf(
+			/* translators: %s: the shipment reference. */
+			__('Økoskabet changed the delivery for %s, but it could not be read back. The order still says what the customer ordered.', O_TEXTDOMAIN),
+			$reference
+		));
+		return array();
+	}
+
+	$changed = oko_write_delivery_back($order, $shipment);
+	if ($changed === array()) {
+		// Nothing of the shop's own moved, so there is no note to write and no
+		// edit to record — but the write-back may have marked the address as
+		// Økoskabet's, and that mark is the whole point when the correction
+		// was a flat being taken off. Meta only: a full save here would read
+		// as an edit and call the resend straight back.
+		$order->save_meta_data();
+		return array();
+	}
+
+	// What Økoskabet holds is now what we would send, written in the same
+	// breath as the change itself. The resend hook fires on this save, builds
+	// the payload, finds the fingerprint already matching, and stops — so
+	// Økoskabet's own correction is not pushed back at Økoskabet, and nothing
+	// has to be marked, filtered or saved a second time to arrange it.
+	//
+	// It replaces a "do not send" meta and a filter that read it. That worked,
+	// but only as long as the meta came off again: an order that could not
+	// build a payload kept it, and every later edit in the shop was dropped
+	// for good, with no note and no line in the log. Saying what was sent is
+	// the thing the resend already asks about; saying "not now" was a second
+	// mechanism for the same question.
+	$payload = oko_shipment_payload($order, $merchant);
+	if ($payload !== null) {
+		oko_remember_what_was_sent($order, $payload);
+	}
+
+	$order->save();
+
+	$order->add_order_note(sprintf(
+		/* translators: %s: a list of what was changed, already joined. */
+		__('Økoskabet changed the delivery: %s. Changed there, not here.', O_TEXTDOMAIN),
+		implode(', ', $changed)
+	));
+
+	return $changed;
+}
+
+/**
+ * Whether an order is one of this merchant's, as a webhook has to ask it.
+ *
+ * The stamp written at checkout says whose an order is. An order without one
+ * predates the stamp and belongs to the default merchant. A merchant record
+ * with no id — the legacy single-merchant fallback — owns everything.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $merchant
+ */
+function oko_order_belongs_to_merchant(\WC_Order $order, array $merchant): bool
+{
+	$merchant_id = (string) ($merchant['id'] ?? '');
+
+	return $merchant_id === '' || oko_order_merchant_id($order) === $merchant_id;
+}
+
+/**
+ * The merchant an order is stamped with, or the default one for an order
+ * from before the stamp.
+ *
+ * @param \WC_Order $order
+ */
+function oko_order_merchant_id(\WC_Order $order): string
+{
+	$owner = sanitize_key((string) $order->get_meta(\okoskabet_woocommerce_plugin\Integrations\Merchant_Router::ORDER_META_KEY, true));
+
+	return $owner !== '' ? $owner : \okoskabet_woocommerce_plugin\Integrations\Merchants::default_id();
+}
+
+/**
+ * Write down the order as Økoskabet now has it.
+ *
+ * The two metas are written together everywhere, and an order carrying only
+ * one of them is precisely the state the resend has to special-case — a
+ * caller that wrote one and forgot the other would put a live order into it
+ * silently. One function, so there is nothing to forget.
+ *
+ * Meta only: the caller decides whether this is part of a save.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $payload What was sent, before it was trimmed
+ *                                     down to a difference.
+ */
+function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
+{
+	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, oko_shipment_fingerprint($payload));
+	$order->update_meta_data(OKO_SENT_META, oko_comparable_payload($payload));
+}
+
+/**
+ * Meta holding a fingerprint of what we last told Økoskabet about an order.
+ *
+ * ## It can go, and here is exactly when
+ *
+ * Everything it holds is derivable from `OKO_SENT_META`, which is written in
+ * the same breath — so the hash answers nothing for an order that has the
+ * payload. Its one job is the order that does *not*: one sent by a version
+ * that recorded a fingerprint and no payload. For such an order the hash is
+ * the only thing left to compare, and it buys the branch at
+ * `oko_resend_shipment_on_update()` that writes the payload down for free
+ * when nothing has moved.
+ *
+ * Without it, every order placed before this release would send its *whole*
+ * payload on its first save — over whatever the backoffice had corrected in
+ * the meantime. That is the bug this whole change exists to stop, so it stays
+ * until no editable order is in that state. That needs two things, and
+ * neither can be hurried:
+ *
+ *   1. this release live long enough that every such order has either been
+ *      saved once, which upgrades it, or been locked by Økoskabet;
+ *   2. no backfill — the hash is not reversible, so writing `OKO_SENT_META`
+ *      from the current payload would bless edits Økoskabet never accepted.
+ *
+ * When that holds: delete this constant, the `$sent_fingerprint === ''` guard,
+ * and the `elseif` branch. `is_array($sent)` then carries "sent by a recording
+ * version" on its own. Tracked as an issue rather than left here to be
+ * remembered.
+ */
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
+
+/**
+ * Meta holding the order as Økoskabet last accepted it.
+ *
+ * The fingerprint above answers "has anything moved"; this answers "what".
+ * Both are kept because they are written together and read at different
+ * moments — an order sent by an older version has the fingerprint and not
+ * this, and the resend knows what to do with that.
+ */
+const OKO_SENT_META = '_okoskabet_sent_payload';
+
+/**
+ * Meta holding the shape of the last change Økoskabet refused.
+ *
+ * So that a change it will never accept is not sent on every save for the
+ * rest of the order's life, while a different change still gets its own try.
+ */
+const OKO_REFUSED_CHANGE_META = '_okoskabet_refused_change';
 
 /**
  * Meta marking an order Økoskabet will not take changes to any more.
@@ -2860,9 +4906,6 @@ const OKO_SHIPMENT_LOCKED_META = '_okoskabet_shipment_locked';
 
 /** The `error_code` Økoskabet uses for a shipment that can no longer change. */
 const OKO_ERROR_CODE_LOCKED = 'shipment_locked';
-
-/** First word of the line older versions put in front of the customer's note. */
-const OKO_ORDER_NOTE_PREFIX = 'ØKOSKABET ';
 
 /** Where an order is going, as one line: a shed's name, home delivery or store pickup. */
 const OKO_DELIVERY_SUMMARY_META = '_okoskabet_delivery_summary';
@@ -2961,16 +5004,220 @@ function oko_order_save_depth(int $delta = 0): int
 }
 
 /**
- * A fingerprint of a payload, so we can tell whether anything actually changed.
+ * A payload reduced to what is actually about the order.
  *
  * Leaves out what describes the request rather than the order: the language
  * and the shop's own address can differ between the customer's checkout and
  * an admin's screen on a multilingual shop, and that is not an edit.
+ * `allow_invalid` goes the same way — the other end reads it when a shipment
+ * is created and never again.
+ *
+ * `notes` is left out for a different reason: it is not something we send
+ * again at all after the order is created, so a change to the shop's copy of
+ * it is not a reason to resend — and counting it would send an order whose
+ * note is the only thing that moved, with the note stripped, achieving
+ * nothing.
+ *
+ * @param array<string,mixed> $payload
+ * @return array<string,mixed>
  */
+function oko_comparable_payload(array $payload): array
+{
+	unset(
+		$payload['locale'],
+		$payload['webshop_products_url'],
+		$payload['notes'],
+		$payload['allow_invalid']
+	);
+
+	return $payload;
+}
+
+/** A fingerprint of a payload, for telling two of them apart. */
 function oko_shipment_fingerprint(array $payload): string
 {
+	return md5((string) wp_json_encode(oko_comparable_payload($payload)));
+}
+
+/**
+ * The fingerprint 1.5.2 would have taken of this order as it stands.
+ *
+ * 1.5.2 kept a fingerprint and nothing else, taken of a payload shaped a
+ * little differently from today's: six keys on a line, the shipment named by
+ * the order's number, an untrimmed recipient, the second address line as
+ * typed, the delivery note repeated as `location` on the address — and only
+ * the language and the products address left out of the hash, so the note and
+ * `allow_invalid` are in it. Rebuilt here from today's payload so an order that
+ * has not moved since 1.5.2 sent it can be told apart from one that has.
+ *
+ * An order with additions was never 1.5.2's to send, and answers nothing.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $payload Today's payload for it, whole.
+ */
+function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload): string
+{
+	if (oko_addition_ids($order) !== array()) {
+		return '';
+	}
+
+	$payload['shipment_reference'] = (string) $order->get_order_number();
+
+	$payload['line_items'] = array_map(static function (array $line): array {
+		return array(
+			'product_id'    => $line['product_id'] ?? null,
+			'variant_id'    => $line['variant_id'] ?? null,
+			'name'          => $line['name'] ?? '',
+			'variant_title' => $line['variant_title'] ?? null,
+			'sku'           => $line['sku'] ?? '',
+			'quantity'      => $line['quantity'] ?? 0,
+		);
+	}, (array) ($payload['line_items'] ?? array()));
+
+	if (isset($payload['home_delivery'])) {
+		$recipient = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
+
+		$payload['customer']['recipient_name'] = $recipient;
+		$payload['home_delivery']              = array_filter(array(
+			'recipient_name' => $recipient,
+			'address_1'      => $order->get_shipping_address_1(),
+			'address_2'      => $order->get_shipping_address_2(),
+			'city'           => $order->get_shipping_city(),
+			'postal_code'    => $order->get_shipping_postcode(),
+			'location'       => oko_logistics_note($order),
+		));
+	}
+
 	unset($payload['locale'], $payload['webshop_products_url']);
+
 	return md5((string) wp_json_encode($payload));
+}
+
+/**
+ * The parts of a payload whose fields the other end takes one at a time.
+ *
+ * Only the customer. Everything else that looks like an object is read as a
+ * whole and has to be sent as one: an address is two composed lines that
+ * Økoskabet washes into a street, a number and a flat *together*, and the
+ * wash only runs when the first line is there. Measured on Gaardmester
+ * staging on 19 October 2026 — an order whose second line alone had moved
+ * was accepted, changed nothing, and said nothing. A shed reservation is
+ * read the same way, and is two fields anyway.
+ *
+ * The customer's four fields have no such reading between them: each is
+ * written on its own, which is what lets a changed phone leave a name the
+ * backoffice corrected exactly where it is.
+ */
+const OKO_NESTED_PAYLOAD_KEYS = array('customer');
+
+/**
+ * Which shape of delivery a payload describes.
+ *
+ * Not the value of `shipment_type` alone: the keys themselves move when an
+ * order changes destination — `home_delivery` gives way to `reservation`, and
+ * back — and that is the one change a difference cannot express, because
+ * leaving a key out means "unchanged" and never "gone".
+ *
+ * `pickup_location_id` is not asked about: it is written in the same branch
+ * as the only `shipment_type` there is, so it can never say anything the
+ * first component has not said already.
+ *
+ * @param array<string,mixed> $payload
+ */
+function oko_destination_shape(array $payload): string
+{
+	return implode('|', array(
+		(string) ($payload['shipment_type'] ?? ''),
+		isset($payload['home_delivery']) ? 'home' : '',
+		isset($payload['reservation']) ? 'shed' : '',
+	));
+}
+
+/**
+ * What has changed since Økoskabet was last told about this order.
+ *
+ * The other end writes the fields it is given and leaves the rest as they
+ * stand, so sending only what moved is what keeps a product rename in the
+ * shop from undoing an address the packing room corrected. Sending the whole
+ * order every time is what made that possible in the first place.
+ *
+ * Returns an empty array when nothing moved — the order is not sent at all
+ * then — and the whole payload when the delivery changed shape, which is not
+ * a field edit and is not safe to express as a difference.
+ *
+ * @param array<string,mixed> $sent    What Økoskabet accepted last.
+ * @param array<string,mixed> $payload What the order says now.
+ * @return array<string,mixed>
+ */
+function oko_payload_changes(array $sent, array $payload): array
+{
+	$sent    = oko_comparable_payload($sent);
+	$payload = oko_comparable_payload($payload);
+
+	if (oko_destination_shape($sent) !== oko_destination_shape($payload)) {
+		return $payload;
+	}
+
+	$changes = array();
+
+	foreach ($payload as $key => $value) {
+		if (! array_key_exists($key, $sent)) {
+			$changes[$key] = $value;
+			continue;
+		}
+
+		$before = $sent[$key];
+
+		if (is_array($value) && is_array($before) && in_array($key, OKO_NESTED_PAYLOAD_KEYS, true)) {
+			$inner = oko_nested_changes($before, $value);
+			if ($inner !== array()) {
+				$changes[$key] = $inner;
+			}
+			continue;
+		}
+
+		if ($before !== $value) {
+			$changes[$key] = $value;
+		}
+	}
+
+	// A key the order has stopped carrying altogether — a delivery date taken
+	// off — is left alone, because an absent key reads as "unchanged" at the
+	// other end. That is not new: the whole payload left it out too, and the
+	// date stayed. Changing it belongs in Økoskabet's own backoffice.
+
+	return $changes;
+}
+
+/**
+ * The same comparison one level down, inside the customer.
+ *
+ * A field the order has stopped carrying is sent as empty rather than left
+ * out: inside an object, leaving it out reads as "unchanged" just as it does
+ * at the top, and a second address line the shop has deleted would otherwise
+ * stay on the delivery for good.
+ *
+ * @param array<string,mixed> $before
+ * @param array<string,mixed> $now
+ * @return array<string,mixed>
+ */
+function oko_nested_changes(array $before, array $now): array
+{
+	$changes = array();
+
+	foreach ($now as $key => $value) {
+		if (! array_key_exists($key, $before) || $before[$key] !== $value) {
+			$changes[$key] = $value;
+		}
+	}
+
+	foreach ($before as $key => $value) {
+		if (! array_key_exists($key, $now)) {
+			$changes[$key] = '';
+		}
+	}
+
+	return $changes;
 }
 
 add_action('woocommerce_update_order', 'oko_resend_shipment_on_update', 20, 1);
@@ -2991,6 +5238,37 @@ function oko_resend_shipment_on_refund($order_id, $refund_id): void
 }
 
 /**
+ * Økoskabet's reason, short enough to be a note.
+ *
+ * A refusal with a message answers JSON and the message is a sentence. A 404
+ * answers plain text, and a server in front of Økoskabet can answer a whole
+ * HTML page — which is why this cuts rather than trusts the length, and why
+ * the tags go: a note is rendered in the admin, and an error page pasted into
+ * one would bring its markup along.
+ *
+ * @param string $reason The reason as it came back.
+ * @return string
+ */
+function oko_short_reason(string $reason): string
+{
+	$reason = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($reason)) ?? '');
+
+	if ($reason === '') {
+		return __('no reason given', O_TEXTDOMAIN);
+	}
+
+	if (mb_strlen($reason) > 200) {
+		return mb_substr($reason, 0, 200) . '…';
+	}
+
+	// Exactly one sentence ending, because the note puts a sentence of its own
+	// after this one. Økoskabet's own messages end with a full stop and the
+	// note read "… ufuldstændige.." on staging; a 404 answers plain text and
+	// ends with nothing at all.
+	return preg_match('/[.!?:…]$/u', $reason) === 1 ? $reason : $reason . '.';
+}
+
+/**
  * Send an edited order to Økoskabet again.
  *
  * An order can be changed after it has been placed — a date moved, an address
@@ -3006,9 +5284,14 @@ function oko_resend_shipment_on_refund($order_id, $refund_id): void
  *     `woocommerce_update_order` fires on every save, including our own, and a
  *     shop that saves an order ten times should not send ten identical PUTs.
  *   - Once per request, whatever WooCommerce does internally.
- *   - A failure is logged and the fingerprint is left alone, so the next save
- *     tries again. It never touches the order's status: an edit that cannot
- *     reach Økoskabet is a problem to retry, not a reason to fail an order a
+ *   - A failure that can be retried — no answer at all, or a 5xx — is logged
+ *     and the fingerprint is left alone, so the next save tries again. A
+ *     *refusal* is a verdict: it is recorded as dealt with and never sent
+ *     again, so it also gets a note on the order. Without one the shop had no
+ *     way at all to learn that an edit never arrived; the only record was a
+ *     line in `debug.log`.
+ *   - It never touches the order's status: an edit that cannot reach
+ *     Økoskabet is a problem to retry, not a reason to fail an order a
  *     customer has already paid for.
  *
  * @param int $order_id
@@ -3046,15 +5329,24 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
-	$merchant = null;
-	if (class_exists('\\okoskabet_woocommerce_plugin\\Integrations\\Merchant_Router')) {
-		$resolved = \okoskabet_woocommerce_plugin\Integrations\Merchant_Router::resolve_for_order($order);
-		$merchant = $resolved['merchant'] ?? null;
-	}
-	if (! $merchant) {
-		$merchant = o_get_merchant();
-	}
+	$merchant = oko_merchant_for_order($order);
 	if (empty($merchant['api_key'])) {
+		return;
+	}
+
+	// Orders sent before this version have no record of what was sent, so
+	// there is nothing to compare an edit with — and treating "no record" as
+	// "changed" would send every old order again the first time a shop marks
+	// it completed. They stay as they were placed.
+	//
+	// Asked before the payload is built, and that is the point: a meta read
+	// against a whole payload — every line, every product's terms and picture,
+	// the refunds, the merchant resolved twice and a call to Økoskabet — built
+	// only to be thrown away on the next line. Every order placed before this
+	// release is in that state, so it was paid on every save and every refund
+	// of all of them.
+	$sent_fingerprint = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true);
+	if ($sent_fingerprint === '') {
 		return;
 	}
 
@@ -3063,33 +5355,53 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
-	// Orders sent before this version have no record of what was sent, so
-	// there is nothing to compare an edit with — and treating "no record" as
-	// "changed" would send every old order again the first time a shop marks
-	// it completed. They stay as they were placed.
-	$sent_fingerprint = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true);
-	if ($sent_fingerprint === '') {
+	// Once, and passed on: every reader below wants the payload without what
+	// describes the request rather than the order.
+	$comparable = oko_comparable_payload($payload);
+	$sent       = $order->get_meta(OKO_SENT_META, true);
+
+	if (is_array($sent)) {
+		$changes = oko_payload_changes($sent, $comparable);
+	} elseif (oko_shipment_fingerprint($comparable) === $sent_fingerprint
+		|| oko_fingerprint_as_1_5_2($order, $payload) === $sent_fingerprint) {
+		// Sent by a version that recorded a fingerprint and not the payload.
+		// Nothing has moved, so this is the free moment to write down what
+		// Økoskabet holds — after this the order compares like any other.
+		//
+		// Asked in 1.5.2's terms too, or every open order would be sent whole
+		// on its first save after the update — see oko_fingerprint_as_1_5_2().
+		$order->update_meta_data(OKO_SENT_META, $comparable);
+		$order->save_meta_data();
+		return;
+	} else {
+		// Something moved, and we have no record of what it moved from. The
+		// whole order goes, exactly as it did before differences — once per
+		// order, and never again.
+		$changes = $comparable;
+	}
+
+	if ($changes === array()) {
 		return;
 	}
 
-	$fingerprint = oko_shipment_fingerprint($payload);
-	if ($fingerprint === $sent_fingerprint) {
+	// A refusal is about the change, not the order. Økoskabet answering 422
+	// to one edit must not stop the next one, but sending the identical thing
+	// again cannot help either — so the refused change is remembered by shape
+	// and only that exact shape is held back.
+	$change_print = oko_shipment_fingerprint($changes);
+	if ($change_print === (string) $order->get_meta(OKO_REFUSED_CHANGE_META, true)) {
 		return;
 	}
 
 	$seen[$order_id] = true;
 
-	$response = wp_remote_request(
-		o_merchant_api_url($merchant) . '/api/v1/shipments/' . rawurlencode($payload['shipment_reference']),
-		array(
-			'method'  => 'PUT',
-			'timeout' => 15,
-			'headers' => array(
-				'Content-Type'  => 'application/json',
-				'Authorization' => (string) $merchant['api_key'],
-			),
-			'body' => wp_json_encode($payload),
-		)
+	// The reference Økoskabet booked it under, not the order's number: a shop
+	// with a numbering plugin has two, and only one of them is ours (#52).
+	$response = oko_api_request(
+		$merchant,
+		'PUT',
+		'/api/v1/shipments/' . rawurlencode(oko_shipment_reference($order)),
+		(string) wp_json_encode($changes)
 	);
 
 	// Could not reach Økoskabet at all. Leave the fingerprint alone so the
@@ -3136,9 +5448,22 @@ function oko_resend_shipment_on_update(int $order_id): void
 				. 'Edits to this order are not reaching Økoskabet. Check the key under Økoskabet settings. Response: %s',
 			$order->get_order_number(),
 			$http_code,
-			$merchant['id'] ?? '?',
+			(string) ($merchant['id'] ?? '?'),
 			$body
 		));
+
+		// And on the order, because the log is not a place anyone looks. This
+		// is how it stayed invisible: the shop edited an order, the screen
+		// said the edit was saved, nothing reached Økoskabet, and the only
+		// record was a line in `debug.log`. Measured on Gaardmester staging
+		// 2026-10-20 with order 88091 — a corrected address refused and lost
+		// with nothing said anywhere a person would see it.
+		$order->add_order_note(sprintf(
+			/* translators: %d: the HTTP status Økoskabet answered with. */
+			__('The change did not reach Økoskabet: the API key was refused (%d). Check the key under Økoskabet settings — until then, edits to this order stay in the shop. It is tried again next time the order is saved.', O_TEXTDOMAIN),
+			$http_code
+		));
+
 		return;
 	}
 
@@ -3160,6 +5485,11 @@ function oko_resend_shipment_on_update(int $order_id): void
 				'okoskabet_woocommerce_plugin: order %s can no longer be changed at Økoskabet — a parcel has been received. Later edits stay in the shop only.',
 				$order->get_order_number()
 			));
+
+			$order->add_order_note(__(
+				'The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop.',
+				O_TEXTDOMAIN
+			));
 		} else {
 			error_log(sprintf(
 				'okoskabet_woocommerce_plugin: resend of order %s refused (%d), not retrying: %s',
@@ -3167,14 +5497,39 @@ function oko_resend_shipment_on_update(int $order_id): void
 				$http_code,
 				$reason
 			));
+
+			// The reason in Økoskabet's own words, which are already in the
+			// shop's language, and the code beside it so a reason that says
+			// nothing is still placed. Cut short because a 404 answers plain
+			// text rather than a message, and a note is not a log.
+			$order->add_order_note(sprintf(
+				/* translators: 1: the HTTP status Økoskabet answered with, 2: Økoskabet's reason. */
+				__('The change did not reach Økoskabet, which refused it (%1$d): %2$s The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own.', O_TEXTDOMAIN),
+				$http_code,
+				oko_short_reason($reason)
+			));
 		}
+
+		// Refused, so Økoskabet still holds what it held before: the record of
+		// what it has must not move. Only this exact change is held back, and
+		// the next edit — including one that touches nothing else — is sent
+		// and refused on its own merits rather than silently dropped.
+		//
+		// Moving the record here instead would lose the refused field for
+		// good: the next edit would compare against an order Økoskabet never
+		// accepted, find that field unchanged, leave it out, and the two ends
+		// would disagree about it forever with nothing said.
+		$order->update_meta_data(OKO_REFUSED_CHANGE_META, $change_print);
+		$order->save_meta_data();
+		return;
 	}
 
-	// Meta only, not a full save — writing the fingerprint should not itself
-	// read as an edit and call us straight back. `save_meta_data()` also goes
-	// through the order's data store, so this works whether the shop keeps
-	// orders in posts or in WooCommerce's own tables.
-	$order->update_meta_data(OKO_SENT_FINGERPRINT_META, $fingerprint);
+	// Meta only, not a full save — writing down what was sent should not
+	// itself read as an edit and call us straight back. `save_meta_data()`
+	// also goes through the order's data store, so this works whether the shop
+	// keeps orders in posts or in WooCommerce's own tables.
+	oko_remember_what_was_sent($order, $comparable);
+	$order->delete_meta_data(OKO_REFUSED_CHANGE_META);
 	$order->save_meta_data();
 }
 
@@ -3231,22 +5586,6 @@ function oko_home_delivery_may_go_without_date(array $fields): bool
 	return oko_home_delivery_has_dates($postcode, array_filter($product_ids)) === false;
 }
 
-add_action('woocommerce_checkout_create_order', 'oko_mark_order_without_date', 15, 2);
-
-/**
- * Record that an order goes without a delivery date on purpose, so it is
- * still sent to Økoskabet.
- */
-function oko_mark_order_without_date($order, $data): void
-{
-	if (! in_array('hey_okoskabet_shipping_home', (array) ($data['shipping_method'] ?? array()), true)) {
-		return;
-	}
-	if (oko_chosen_delivery_date_mode() === OKO_DATE_MODE_WHEN_AVAILABLE && empty($order->get_meta('_billing_okoskabet_delivery_date', true))) {
-		$order->update_meta_data(OKO_WITHOUT_DATE_META, 'yes');
-	}
-}
-
 add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery', 10, 2);
 
 function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $data): void
@@ -3256,6 +5595,67 @@ function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $d
 	if (in_array('hey_okoskabet_shipping_home', $shipping_methods, true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', '');
 	}
+}
+
+/**
+ * Stamp the delivery-location source and apply a default when neither
+ * the dropdown nor the Andet free-text was set on a home-delivery order.
+ *
+ * Source values feed the admin metabox and the post-save diagnostic
+ * log; the default ensures the driver always has a usable instruction
+ * even when our checkout JS never rendered (page cache, blocks-checkout,
+ * mobile timing, etc.). Runs pre-save — `get_id()` would be 0 here, so
+ * logging lives in the post-save companion below.
+ */
+add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_default_delivery_location', 25, 2);
+
+function okoskabet_woocommerce_plugin_default_delivery_location($order, $data): void
+{
+	if (! in_array('hey_okoskabet_shipping_home', (array) ($data['shipping_method'] ?? array()), true)) {
+		return;
+	}
+
+	$location = trim((string) $order->get_meta('_billing_okoskabet_delivery_location', true));
+	$note     = trim((string) $order->get_meta('_billing_okoskabet_delivery_note', true));
+
+	if ($location !== '') {
+		$source = 'dropdown';
+	} elseif ($note !== '') {
+		$source = 'andet_text';
+	} else {
+		$source = 'default_fallback';
+		$order->update_meta_data('_billing_okoskabet_delivery_location', 'In front of the front door');
+	}
+
+	$order->update_meta_data('_billing_okoskabet_delivery_location_source', $source);
+}
+
+/**
+ * Log default_fallback events post-save, so order_id is non-zero and
+ * correlatable with the Økoskabet backend. UA + postcode + login state
+ * is enough to spot patterns (mobile Safari, guest-only, postcode
+ * cluster) without dumping PII.
+ */
+add_action('woocommerce_checkout_order_processed', 'okoskabet_woocommerce_plugin_log_default_fallback', 10, 1);
+
+function okoskabet_woocommerce_plugin_log_default_fallback(int $order_id): void
+{
+	$order = wc_get_order($order_id);
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+	if ($order->get_meta('_billing_okoskabet_delivery_location_source', true) !== 'default_fallback') {
+		return;
+	}
+
+	$ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr((string) $_SERVER['HTTP_USER_AGENT'], 0, 200) : '';
+	error_log(sprintf(
+		'okoskabet_woocommerce_plugin: delivery_location default_fallback order_id=%d postcode=%s user=%s ua=%s',
+		$order_id,
+		$order->get_shipping_postcode(),
+		is_user_logged_in() ? 'member' : 'guest',
+		$ua
+	));
 }
 
 /**
@@ -3472,6 +5872,58 @@ function oko_status_events_as_chosen(array $events): array
 }
 
 /**
+ * The shop's own tags on a product, the way the lookup answers them.
+ *
+ * Tags are what Økoskabet splits dispatch notes into zones by, so they are
+ * the one field that must not go missing. They live on the product, never on
+ * the variation, so a variation is asked on its parent's behalf — otherwise a
+ * line for a variation would come back with no tags and fall out of its zone.
+ */
+function oko_product_tags(\WC_Product $product): array
+{
+	$id = $product instanceof \WC_Product_Variation
+		? (int) $product->get_parent_id()
+		: (int) $product->get_id();
+
+	// Asked once per product for the length of the request. A shipment's whole
+	// list of goods is rebuilt from scratch every time an addition arrives,
+	// and six variations of the same product are six identical term queries —
+	// as is a basket holding the same goods in two sizes.
+	static $tags = array();
+
+	if (! isset($tags[$id])) {
+		$tags[$id] = array_values(array_map('strval', (array) get_terms(array(
+			'taxonomy'   => 'product_tag',
+			'object_ids' => $id,
+			'fields'     => 'names',
+			'hide_empty' => false,
+		))));
+	}
+
+	return $tags[$id];
+}
+
+/**
+ * The picture of the goods, the way the lookup answers it.
+ *
+ * A variation without its own picture answers the parent's: WooCommerce does
+ * that itself in `WC_Product_Variation::get_image_id()`, so the packing room
+ * sees what the customer saw without us arranging it. We wrote that fallback
+ * out by hand first; a mutation check showed the test passed without it, and
+ * WooCommerce's source said why. The test stays — it is the parent's picture
+ * we depend on arriving, whoever fetches it.
+ *
+ * An empty string, never null: the other end reads it as "no picture", and a
+ * missing picture is not an error.
+ */
+function oko_product_image_url(\WC_Product $product): string
+{
+	$image_id = (int) $product->get_image_id();
+
+	return $image_id > 0 ? (string) \wp_get_attachment_url($image_id) : '';
+}
+
+/**
  * What the shop knows about a product, beyond its name.
  *
  * A packing slip has to name the producer and the country the goods come from.
@@ -3494,12 +5946,28 @@ function oko_status_events_as_chosen(array $events): array
  */
 function oko_product_properties(\WC_Product $product): array
 {
+	// Asked once per product for the length of the request, as the tags are.
+	// Every line of an order is a lookup — `wp_get_post_terms` for each public
+	// taxonomy and `wc_get_product_terms` for each visible attribute, none of
+	// which the object cache answers — and a shipment's whole list is rebuilt
+	// from scratch every time an addition arrives. Six variations of the same
+	// product were six identical scans of the parent.
+	static $properties_of = array();
+
+	// Its own name: `$key` below is each property's key, and reusing it
+	// stored the answer under the last attribute's key, where the next
+	// lookup by product never found it.
+	$memo_key = (int) $product->get_id();
+	if (isset($properties_of[$memo_key])) {
+		return $properties_of[$memo_key];
+	}
+
 	// A variation is one choice out of the parent's list. Answering with the
 	// parent's whole list would put "Danmark, Spanien" on the packing slip for
 	// a customer who bought the Spanish one, and country of origin is the one
 	// field that has to be right.
 	if ($product instanceof \WC_Product_Variation) {
-		return oko_variation_properties($product);
+		return $properties_of[$memo_key] = oko_variation_properties($product);
 	}
 
 	$properties = array();
@@ -3584,7 +6052,7 @@ function oko_product_properties(\WC_Product $product): array
 		}
 	}
 
-	return $properties;
+	return $properties_of[$memo_key] = $properties;
 }
 
 /**
@@ -3714,6 +6182,72 @@ function oko_variation_properties(\WC_Product_Variation $variation): array
 	}
 
 	return $properties;
+}
+
+/** When Økoskabet last reached this shop, per kind of call. */
+const OKO_INBOUND_SEEN_OPTION = 'okoskabet_inbound_last_seen';
+
+/**
+ * Remember that a call from Økoskabet arrived.
+ *
+ * Two roads run into the shop: the status messages that finish an order, and
+ * the product lookup the packing room needs for producer, country of origin
+ * and the tags it sorts dispatch notes by. Either can be stopped before
+ * WordPress ever sees it — a firewall in front of the site is enough, and at
+ * Gaardmester one is. Nothing breaks loudly when that happens: the packing
+ * room simply has nothing to sort by, and the shop has no way of telling that
+ * from a quiet day.
+ *
+ * The plugin cannot see a call that never arrives. What it can do is say when
+ * one last did, and let the shop draw the conclusion from "never".
+ *
+ * @param string $kind 'webhook' or 'products'.
+ */
+function oko_note_inbound_call(string $kind): void
+{
+	$seen = get_option(OKO_INBOUND_SEEN_OPTION, array());
+	$seen = is_array($seen) ? $seen : array();
+
+	// To the minute is plenty for "has anything come through lately", and it
+	// keeps a busy shop from writing this option on every single call.
+	if (isset($seen[$kind]) && (time() - (int) $seen[$kind]) < MINUTE_IN_SECONDS) {
+		return;
+	}
+
+	$seen[$kind] = time();
+
+	// Not autoloaded: read on one settings screen, never on the front end.
+	update_option(OKO_INBOUND_SEEN_OPTION, $seen, false);
+}
+
+/**
+ * When Økoskabet last reached this shop with a call of this kind, or null.
+ *
+ * @param string $kind 'webhook' or 'products'.
+ */
+function oko_inbound_last_seen(string $kind): ?int
+{
+	$seen = get_option(OKO_INBOUND_SEEN_OPTION, array());
+	$when = is_array($seen) && isset($seen[$kind]) ? (int) $seen[$kind] : 0;
+
+	return $when > 0 ? $when : null;
+}
+
+/**
+ * "2 hours ago", or "never" — for the shop, not for a log.
+ *
+ * A shop owner reading the settings page needs one of two answers: something
+ * came through recently, or nothing ever has. An exact timestamp invites them
+ * to work out the difference themselves.
+ */
+function oko_inbound_seen_label(?int $when): string
+{
+	if ($when === null) {
+		return __('never', O_TEXTDOMAIN);
+	}
+
+	/* translators: %s: human-readable time difference, e.g. "2 hours". */
+	return sprintf(__('%s ago', O_TEXTDOMAIN), human_time_diff($when, time()));
 }
 
 /** Set once the shop has saved the plugin settings at least once. */

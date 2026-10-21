@@ -1686,3 +1686,151 @@ msgstr "Importér"
 
 msgid "okoskabet-woocommerce-plugin is on production environment with missing `composer dumpautoload -o` that will improve the performance on autoloading itself."
 msgstr "okoskabet-woocommerce-plugin kører i produktionsmiljø uden `composer dumpautoload -o`, som ville gøre dets egen autoloading hurtigere."
+
+msgid "Contact from Økoskabet"
+msgstr "Kontakt fra Økoskabet"
+
+msgid "Last status message received: %s"
+msgstr "Seneste statusbesked modtaget: %s"
+
+msgid "Last product lookup received: %s"
+msgstr "Seneste vareopslag modtaget: %s"
+
+msgid "Both are calls from Økoskabet into this shop. \"Never\" means they are not getting through — usually a firewall or a security plugin in front of the site, not a setting here."
+msgstr "Begge er kald fra Økoskabet ind i denne butik. »Aldrig« betyder, at de ikke kommer igennem — oftest en firewall eller et sikkerhedsplugin foran siden, ikke en indstilling her."
+
+msgid "never"
+msgstr "aldrig"
+
+#. translators: %s: human-readable time difference, e.g. "2 hours".
+msgid "%s ago"
+msgstr "for %s siden"
+
+msgid "collection from the shop"
+msgstr "afhentning i butikken"
+
+msgid "no longer a collection from the shop"
+msgstr "ikke længere en afhentning i butikken"
+
+msgid "The change did not reach Økoskabet: the API key was refused (%d). Check the key under Økoskabet settings — until then, edits to this order stay in the shop. It is tried again next time the order is saved."
+msgstr "Ændringen nåede ikke Økoskabet: API-nøglen blev afvist (%d). Tjek nøglen under Økoskabet-indstillinger — indtil da bliver rettelser på denne ordre kun i butikken. Den forsøges igen, næste gang ordren gemmes."
+
+msgid "The change did not reach Økoskabet: the order can no longer be changed there, because a parcel has been received. This and later edits stay in the shop."
+msgstr "Ændringen nåede ikke Økoskabet: ordren kan ikke længere ændres der, fordi en pakke er modtaget. Denne og senere rettelser bliver kun i butikken."
+
+msgid "The change did not reach Økoskabet, which refused it (%1$d): %2$s The order now says something Økoskabet does not, and this change is not sent again — a later edit is tried on its own."
+msgstr "Ændringen nåede ikke Økoskabet, som afviste den (%1$d): %2$s Ordren siger nu noget, Økoskabet ikke siger, og denne ændring sendes ikke igen — en senere rettelse forsøges for sig."
+
+msgid "no reason given"
+msgstr "ingen grund oplyst"
+
+msgid "delivery address %s"
+msgstr "leveringsadresse %s"
+
+msgid "delivery date %s"
+msgstr "leveringsdato %s"
+
+msgid "recipient %s"
+msgstr "modtager %s"
+
+msgid "delivery to Økoskab %s"
+msgstr "levering til Økoskab %s"
+
+msgid "no longer a delivery to an Økoskab"
+msgstr "ikke længere en levering til et Økoskab"
+
+msgid "Økoskabet changed the delivery for %s, but it could not be read back. The order still says what the customer ordered."
+msgstr "Økoskabet ændrede leveringen for %s, men den kunne ikke læses tilbage. Ordren siger stadig det, kunden bestilte."
+
+msgid "Økoskabet changed the delivery: %s. Changed there, not here."
+msgstr "Økoskabet ændrede leveringen: %s. Ændret dér, ikke her."
+
+msgid "Ask for flat, floor and door"
+msgstr "Spørg om lejlighed, etage og dør"
+
+msgid "Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself (\"Byagervej 194, 1. tv\") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice."
+msgstr "Lægger en anden adresselinje i kassen, til en butik hvis kasse ingen har. Lad den være slukket, hvis jeres kunder skriver etagen på selve gadelinjen (\"Byagervej 194, 1. tv\") — adresseregistret får den dér og læser den, og to steder at skrive én ting betyder, at nogle kunder skriver den to gange."
+
+msgid "Flat, floor and door"
+msgstr "Lejlighed, etage og dør"
+
+msgid "e.g. 3. th"
+msgstr "f.eks. 3. th"
+
+msgid "Adding to an earlier order? Write its order number here"
+msgstr "Tillæg til en tidligere ordre? Skriv ordrenummeret her"
+
+msgid "Addition to order %s"
+msgstr "Tillæg til ordre %s"
+
+msgid "Order %s is an addition to this one"
+msgstr "Ordre %s er et tillæg til denne"
+
+msgid "We cannot find that order number on your email address. This is ordered on its own, with its own delivery."
+msgstr "Vi kan ikke finde det ordrenummer på din mailadresse. Dette bestilles for sig, med sin egen levering."
+
+msgid "The goods could not be added to order %1$s (%2$s). Økoskabet has not been told about this order."
+msgstr "Varerne kunne ikke lægges til ordre %1$s (%2$s). Økoskabet har ikke fået besked om denne ordre."
+
+msgid "The goods were added to order %s. No separate delivery."
+msgstr "Varerne er lagt til ordre %s. Ingen selvstændig levering."
+
+msgid "The goods were taken off order %s."
+msgstr "Varerne er taget af ordre %s."
+
+msgid "The goods could not be taken off order %1$s (%2$s). They may still be on that delivery."
+msgstr "Varerne kunne ikke tages af ordre %1$s (%2$s). De kan stadig stå på den levering."
+
+msgid "ADDITION — %s"
+msgstr "TILLÆG — %s"
+
+msgid "ADDITION: order %1$s was added %2$s. Its goods are at the bottom of the list."
+msgstr "TILLÆG: ordre %1$s er lagt til %2$s. Dens varer står nederst på listen."
+
+msgid "ADDITION: order %s was cancelled. Its goods have been taken off the list."
+msgstr "TILLÆG: ordre %s er annulleret. Dens varer er taget af listen."
+
+msgid "That order can no longer take anything more. This is ordered on its own, with its own delivery."
+msgstr "Den ordre kan ikke tage imod mere. Dette bestilles for sig, med sin egen levering."
+
+msgid "Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order."
+msgstr "Ordre %s kunne ikke læses, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
+
+msgid "Order %s can no longer take anything more, so nothing was added to it. Økoskabet has not been told about this order."
+msgstr "Ordre %s kan ikke tage imod mere, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
+
+# ----------------------------------------------------------------------
+# Address suggestions at checkout
+# ----------------------------------------------------------------------
+
+msgid "Address suggestions at checkout"
+msgstr "Adresseforslag i kassen"
+
+msgid "While the customer types their address, suggest addresses from the Danish address register and fill in street, floor and door, postcode and city. Fewer parcels go to an address that cannot be found. The customer can ignore the suggestions and type as before. Works in the classic checkout."
+msgstr "Mens kunden skriver sin adresse, foreslås adresser fra det danske adresseregister, og vej, etage og dør, postnummer og by bliver udfyldt. Så bliver færre pakker sendt til en adresse, der ikke kan findes. Kunden kan se bort fra forslagene og skrive som før. Virker i den klassiske kasse."
+
+msgid "Address suggestions: the checkout suggests addresses from the address register while the customer types, including floor and door."
+msgstr "Adresseforslag: kassen foreslår adresser fra adresseregistret, mens kunden skriver, også med etage og dør."
+
+msgid "Address suggestions"
+msgstr "Adresseforslag"
+
+msgid "Choose apartment"
+msgstr "Vælg lejlighed"
+
+msgid "No apartment / the whole house"
+msgstr "Ingen lejlighed / hele huset"
+
+#, php-format
+msgid "%d suggestions. Use the up and down arrows to choose."
+msgstr "%d forslag. Brug pil op og pil ned for at vælge."
+
+msgid "1 suggestion. Use the up and down arrows to choose."
+msgstr "1 forslag. Brug pil op og pil ned for at vælge."
+
+#, php-format
+msgid "%d apartments. Use the up and down arrows to choose."
+msgstr "%d lejligheder. Brug pil op og pil ned for at vælge."
+
+msgid "The address has been filled in."
+msgstr "Adressen er udfyldt."

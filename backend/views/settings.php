@@ -180,6 +180,15 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 
 	$cmb->add_field(
 		array(
+			'name'    => __('Ask for flat, floor and door', O_TEXTDOMAIN),
+			'desc'    => __('Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself ("Byagervej 194, 1. tv") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice.', O_TEXTDOMAIN),
+			'id'      => '_ask_for_floor',
+			'type'    => 'checkbox',
+		)
+	);
+
+	$cmb->add_field(
+		array(
 			'name'       => __('Shipping in a row of its own', O_TEXTDOMAIN),
 			'desc'       => __('Shipping methods shown in their own row under Shipping at checkout, e.g. an add-on to an earlier order.', O_TEXTDOMAIN),
 			'id'         => '_separate_shipping_methods',
@@ -195,6 +204,18 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 			'type'            => 'text',
 			'sanitization_cb' => 'sanitize_text_field',
 			'attributes'      => array('placeholder' => __('Other options', O_TEXTDOMAIN)),
+		)
+	);
+
+	// Off until the shop turns it on, like everything new. The checkout script
+	// and its REST routes both check this, see Address_Autocomplete.
+	$cmb->add_field(
+		array(
+			'name'    => __('Address suggestions at checkout', O_TEXTDOMAIN),
+			'desc'    => __('While the customer types their address, suggest addresses from the Danish address register and fill in street, floor and door, postcode and city. Fewer parcels go to an address that cannot be found. The customer can ignore the suggestions and type as before. Works in the classic checkout.', O_TEXTDOMAIN),
+			'id'      => \okoskabet_woocommerce_plugin\Integrations\Address_Autocomplete::SETTING,
+			'type'    => 'checkbox',
+			'default' => '',
 		)
 	);
 
@@ -224,6 +245,32 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
+	// Whether Økoskabet can reach this shop at all. The plugin never sees a
+	// call that is stopped in front of WordPress, so it cannot report the
+	// blockage — only when something last got through. "Aldrig" is the answer
+	// that matters: it means the road has been closed the whole time.
+	$cmb->add_field(
+		array(
+			'name' => __('Contact from Økoskabet', O_TEXTDOMAIN),
+			'id'   => '_oko_inbound_seen',
+			'type' => 'title',
+			'desc' => sprintf(
+				'<p>%s<br />%s</p><p><em>%s</em></p>',
+				esc_html(sprintf(
+					/* translators: %s: how long ago, e.g. "2 hours", or "never". */
+					__('Last status message received: %s', O_TEXTDOMAIN),
+					oko_inbound_seen_label(oko_inbound_last_seen('webhook'))
+				)),
+				esc_html(sprintf(
+					/* translators: %s: how long ago, e.g. "2 hours", or "never". */
+					__('Last product lookup received: %s', O_TEXTDOMAIN),
+					oko_inbound_seen_label(oko_inbound_last_seen('products'))
+				)),
+				esc_html__('Both are calls from Økoskabet into this shop. "Never" means they are not getting through — usually a firewall or a security plugin in front of the site, not a setting here.', O_TEXTDOMAIN)
+			),
+		)
+	);
+
 	$cmb->add_field(
 		array(
 			'name' => __('Webhook Status', O_TEXTDOMAIN),
@@ -232,7 +279,14 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 				: __('Enable or disable webhook functionality.', O_TEXTDOMAIN),
 			'id'   => '_webhook_enabled',
 			'type' => 'checkbox',
-			'default' => 'on',
+			// A plain 'default' would tick this again every time the shop
+			// saves it off: an unticked checkbox stores nothing, and CMB2
+			// shows the default whenever nothing is stored. So a shop could
+			// never close this door, and the page said it was open when it
+			// was not. Same remedy as the two event lists below.
+			'default_cb' => function () {
+				return get_option(OKO_SETTINGS_SAVED_OPTION) ? '' : 'on';
+			},
 		)
 	);
 
@@ -241,8 +295,12 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		// reports them, plus the label print — which is not a step but the
 		// moment the boxes come into being. Read from the account so a step
 		// added later can be chosen without a plugin release.
-		$oko_status_event_options = array( 'label_printed' => __('Label printed', O_TEXTDOMAIN) )
-			+ oko_merchant_statuses( 'default' );
+		// `oko_merchant_events()` rather than the list with the label written
+		// in front of it: printing the label belongs where it happens, after
+		// the order is registered. This screen is the one a shop with a single
+		// account sees — Gaardmester's — and it built its own copy of the
+		// list, so the same fix had to be made twice. Now it is made once.
+		$oko_status_event_options = oko_merchant_events( 'default' );
 
 		$cmb->add_field(
 			array(

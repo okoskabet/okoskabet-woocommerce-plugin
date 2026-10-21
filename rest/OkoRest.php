@@ -15,6 +15,7 @@ namespace okoskabet_woocommerce_plugin\Rest;
 use okoskabet_woocommerce_plugin\Engine\Base;
 use okoskabet_woocommerce_plugin\Integrations\Merchants;
 use okoskabet_woocommerce_plugin\Integrations\Merchant_Router;
+use okoskabet_woocommerce_plugin\Integrations\Payment_Capture;
 
 /**
  * Multi-merchant aware REST endpoints.
@@ -302,6 +303,31 @@ class OkoRest extends Base
 	}
 
 	/**
+	 * The merchant id the route itself names, or '' on the legacy route.
+	 *
+	 * From the URL and nowhere else: `get_param()` lets the query string and a
+	 * JSON body speak over the route.
+	 */
+	private static function route_merchant_id(\WP_REST_Request $request): string {
+		$id = $request->get_url_params()['merchant_id'] ?? '';
+
+		return is_string($id) ? $id : '';
+	}
+
+	/**
+	 * One query value as text, or nothing.
+	 *
+	 * `zip[]=1` is a request anyone can make, and casting the array that
+	 * arrives to a string is a PHP warning in the shop's log and a lookup for
+	 * a postcode called "Array".
+	 *
+	 * @param mixed $value
+	 */
+	private static function query_text($value): string {
+		return is_scalar($value) ? (string) $value : '';
+	}
+
+	/**
 	 * Parse a comma-separated list of integers into a sanitised array of
 	 * positive product IDs. Defensive against any input shape.
 	 */
@@ -377,11 +403,15 @@ class OkoRest extends Base
 			$maximum_days_in_future = $default_days;
 		}
 
+		// Encoded: `add_query_arg()` puts values in as they are, so a postcode
+		// of "8000&maximum_days_in_future=366" from the public route became a
+		// second parameter on our call to Økoskabet, made with the merchant's
+		// key — and an address with an "&" in it was cut short.
 		$request_url = \add_query_arg(array(
 			'delivery_dates'         => 'true',
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'zipcode'                => $params['zip'],
-			'address'                => $params['address'] ?? '',
+			'zipcode'                => rawurlencode(self::query_text($params['zip'] ?? '')),
+			'address'                => rawurlencode(self::query_text($params['address'] ?? '')),
 		), Merchants::api_url_for($merchant) . '/api/v1/sheds/');
 
 		$response = \wp_remote_get($request_url, array(
@@ -480,7 +510,7 @@ class OkoRest extends Base
 
 		$request_url = \add_query_arg(array(
 			'maximum_days_in_future' => $maximum_days_in_future,
-			'postal_code'            => $params['zip'],
+			'postal_code'            => rawurlencode(self::query_text($params['zip'] ?? '')),
 		), Merchants::api_url_for($merchant) . '/api/v1/home_delivery');
 
 		$response = \wp_remote_get($request_url, array(
@@ -791,7 +821,8 @@ class OkoRest extends Base
 	public function handle_products(\WP_REST_Request $request)
 	{ // phpcs:ignore Squiz.Commenting.FunctionComment.IncorrectTypeHint
 
-		$merchant = Merchants::get(Merchant_Router::sanitize_id((string) $request->get_param('merchant_id')));
+		// From the route and nothing else; see handle_webhook().
+		$merchant = Merchants::get(Merchant_Router::sanitize_id(self::route_merchant_id($request)));
 		if (!$merchant) {
 			return new \WP_Error('unknown_merchant', 'Unknown merchant', array('status' => 404));
 		}
@@ -859,13 +890,14 @@ class OkoRest extends Base
 				continue;
 			}
 
-			$image_id = (int) $product->get_image_id();
-
 			$products[] = array(
 				'id'    => $id,
 				'name'  => (string) $product->get_name(),
-				'image' => $image_id > 0 ? (string) \wp_get_attachment_url($image_id) : '',
-				'tags'  => array_values(array_map('strval', (array) \wp_get_post_terms($id, 'product_tag', array('fields' => 'names')))),
+				// Read through the same helpers the order lines use, so the
+				// two answers cannot drift apart. Økoskabet now gets these on
+				// the line as well, and fills from the lookup only to refresh.
+				'image' => \oko_product_image_url($product),
+				'tags'  => \oko_product_tags($product),
 				// Everything else the shop files this product under. A packing
 				// slip has to name the producer and the country of origin, and
 				// no two shops keep those in the same field — so the shop picks
@@ -873,6 +905,8 @@ class OkoRest extends Base
 				'properties' => \oko_product_properties($product),
 			);
 		}
+
+		\oko_note_inbound_call('products');
 
 		return new \WP_REST_Response($products, 200);
 	}
@@ -897,14 +931,19 @@ class OkoRest extends Base
 				$has_sig ? 'yes' : 'no',
 				isset($diag_params['event']) ? $diag_params['event'] : '(none)',
 				isset($diag_params['shipment_reference']) ? $diag_params['shipment_reference'] : '(none)',
-				$request->get_param('merchant_id') ?: '(default-route)'
+				self::route_merchant_id($request) ?: '(default-route)'
 			));
 			error_log('Økoskabet webhook headers (redacted): ' . wp_json_encode($redacted));
 		}
 
 		// --- Step 0: Resolve which merchant the request is for ---
-		$merchant_id_param = $request->get_param('merchant_id');
-		if (is_string($merchant_id_param) && $merchant_id_param !== '') {
+		// The merchant named in the URL, and only there. `get_param()` lets the
+		// query string and a JSON body speak over the route, so
+		// `/webhook/a?merchant_id=b` was checked against b's secret, and a
+		// `merchant_id` field ever added to Økoskabet's body would have sent
+		// every webhook to the wrong merchant.
+		$merchant_id_param = self::route_merchant_id($request);
+		if ($merchant_id_param !== '') {
 			$merchant = Merchants::get(Merchant_Router::sanitize_id($merchant_id_param));
 			if (!$merchant) {
 				if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -978,6 +1017,11 @@ class OkoRest extends Base
 			return new \WP_Error('signature_invalid', 'Invalid HMAC signature', array('status' => 401));
 		}
 
+		// Økoskabet reached us and proved who it was. Noted here rather than at
+		// the end: what the shop needs to know is whether the road is open,
+		// and an event this shop does nothing with still came down it.
+		\oko_note_inbound_call('webhook');
+
 		// --- Step 3: Map Økoskabet's event semantics to internal names ---
 		// Read out of the signed body and nothing else. `get_params()` merges
 		// the query string in on top, and a body sent as text/plain is not
@@ -1015,6 +1059,19 @@ class OkoRest extends Base
 			}
 		}
 
+		// The delivery itself, before anything about statuses. A shed, a date
+		// or an address changed by hand in Økoskabet's backoffice is a change
+		// the shop has to hear about whatever steps it has ticked — and until
+		// it does, WooCommerce still holds what the customer ordered, and the
+		// next edit in the shop sends that back over the correction.
+		$delivery_written_back = array();
+		if ($raw_event === 'reservation_updated'
+			&& $shipment_reference !== ''
+			&& isset($params['changes']) && is_array($params['changes'])
+			&& \oko_changes_touch_the_delivery($params['changes'])) {
+			$delivery_written_back = \oko_take_delivery_from_okoskabet($shipment_reference, $merchant);
+		}
+
 		// As the shop saved them. The old names are rewritten once, by the
 		// migration, and translating again here would undo a shop's own
 		// choice: a freshly ticked "I skabet" is the real `in_shed` step, and
@@ -1032,9 +1089,10 @@ class OkoRest extends Base
 				));
 			}
 			return array(
-				'success' => true,
-				'message' => 'Event acknowledged but not actionable',
-				'event'   => $raw_event,
+				'success'  => true,
+				'message'  => 'Event acknowledged but not actionable',
+				'event'    => $raw_event,
+				'delivery' => $delivery_written_back,
 			);
 		}
 
@@ -1056,6 +1114,7 @@ class OkoRest extends Base
 				'message'  => 'Event not configured for any action',
 				'event'    => $internal_event,
 				'order_id' => $shipment_reference,
+				'delivery' => $delivery_written_back,
 			);
 		}
 
@@ -1085,66 +1144,31 @@ class OkoRest extends Base
 		// leaking the other secret, but cheap to enforce.) Orders
 		// without a recorded merchant predate the migration — treat
 		// those as belonging to the default merchant.
-		$order_merchant_id = sanitize_key((string) $order->get_meta(Merchant_Router::ORDER_META_KEY, true));
-		if ($order_merchant_id === '') {
-			$order_merchant_id = Merchants::default_id();
-		}
-		if (! empty($merchant['id']) && $order_merchant_id !== $merchant['id']) {
+		// The same question the delivery write-back above asks, answered by
+		// the same function, so the two halves of one webhook cannot disagree.
+		if (! \oko_order_belongs_to_merchant($order, $merchant)) {
 			if (defined('WP_DEBUG') && WP_DEBUG) {
 				error_log(sprintf(
 					'Økoskabet webhook: REJECTED — order %s belongs to merchant "%s" but webhook came in for "%s"',
 					$shipment_reference,
-					$order_merchant_id,
+					\oko_order_merchant_id($order),
 					$merchant['id']
 				));
 			}
 			return new \WP_Error('merchant_mismatch', 'Order belongs to a different merchant', array('status' => 403));
 		}
 
-		$capture_result = null;
+		$capture_result = self::settle_order($order, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete, $webhook_events, $capture_events);
 
-		// --- Step 6: Capture payment if this event is a capture trigger ---
-		if ($triggers_capture && !$order->is_paid()) {
-			$capture_result = \okoskabet_woocommerce_plugin\Integrations\Payment_Capture::capture(
-				$order,
-				$gateway_hint
-			);
-
-			$order->add_order_note(sprintf(
-				/* translators: %1$s = internal event name, %2$s = capture result message */
-				__('Økoskabet webhook: betalingshåndtering via event "%1$s". Resultat: %2$s', O_TEXTDOMAIN),
-				$internal_event,
-				$capture_result['message']
-			));
-		}
-
-		// --- Step 7: Mark order as completed if this event triggers completion ---
-		if ($triggers_complete) {
-			// A delivery says nothing about an order the shop has already
-			// settled. Cancelled, refunded and failed orders are done with,
-			// and an order nobody has paid for is not one to call finished:
-			// completing it tells the customer their order is on its way and,
-			// on a gateway that charges at completion, asks for the money
-			// without anything behind it. The parcel can still arrive late in
-			// a courier's feed long after a shop cancelled the order, so this
-			// is an ordinary Tuesday rather than an edge case.
-			$settled = array('cancelled', 'refunded', 'failed', 'trash');
-			if (in_array($order->get_status(), $settled, true) || ! $order->is_paid()) {
-				if (defined('WP_DEBUG') && WP_DEBUG) {
-					error_log(sprintf(
-						'Økoskabet webhook: not completing order %s — status "%s", paid: %s',
-						$shipment_reference,
-						$order->get_status(),
-						$order->is_paid() ? 'yes' : 'no'
-					));
-				}
-			} elseif ($order->get_status() !== 'completed') {
-				$order->update_status('completed', sprintf(
-					/* translators: %s = internal event name */
-					__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),
-					$internal_event
-				));
-			}
+		// Every addition riding on this delivery is settled the same way. An
+		// addition is its own WooCommerce order with its own payment, but it
+		// has no shipment of its own, so no webhook ever names it: without
+		// this its card was never charged on a capture-on-event gateway, and
+		// it stayed "processing" after the box it was packed in was delivered.
+		$additions = array();
+		foreach (\oko_additions_to($order, $order) as $addition) {
+			self::settle_order($addition, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete, $webhook_events, $capture_events);
+			$additions[(string) $addition->get_id()] = $addition->get_status();
 		}
 
 		if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -1169,6 +1193,142 @@ class OkoRest extends Base
 			'merchant_id'    => $merchant['id'] ?? '',
 			'capture_result' => $capture_result,
 			'new_status'     => $order->get_status(),
+			'additions'      => $additions,
+			'delivery'       => $delivery_written_back,
 		);
+	}
+
+	/**
+	 * Steps 6 and 7 for one order: capture if the event is a capture trigger,
+	 * complete if it is a completion trigger — with every guard both steps
+	 * have always had.
+	 *
+	 * The shop's two step lists come along whole, not only the two answers
+	 * for this event: a completion that arrived before the capture is put to
+	 * use only while its own step is still ticked, and is remembered only
+	 * when some capture step could still come for it.
+	 *
+	 * @param \WC_Order $order
+	 * @param string[] $webhook_events The steps that complete an order.
+	 * @param string[] $capture_events The steps that capture its payment.
+	 * @return array<string,mixed>|null The capture result, when one was tried.
+	 */
+	private static function settle_order(\WC_Order $order, string $internal_event, string $gateway_hint, bool $triggers_capture, bool $triggers_complete, array $webhook_events, array $capture_events): ?array
+	{
+		$capture_result = null;
+
+		// --- Step 6: Capture payment if this event is a capture trigger ---
+		if ($triggers_capture && !$order->is_paid()) {
+			$capture_result = Payment_Capture::capture(
+				$order,
+				$gateway_hint
+			);
+
+			$order->add_order_note(sprintf(
+				/* translators: %1$s = internal event name, %2$s = capture result message */
+				__('Økoskabet webhook: betalingshåndtering via event "%1$s". Resultat: %2$s', O_TEXTDOMAIN),
+				$internal_event,
+				$capture_result['message']
+			));
+		}
+
+		// --- Step 7: Mark order as completed if this event triggers completion ---
+		// Økoskabet sends each step on its own and retries after a 5xx, so the
+		// completion event can arrive before the capture event. It cannot be
+		// used then — the order is not paid — but it has happened, and the
+		// capture event that pays the order is the moment to use it. Nothing
+		// else does: without the completion event, a capture only captures.
+		// Only while the shop still has that step ticked: a completion step
+		// switched off since must not go on completing orders.
+		$completion_event = null;
+		$waiting_event    = (string) $order->get_meta(Payment_Capture::COMPLETION_WAITING_META, true);
+
+		// A refused capture ends the wait. Some gateways move the order to
+		// processing before asking for the money, so the order can look paid
+		// all the same, and the next event to come along would otherwise
+		// finish an order whose money was never taken.
+		if ($waiting_event !== '' && $capture_result !== null && empty($capture_result['success'])) {
+			$order->delete_meta_data(Payment_Capture::COMPLETION_WAITING_META);
+			$order->add_order_note(sprintf(
+				/* translators: %s = completion event */
+				__('Økoskabet webhook: betalingen blev ikke hævet, så ordren afsluttes ikke af event "%s", der kom før.', O_TEXTDOMAIN),
+				$waiting_event
+			));
+			$order->save();
+			$waiting_event = '';
+		}
+
+		$waiting_ticked = in_array($waiting_event, $webhook_events, true);
+		if ($triggers_complete) {
+			$completion_event = $internal_event;
+		} elseif ($waiting_ticked) {
+			// Not a completion event, so Step 4 let it through as a capture event.
+			$completion_event = $waiting_event;
+		}
+
+		if ($completion_event !== null) {
+			// A delivery says nothing about an order the shop has already
+			// settled. Cancelled, refunded and failed orders are done with,
+			// and an order nobody has paid for is not one to call finished:
+			// completing it tells the customer their order is on its way and,
+			// on a gateway that charges at completion, asks for the money
+			// without anything behind it. The parcel can still arrive late in
+			// a courier's feed long after a shop cancelled the order, so this
+			// is an ordinary Tuesday rather than an edge case.
+			$settled = array('cancelled', 'refunded', 'failed', 'trash');
+			if (in_array($order->get_status(), $settled, true) || ! $order->is_paid()) {
+				if (defined('WP_DEBUG') && WP_DEBUG) {
+					error_log(sprintf(
+						'Økoskabet webhook: not completing order %s — status "%s", paid: %s',
+						$order->get_order_number(),
+						$order->get_status(),
+						$order->is_paid() ? 'yes' : 'no'
+					));
+				}
+
+				// Remembered, not acted on: only a capture that actually pays
+				// the order puts it to use, and the checks above run again then.
+				// Once, however many times the event is retried — unless the
+				// shop has since unticked the step that is waiting, which then
+				// makes way for the one it ticks instead. Not when no capture
+				// can come — no capture step chosen, an offline payment, an
+				// order capture will not touch — since the note would promise
+				// something that cannot happen.
+				if ($triggers_complete && ! $waiting_ticked && ! empty($capture_events)
+					&& Payment_Capture::can_capture($order)) {
+					$order->update_meta_data(Payment_Capture::COMPLETION_WAITING_META, $internal_event);
+					$order->add_order_note(sprintf(
+						/* translators: %s = internal event name */
+						__('Økoskabet webhook: event "%s" afslutter ordren, men betalingen er ikke hævet endnu. Ordren afsluttes, når betalingen hæves.', O_TEXTDOMAIN),
+						$internal_event
+					));
+					$order->save();
+				}
+			} else {
+				// Cleared before update_status(), which saves it in the same write.
+				if ($waiting_event !== '') {
+					$order->delete_meta_data(Payment_Capture::COMPLETION_WAITING_META);
+				}
+				if ($order->get_status() !== 'completed') {
+					$note = $triggers_complete
+						? sprintf(
+							/* translators: %s = internal event name */
+							__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %s', O_TEXTDOMAIN),
+							$completion_event
+						)
+						: sprintf(
+							/* translators: %1$s = completion event, %2$s = capture event */
+							__('Ordre markeret som afsluttet via Økoskabet webhook. Event: %1$s, som kom før betalingen blev hævet ved %2$s.', O_TEXTDOMAIN),
+							$completion_event,
+							$internal_event
+						);
+					$order->update_status('completed', $note);
+				} elseif ($waiting_event !== '') {
+					$order->save();
+				}
+			}
+		}
+
+		return $capture_result;
 	}
 }
