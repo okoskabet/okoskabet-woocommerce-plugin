@@ -21,13 +21,45 @@ use okoskabet_woocommerce_plugin\Engine\Base;
 class Payment_Capture extends Base {
 
 	/**
+	 * Order meta: the completion event that reached the webhook before the
+	 * order was paid. The capture that pays the order uses it; see Step 7 of
+	 * OkoRest::handle_webhook().
+	 */
+	public const COMPLETION_WAITING_META = '_okoskabet_completion_waiting';
+
+	/**
 	 * Initialize the class.
+	 *
+	 * Capture itself is called directly from the OkoRest webhook handler. The
+	 * hooks here run wherever the order is cancelled or refunded, the admin
+	 * included, which the REST classes are not loaded for.
 	 *
 	 * @return void|bool
 	 */
 	public function initialize() {
 		parent::initialize();
-		// No hooks needed here — capture is called directly from OkoRest webhook handler.
+
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'forget_waiting_completion' ), 10, 2 );
+		add_action( 'woocommerce_order_status_refunded', array( $this, 'forget_waiting_completion' ), 10, 2 );
+	}
+
+	/**
+	 * A cancelled or refunded order is done with, and so is the delivery that
+	 * was waiting for its money. Should the shop reopen it and send it again,
+	 * the next capture must wait for the next delivery, not finish the order
+	 * on the old one.
+	 *
+	 * @param int       $order_id The order whose status changed.
+	 * @param \WC_Order $order    The order, as WooCommerce passes it.
+	 * @return void
+	 */
+	public function forget_waiting_completion( $order_id, \WC_Order $order ) {
+		if ( (string) $order->get_meta( self::COMPLETION_WAITING_META, true ) === '' ) {
+			return;
+		}
+
+		$order->delete_meta_data( self::COMPLETION_WAITING_META );
+		$order->save();
 	}
 
 	/**
@@ -126,6 +158,46 @@ class Payment_Capture extends Base {
 	}
 
 	/**
+	 * Whether a capture event could still take the money for this order: it
+	 * was paid by card, and it is in a status capture() will act on. The
+	 * webhook asks before it promises a shop that an order will be finished
+	 * once its payment is taken.
+	 *
+	 * @param \WC_Order $order The order.
+	 */
+	public static function can_capture( \WC_Order $order ): bool {
+		return ! $order->is_paid()
+			&& ! self::is_offline( $order )
+			&& $order->has_status( self::capturable_statuses() );
+	}
+
+	/**
+	 * Whether the order was paid in a way no capture can touch.
+	 *
+	 * @param \WC_Order $order The order.
+	 */
+	private static function is_offline( \WC_Order $order ): bool {
+		$offline_methods = apply_filters(
+			'okoskabet_offline_payment_methods',
+			array( 'bacs', 'cheque', 'cod' )
+		);
+
+		return in_array( $order->get_payment_method(), (array) $offline_methods, true );
+	}
+
+	/**
+	 * The statuses capture() acts on.
+	 *
+	 * @return array<string>
+	 */
+	private static function capturable_statuses(): array {
+		return (array) apply_filters(
+			'okoskabet_capturable_order_statuses',
+			array( 'pending', 'on-hold', 'failed' )
+		);
+	}
+
+	/**
 	 * Attempt to capture payment for a WooCommerce order.
 	 * Detects the gateway used and calls the appropriate capture method.
 	 *
@@ -145,11 +217,7 @@ class Payment_Capture extends Base {
 		// such an order to 'processing' would report it paid when it is not.
 		// Ask the order, not the merchant's gateway hint: the hint names the
 		// card gateway to capture through, not how this order was paid.
-		$offline_methods = apply_filters(
-			'okoskabet_offline_payment_methods',
-			array( 'bacs', 'cheque', 'cod' )
-		);
-		if ( in_array( $order->get_payment_method(), (array) $offline_methods, true ) ) {
+		if ( self::is_offline( $order ) ) {
 			$msg = sprintf(
 				'Order #%s uses "%s", an offline payment method; nothing to capture, order left unpaid.',
 				$order->get_order_number(),
@@ -165,11 +233,7 @@ class Payment_Capture extends Base {
 		// status. A late webhook from Økoskabet must not flip a cancelled,
 		// refunded, or failed order back into 'processing'. Accept only the
 		// statuses where capture is meaningful.
-		$capturable_statuses = apply_filters(
-			'okoskabet_capturable_order_statuses',
-			array( 'pending', 'on-hold', 'failed' )
-		);
-		if ( ! $order->has_status( $capturable_statuses ) ) {
+		if ( ! $order->has_status( self::capturable_statuses() ) ) {
 			$msg = sprintf(
 				'Order #%s is in status "%s"; capture skipped (not in capturable statuses).',
 				$order->get_order_number(),
