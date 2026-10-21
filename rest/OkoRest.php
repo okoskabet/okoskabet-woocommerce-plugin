@@ -1158,7 +1158,7 @@ class OkoRest extends Base
 			return new \WP_Error('merchant_mismatch', 'Order belongs to a different merchant', array('status' => 403));
 		}
 
-		$capture_result = self::settle_order($order, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete);
+		$capture_result = self::settle_order($order, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete, $webhook_events, $capture_events);
 
 		// Every addition riding on this delivery is settled the same way. An
 		// addition is its own WooCommerce order with its own payment, but it
@@ -1167,7 +1167,7 @@ class OkoRest extends Base
 		// it stayed "processing" after the box it was packed in was delivered.
 		$additions = array();
 		foreach (\oko_additions_to($order, $order) as $addition) {
-			self::settle_order($addition, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete);
+			self::settle_order($addition, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete, $webhook_events, $capture_events);
 			$additions[(string) $addition->get_id()] = $addition->get_status();
 		}
 
@@ -1203,10 +1203,17 @@ class OkoRest extends Base
 	 * complete if it is a completion trigger — with every guard both steps
 	 * have always had.
 	 *
+	 * The shop's two step lists come along whole, not only the two answers
+	 * for this event: a completion that arrived before the capture is put to
+	 * use only while its own step is still ticked, and is remembered only
+	 * when some capture step could still come for it.
+	 *
 	 * @param \WC_Order $order
+	 * @param string[] $webhook_events The steps that complete an order.
+	 * @param string[] $capture_events The steps that capture its payment.
 	 * @return array<string,mixed>|null The capture result, when one was tried.
 	 */
-	private static function settle_order(\WC_Order $order, string $internal_event, string $gateway_hint, bool $triggers_capture, bool $triggers_complete): ?array
+	private static function settle_order(\WC_Order $order, string $internal_event, string $gateway_hint, bool $triggers_capture, bool $triggers_complete, array $webhook_events, array $capture_events): ?array
 	{
 		$capture_result = null;
 
