@@ -1132,11 +1132,7 @@ class OkoRest extends Base
 		// this its card was never charged on a capture-on-event gateway, and
 		// it stayed "processing" after the box it was packed in was delivered.
 		$additions = array();
-		foreach (\oko_addition_ids($order) as $addition_id) {
-			$addition = wc_get_order($addition_id);
-			if (! $addition instanceof \WC_Order || $addition->get_id() === $order->get_id()) {
-				continue;
-			}
+		foreach (\oko_additions_to($order, $order) as $addition) {
 			self::settle_order($addition, $internal_event, $gateway_hint, $triggers_capture, $triggers_complete);
 			$additions[(string) $addition->get_id()] = $addition->get_status();
 		}
