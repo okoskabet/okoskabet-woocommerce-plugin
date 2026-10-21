@@ -3035,13 +3035,7 @@ function oko_cart_can_pre_order(): bool
 		return false;
 	}
 
-	$product_ids = array();
-	foreach (WC()->cart->get_cart() as $item) {
-		$pid = (int) ($item['product_id'] ?? 0);
-		if ($pid > 0) {
-			$product_ids[] = $pid;
-		}
-	}
+	$product_ids = oko_cart_product_ids();
 
 	return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_has_pre_order_days($product_ids);
 }
@@ -3056,13 +3050,7 @@ function oko_cart_is_pre_order_only(): bool
 		return false;
 	}
 
-	$product_ids = array();
-	foreach (WC()->cart->get_cart() as $item) {
-		$pid = (int) ($item['product_id'] ?? 0);
-		if ($pid > 0) {
-			$product_ids[] = $pid;
-		}
-	}
+	$product_ids = oko_cart_product_ids();
 
 	return \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions::cart_is_pre_order_only($product_ids);
 }
@@ -3103,13 +3091,7 @@ function oko_pre_order_cart_has_date(): ?bool
 		$postcode = trim((string) WC()->customer->get_billing_postcode());
 	}
 
-	$product_ids = array();
-	foreach (WC()->cart->get_cart() as $item) {
-		$pid = (int) ($item['product_id'] ?? 0);
-		if ($pid > 0) {
-			$product_ids[] = $pid;
-		}
-	}
+	$product_ids = oko_cart_product_ids();
 	if (empty($product_ids)) {
 		return null;
 	}
@@ -4512,13 +4494,7 @@ const OKO_DELIVERY_CHANGES = array(
  */
 function oko_changes_touch_the_delivery(array $changes): bool
 {
-	foreach (OKO_DELIVERY_CHANGES as $field) {
-		if (array_key_exists($field, $changes)) {
-			return true;
-		}
-	}
-
-	return false;
+	return array_intersect_key($changes, array_flip(OKO_DELIVERY_CHANGES)) !== array();
 }
 
 /**
@@ -4905,9 +4881,6 @@ const OKO_SHIPMENT_LOCKED_META = '_okoskabet_shipment_locked';
 
 /** The `error_code` Økoskabet uses for a shipment that can no longer change. */
 const OKO_ERROR_CODE_LOCKED = 'shipment_locked';
-
-/** First word of the line older versions put in front of the customer's note. */
-const OKO_ORDER_NOTE_PREFIX = 'ØKOSKABET ';
 
 /** Where an order is going, as one line: a shed's name, home delivery or store pickup. */
 const OKO_DELIVERY_SUMMARY_META = '_okoskabet_delivery_summary';
@@ -5895,9 +5868,12 @@ function oko_product_properties(\WC_Product $product): array
 	// product were six identical scans of the parent.
 	static $properties_of = array();
 
-	$key = (int) $product->get_id();
-	if (isset($properties_of[$key])) {
-		return $properties_of[$key];
+	// Its own name: `$key` below is each property's key, and reusing it
+	// stored the answer under the last attribute's key, where the next
+	// lookup by product never found it.
+	$memo_key = (int) $product->get_id();
+	if (isset($properties_of[$memo_key])) {
+		return $properties_of[$memo_key];
 	}
 
 	// A variation is one choice out of the parent's list. Answering with the
@@ -5905,7 +5881,7 @@ function oko_product_properties(\WC_Product $product): array
 	// a customer who bought the Spanish one, and country of origin is the one
 	// field that has to be right.
 	if ($product instanceof \WC_Product_Variation) {
-		return $properties_of[$key] = oko_variation_properties($product);
+		return $properties_of[$memo_key] = oko_variation_properties($product);
 	}
 
 	$properties = array();
@@ -5990,7 +5966,7 @@ function oko_product_properties(\WC_Product $product): array
 		}
 	}
 
-	return $properties_of[$key] = $properties;
+	return $properties_of[$memo_key] = $properties;
 }
 
 /**
