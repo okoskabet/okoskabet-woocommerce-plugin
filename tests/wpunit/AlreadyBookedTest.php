@@ -33,7 +33,11 @@ class AlreadyBookedTest extends \Codeception\TestCase\WPTestCase
 
 	public function test_an_order_okoskabet_already_has_is_booked(): void
 	{
-		$this->okoskabet_answers(200, array('errors' => array(), 'shipment' => array('status' => 'registered', 'shipment_reference' => 'x')));
+		$this->okoskabet_answers(200, array('errors' => array(), 'shipment' => array(
+			'status'             => 'registered',
+			'shipment_reference' => 'x',
+			'customer'           => array('email' => 'Kunde@Example.org'),
+		)));
 
 		$order = $this->an_order();
 		$order->update_status('processing');
@@ -41,6 +45,33 @@ class AlreadyBookedTest extends \Codeception\TestCase\WPTestCase
 		$order = wc_get_order($order->get_id());
 		$this->assertSame('processing', $order->get_status());
 		$this->assertNotEmpty($order->get_meta('billing_okoskabet_done', true));
+	}
+
+	/**
+	 * Somebody else's shipment under the same number is not this order's.
+	 *
+	 * A shop that renumbers can give a new order the number of an old delivery
+	 * that is still live. Taking that as booked would tie the new order to a
+	 * stranger's shipment and never send it.
+	 */
+	public function test_a_strangers_shipment_under_the_same_number_is_not_a_booking(): void
+	{
+		$this->okoskabet_answers(200, array('errors' => array(), 'shipment' => array(
+			'status'             => 'fulfilled',
+			'shipment_reference' => 'x',
+			'customer'           => array('email' => 'someone-else@example.org'),
+		)));
+
+		$order = $this->an_order();
+		try {
+			$order->update_status('processing');
+		} catch (\Exception $e) {
+			// The checkout is meant to hear about it.
+		}
+
+		$order = wc_get_order($order->get_id());
+		$this->assertSame('failed', $order->get_status());
+		$this->assertEmpty($order->get_meta('billing_okoskabet_done', true));
 	}
 
 	/** A refusal is still a refusal. */
@@ -83,6 +114,7 @@ class AlreadyBookedTest extends \Codeception\TestCase\WPTestCase
 		$shipping->set_method_id('hey_okoskabet_shipping_home');
 		$shipping->set_method_title('Hjemmelevering');
 		$order->add_item($shipping);
+		$order->set_billing_email('kunde@example.org');
 		$order->set_shipping_address_1('Byagervej 194');
 		$order->set_shipping_postcode('8330');
 		$order->set_shipping_city('Beder');

@@ -2808,7 +2808,18 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// (a timeout), and the order arriving here again. That is booked, not
 		// failed — failing it threw the customer's checkout and marked a paid
 		// order as failed for a delivery that was on its way.
-		$already_booked = $http_code === 200 && is_array($shipment) && !empty($shipment['shipment']);
+		//
+		// Only when it is this order's shipment. A reference is the order's
+		// number, and a shop that has renumbered can hand a new order the number
+		// of an old delivery that is still live — read as "booked", the new
+		// order would be tied to a stranger's shipment and never sent. The
+		// customer's email is the one thing the answer carries that says whose
+		// it is; anything else stays a failure the shop can see.
+		$already_booked = $http_code === 200
+			&& is_array($shipment)
+			&& !empty($shipment['shipment'])
+			&& strtolower(trim((string) ($shipment['shipment']['customer']['email'] ?? ''))) !== ''
+			&& strtolower(trim((string) ($shipment['shipment']['customer']['email'] ?? ''))) === strtolower(trim((string) $order->get_billing_email()));
 
 		if ($http_code !== 201 && !$already_booked) {
 			$error_text = !empty($shipment['error_message']) ? $shipment['error_message'] : __("The order could not be completed", O_TEXTDOMAIN);
