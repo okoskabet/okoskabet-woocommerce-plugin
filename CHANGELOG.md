@@ -2,6 +2,72 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## 1.6.0 - 2026-10-21
+
+Tillæg til en ordre, etagen i kassen, og rettelser fra Økoskabet, der ikke
+længere bliver kørt over af butikken.
+
+= Rettelser i Økoskabets backoffice når tilbage til butikken =
+
+Flytter pakkeriet en levering til et skab, tilbage til døren eller til
+afhentning i butikken, retter en adresse eller en dato i Økoskabets
+backoffice, skrives det nu også på ordren i WooCommerce, og ordren får en
+note om, hvad der flyttede. Før blev WooCommerce ved med at holde det, kunden
+bestilte, og den næste redigering i butikken sendte det tilbage oven på
+rettelsen. Intet om penge flyttes: hverken fragtmetode, fragt eller linjer.
+
+= Kun det, der er ændret, sendes =
+
+En redigering i butikken sender nu kun det, der har flyttet sig. En
+omdøbt vare sender varelinjerne, en rettet adresse sender adressen, og det,
+ingen har rørt, sendes slet ikke. Så kan en produktomdøbning ikke længere gøre
+pakkeriets arbejde om.
+
+= En afvist ændring står på ordren =
+
+Siger Økoskabet nej til en ændring, får ordren en note med Økoskabets egen
+begrundelse. Før stod det kun i en logfil, og butikken fik intet at vide.
+
+= Tillæg til en ordre =
+
+En kunde kan bestille mere til en levering, der allerede er på vej, ved at
+skrive ordrenummeret i kassen. Tillægget er sin egen ordre, som skal
+betales, men kunden betaler ikke fragt igen, og varerne lægges på den
+levering, der findes. Det er Økoskabet, der afgør, hvor sent det kan nås.
+Annulleres tillægget, tages varerne af leveringen igen.
+
+= Etage, lejlighed og dør i kassen =
+
+En ny indstilling lægger en anden adresselinje i kassen til butikker, hvis
+kasse ingen har. Den er slukket fra start: skriver kunderne etagen på selve
+gadelinjen, læser adresseregistret den dér, og to steder at skrive den
+betyder, at nogle skriver den to gange.
+
+= En ordre uden leveringsdato forsvinder ikke =
+
+En ordre med en af Økoskabets fragtmetoder, men uden leveringsdato, sendes
+nu af sted og lander blandt de uafklarede hos Økoskabet, hvor den kan få en
+dato. Før forsvandt den uden et spor. Ordrer uden Økoskabets fragtmetoder
+røres stadig ikke.
+
+= Afhentning i butikken =
+
+En levering, pakkeriet har flyttet til afhentning i butikken, bliver ved
+med at være det, når ordren redigeres i butikken. Flyttes ordren mellem to
+af butikkens egne afhentningssteder, får butikken det at vide.
+
+= Mindre =
+
+Etiket printet står nu efter Registreret i listen over hændelser, i den
+rækkefølge det sker.
+
+= Linjebeløb, når butikken bruger tilbud =
+
+Bruger butikken tilbud i Track&Trace-appen, sendes ordrelinjernes beløb nu
+med til Økoskabet, så tilbuddets andel kan regnes ud. Kun da: beløbene bruges
+ikke til andet, og Økoskabet beder kun om dem hos butikker, der har sagt ja
+til tilbud. For alle andre ændrer intet sig.
+
 ## 1.5.3 - 2026-10-21
 
 Rettelse: beskeder fra Økoskabet kunne ramme den forkerte ordre.
