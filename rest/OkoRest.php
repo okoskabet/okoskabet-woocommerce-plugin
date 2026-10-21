@@ -915,7 +915,7 @@ class OkoRest extends Base
 				$has_sig ? 'yes' : 'no',
 				isset($diag_params['event']) ? $diag_params['event'] : '(none)',
 				isset($diag_params['shipment_reference']) ? $diag_params['shipment_reference'] : '(none)',
-				$request->get_param('merchant_id') ?: '(default-route)'
+				($request->get_url_params()['merchant_id'] ?? '') ?: '(default-route)'
 			));
 			error_log('Økoskabet webhook headers (redacted): ' . wp_json_encode($redacted));
 		}
