@@ -2273,6 +2273,13 @@ function oko_addon_inherits_the_delivery($order, $data): void
 /** The earlier order's id, written on the addition once it is settled. */
 const OKO_ADDON_PARENT_ID_META = '_okoskabet_addon_of_id';
 
+/**
+ * Set on an addition this plugin put on hold because its goods did not get
+ * onto the delivery. Read by the status hook, so the hold itself does not set
+ * off another attempt; cleared once the goods are on the delivery.
+ */
+const OKO_ADDITION_HELD_META = '_okoskabet_addition_held';
+
 /** The additions an order already carries, in the order they were added. */
 const OKO_ADDITIONS_META = '_okoskabet_additions';
 
@@ -2589,7 +2596,7 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 	// goods would then be the whole of this shipment.
 	$parent = wc_get_order($parent_id);
 	if (! $parent instanceof \WC_Order) {
-		$order->add_order_note(sprintf(
+		oko_hold_addition($order, sprintf(
 			/* translators: %s: the earlier order's id. */
 			__('Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
 			(string) $parent_id
@@ -2612,7 +2619,7 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 	// with nothing left to ride along with.
 	$delivery_date = (string) $parent->get_meta('_billing_okoskabet_delivery_date', true);
 	if ($delivery_date === '' || ! oko_order_can_still_take_more($parent, $delivery_date)) {
-		$order->add_order_note(sprintf(
+		oko_hold_addition($order, sprintf(
 			/* translators: %s: the earlier order's number. */
 			__('Order %s can no longer take anything more, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
 			$reference
@@ -2636,7 +2643,7 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 	));
 
 	if ($code !== 200) {
-		$order->add_order_note(sprintf(
+		oko_hold_addition($order, sprintf(
 			/* translators: 1: the earlier order's number, 2: the HTTP status or 0 when unreachable. */
 			__('The goods could not be added to order %1$s (%2$s). Økoskabet has not been told about this order.', O_TEXTDOMAIN),
 			$reference,
@@ -2647,6 +2654,7 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 
 	oko_remember_addition($parent, $order);
 
+	$order->delete_meta_data(OKO_ADDITION_HELD_META);
 	$order->update_meta_data('billing_okoskabet_done', 'yes');
 	$order->add_order_note(sprintf(
 		/* translators: %s: the earlier order's number. */
@@ -2654,6 +2662,39 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 		$reference
 	));
 	$order->save();
+}
+
+/**
+ * Put an addition whose goods did not get onto its delivery on hold.
+ *
+ * What happens to them is the shop's to decide (Marc, 21/10): send them some
+ * other way, refund them, or try again. Left in processing, as it was, the
+ * order looked like any other on its way, and a bank transfer marked paid
+ * after the delivery had left was paid, charged no freight and never sent —
+ * with only a note to say so.
+ *
+ * On hold rather than failed: the money is still there, and a shop that sets
+ * it back to processing asks once more, which is the way to try again after
+ * Økoskabet could not be reached.
+ *
+ * @param \WC_Order $order The addition.
+ * @param string    $why   What went wrong, said first in the note.
+ */
+function oko_hold_addition(\WC_Order $order, string $why): void
+{
+	$note = $why . ' ' . __('The order is on hold for the shop to decide: set it to processing to try again, or send or refund the goods some other way.', O_TEXTDOMAIN);
+
+	// Marked before the status changes: the change runs the status hook again,
+	// with this very order, and the mark is what stops it from asking again.
+	$order->update_meta_data(OKO_ADDITION_HELD_META, 'yes');
+
+	if ($order->get_status() === 'on-hold') {
+		$order->add_order_note($note);
+		$order->save();
+		return;
+	}
+
+	$order->update_status('on-hold', $note);
 }
 
 /**
@@ -4391,6 +4432,12 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		// one freight and one shipment, and the packing room sees the extra
 		// goods on the list they already have.
 		if ($parent_id !== 0) {
+			// Put on hold by us for the shop to decide. Only the shop moving it
+			// on asks again; the hold itself would otherwise be one more try,
+			// and one more note, on every save.
+			if ($new_status === 'on-hold' && $order->get_meta(OKO_ADDITION_HELD_META, true) !== '') {
+				return;
+			}
 			oko_send_addition_to_its_order($order, $parent_id, $merchant);
 			return;
 		}

@@ -1799,6 +1799,9 @@ msgstr "Ordre %s kunne ikke læses, så der blev ikke lagt noget til den. Økosk
 msgid "Order %s can no longer take anything more, so nothing was added to it. Økoskabet has not been told about this order."
 msgstr "Ordre %s kan ikke tage imod mere, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
 
+msgid "The order is on hold for the shop to decide: set it to processing to try again, or send or refund the goods some other way."
+msgstr "Ordren er sat på hold, så butikken kan bestemme: sæt den til Behandler for at prøve igen, eller send eller refundér varerne på anden vis."
+
 # ----------------------------------------------------------------------
 # Address suggestions at checkout
 # ----------------------------------------------------------------------

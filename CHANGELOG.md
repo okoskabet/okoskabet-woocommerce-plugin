@@ -24,6 +24,21 @@ them checks out exactly as before, and if the address lookup is unavailable the
 checkout simply shows no suggestions. Works in the classic checkout, not the
 block checkout.
 
+= Et tillæg, der ikke når med, sættes på hold =
+
+Et tillæg, der bliver betalt, efter at leveringen er lukket — typisk en
+bankoverførsel, der markeres betalt dage senere — stod før i Behandler med en
+note. Det så ud som enhver anden ordre på vej, men varerne kom aldrig med. Nu
+sættes ordren på hold, og noten siger hvorfor. Butikken bestemmer selv: sæt den
+til Behandler for at prøve igen, eller send eller refundér varerne på anden
+vis. Det samme gælder, når Økoskabet afviser varerne, eller den første ordre
+ikke kan læses.
+
+= Installation kun fra en udgivelse =
+
+README henviser ikke længere nye installationer til `main.zip`, men kun til den
+seneste udgivelse.
+
 ## 1.5.2 - 2026-10-13
 
 Hastefejl: leveringsdatoen manglede for nye kunder.

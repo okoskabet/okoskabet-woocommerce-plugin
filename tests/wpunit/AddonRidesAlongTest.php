@@ -342,6 +342,114 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		}, 10, 3);
 	}
 
+	/**
+	 * An addition too late for its delivery is put on hold for the shop.
+	 *
+	 * A bank transfer is marked paid days after it was ordered. By then the
+	 * delivery may have closed, and the addition stayed in processing — paid,
+	 * charged no freight and never sent, with only a note to say so. Whether
+	 * the goods go some other way is the shop's to decide (Marc, 21/10).
+	 */
+	public function test_an_addition_too_late_for_its_delivery_is_held_for_the_shop(): void
+	{
+		$addition = $this->an_addition_to_a_delivery_on($this->days_ahead(0));
+
+		$addition->update_status('processing');
+
+		$addition = wc_get_order($addition->get_id());
+		$this->assertSame('on-hold', $addition->get_status(), 'The shop has to see it is not on its way.');
+		$this->assertCount(1, $this->hold_notes($addition), 'And be told why, once.');
+		$this->assertSame('', (string) $addition->get_meta('billing_okoskabet_done', true));
+	}
+
+	/**
+	 * The hold is not one more try. Only the shop moving the order on is: it
+	 * asks again, and is told again when the answer is still no.
+	 */
+	public function test_only_the_shop_moving_it_on_asks_again(): void
+	{
+		$addition = $this->an_addition_to_a_delivery_on($this->days_ahead(0));
+		$addition->update_status('processing');
+
+		$addition = wc_get_order($addition->get_id());
+		$addition->save();
+		$this->assertCount(1, $this->hold_notes(wc_get_order($addition->get_id())), 'A save asks nothing.');
+
+		$addition->update_status('processing');
+
+		$addition = wc_get_order($addition->get_id());
+		$this->assertSame('on-hold', $addition->get_status());
+		$this->assertCount(2, $this->hold_notes($addition));
+	}
+
+	/**
+	 * A card payment carries a transaction id, so nothing further up stops the
+	 * hold's own change of status from asking once more. The mark does.
+	 */
+	public function test_a_card_paid_addition_is_held_once(): void
+	{
+		$addition = $this->an_addition_to_a_delivery_on($this->days_ahead(0), 'pending');
+		$addition->set_payment_method('quickpay');
+		$addition->set_transaction_id('qp-4711');
+		$addition->save();
+
+		$addition->update_status('processing');
+
+		$addition = wc_get_order($addition->get_id());
+		$this->assertSame('on-hold', $addition->get_status());
+		$this->assertCount(1, $this->hold_notes($addition), 'The hold is not one more try.');
+	}
+
+	/** Once it gets on, it is an addition like any other and no longer held. */
+	public function test_a_held_addition_that_gets_on_is_released(): void
+	{
+		$addition = $this->an_addition_to_a_delivery_on($this->days_ahead(5));
+		$addition->update_meta_data(OKO_ADDITION_HELD_META, 'yes');
+		$addition->save();
+
+		$addition->update_status('processing');
+
+		$addition = wc_get_order($addition->get_id());
+		$this->assertSame('processing', $addition->get_status());
+		$this->assertSame('yes', (string) $addition->get_meta('billing_okoskabet_done', true));
+		$this->assertSame('', (string) $addition->get_meta(OKO_ADDITION_HELD_META, true));
+		$this->assertCount(0, $this->hold_notes($addition));
+	}
+
+	/**
+	 * An addition paid by bank transfer, as the customer leaves it: on hold
+	 * with money owing, which the plugin does not send. The shop setting it to
+	 * processing is the shop saying the money has arrived.
+	 */
+	private function an_addition_to_a_delivery_on(string $delivery_date, string $status = 'on-hold'): \WC_Order
+	{
+		$parent = new \WC_Order();
+		$parent->add_product(wc_get_product($this->a_product('Økologiske æg')), 2);
+		$parent->update_meta_data('_billing_okoskabet_delivery_date', $delivery_date);
+		$parent->save();
+
+		$addition = new \WC_Order();
+		$addition->add_product(wc_get_product($this->a_product('Rugbrød')), 1);
+		$addition->set_payment_method('bacs');
+		$addition->calculate_totals();
+		$addition->update_meta_data(OKO_ADDON_PARENT_ID_META, (string) $parent->get_id());
+		$addition->set_status($status);
+		$addition->save();
+
+		return $addition;
+	}
+
+	/** @return array<int,\WP_Comment> */
+	private function hold_notes(\WC_Order $order): array
+	{
+		$needle = __('The order is on hold for the shop to decide', O_TEXTDOMAIN);
+
+		return array_values(array_filter(
+			wc_get_order_notes(array('order_id' => $order->get_id())),
+			static fn($note): bool => strpos((string) $note->content, $needle) !== false
+		));
+	}
+
 	private function a_product(string $name): int
 	{
 		$product = new \WC_Product_Simple();
