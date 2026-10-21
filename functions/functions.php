@@ -2236,6 +2236,14 @@ function oko_addon_inherits_the_delivery($order, $data): void
 		return;
 	}
 
+	// Only when Økoskabet is carrying it. A customer who types the earlier
+	// order's number and then picks the shop's own courier pays that
+	// courier's freight; putting the goods on our delivery as well would send
+	// them twice, or send them with the wrong one.
+	if (! oko_order_is_ours($order)) {
+		return;
+	}
+
 	$parent = oko_addon_in_checkout()['order'];
 	if (! $parent instanceof \WC_Order) {
 		return;
@@ -2500,6 +2508,10 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 		return;
 	}
 
+	// The shipment is the earlier order's, so it is written under that
+	// order's account — see oko_send_addition_to_its_order().
+	$merchant = oko_merchant_for_order($parent);
+
 	// An addition the order never took is nothing to take off it. That is a
 	// cancellation of an order Økoskabet was never told about — writing the
 	// shipment again would be a call that changes nothing, and a note saying
@@ -2577,6 +2589,13 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 	}
 
 	$reference = oko_shipment_reference($parent);
+
+	// Under the earlier order's account, not this one's. The shipment being
+	// written is the earlier order's, and the addition's own basket can route
+	// to another merchant: its key then asked an account that has no such
+	// shipment, and the customer had been charged no freight for goods that
+	// were never booked.
+	$merchant = oko_merchant_for_order($parent);
 
 	// Asked again here, not only in the checkout. A bank transfer is marked
 	// paid days after it was ordered, and by then the delivery may have left
