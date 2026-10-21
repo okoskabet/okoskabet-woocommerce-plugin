@@ -13,12 +13,6 @@
  */
 class LookupWithoutSideEffectsTest extends \Codeception\TestCase\WPTestCase
 {
-	public function tearDown(): void
-	{
-		unset($_POST['billing_okoskabet_addon_order'], $_POST['billing_email']);
-		parent::tearDown();
-	}
-
 	public function test_the_checkout_lookup_writes_nothing_on_the_order(): void
 	{
 		$order = $this->booked_before_references_were_kept('someone@example.com');
