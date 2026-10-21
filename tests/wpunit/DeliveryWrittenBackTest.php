@@ -251,6 +251,54 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * Another merchant's webhook does not write on this merchant's order.
+	 *
+	 * The status half of the webhook answers 403 for an order of another
+	 * account; the delivery half ran before that check and had already
+	 * rewritten the address by then.
+	 */
+	public function test_another_merchants_webhook_does_not_write_on_the_order(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->update_meta_data(\okoskabet_woocommerce_plugin\Integrations\Merchant_Router::ORDER_META_KEY, 'default');
+		$order->save();
+
+		$asked = 0;
+		remove_all_filters('pre_http_request');
+		add_filter('pre_http_request', static function ($preempt, $args, $url) use (&$asked, $order) {
+			if (strpos($url, '/api/v1/shipments/') === false) {
+				return $preempt;
+			}
+			$asked++;
+
+			return array(
+				'response' => array('code' => 200),
+				'body'     => wp_json_encode(array(
+					'shipment_reference' => (string) $order->get_order_number(),
+					'shipment_type'      => 'home_delivery',
+					'delivery_date'      => '2026-10-20',
+					'home_delivery'      => array('address' => array(
+						'street_name'  => 'Byagervej',
+						'house_number' => '194',
+						'city'         => 'Beder',
+						'postal_code'  => '8330',
+					)),
+				)),
+			);
+		}, 10, 3);
+
+		$changed = oko_take_delivery_from_okoskabet(
+			(string) $order->get_order_number(),
+			array('id' => 'anden', 'api_key' => 'other-key', 'staging' => true)
+		);
+
+		$fresh = wc_get_order($order->get_id());
+		$this->assertSame(array(), $changed);
+		$this->assertSame('Kildeparken 98', $fresh->get_shipping_address_1());
+		$this->assertSame(0, $asked, 'The other account is not even asked about it.');
+	}
+
 	/** Økoskabet, answering with this shipment and nothing else. */
 	private function okoskabet_answers_with(array $shipment): void
 	{
