@@ -1,0 +1,6 @@
+01-installation.md
+02-forbind-til-okoskabet.md
+03-fragtmetoder.md
+04-indstillinger.md
+05-kassen-og-ordrer.md
+06-fejlfinding.md

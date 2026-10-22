@@ -17,5 +17,6 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/test-delivery-exception-flip.php';
 require_once __DIR__ . '/test-only-on-dates.php';
 require_once __DIR__ . '/test-split-checkout.php';
+require_once __DIR__ . '/test-guide-covers-every-setting.php';
 
 exit( oko_test_summary() );
