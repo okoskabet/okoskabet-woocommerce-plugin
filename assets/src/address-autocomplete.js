@@ -45,7 +45,7 @@ let instances = 0;
 function suggestUrl( query ) {
 	const base = CONFIG.suggestUrl || '';
 	const glue = base.indexOf( '?' ) === -1 ? '?' : '&';
-	return base + glue + 'q=' + encodeURIComponent( query ) + '&streets=1';
+	return base + glue + 'q=' + encodeURIComponent( query );
 }
 
 /**
@@ -141,11 +141,19 @@ function attach( prefix ) {
 	list.setAttribute( 'role', 'listbox' );
 	list.setAttribute( 'aria-label', STR.suggestions || '' );
 
+	// While the register is asked. Outside the listbox: it is not an option,
+	// and a list with one row in it reads as a list of one.
+	const busy = document.createElement( 'div' );
+	busy.className = 'okoskabet-address-searching';
+	busy.hidden = true;
+	busy.textContent = STR.searching || '';
+
 	const status = document.createElement( 'div' );
 	status.className = 'okoskabet-address-status';
 	status.setAttribute( 'role', 'status' );
 	status.setAttribute( 'aria-live', 'polite' );
 
+	popup.appendChild( busy );
 	popup.appendChild( heading );
 	popup.appendChild( list );
 	wrapper.appendChild( popup );
@@ -180,6 +188,7 @@ function attach( prefix ) {
 	 */
 	function close() {
 		popup.hidden = true;
+		busy.hidden = true;
 		heading.hidden = true;
 		list.setAttribute( 'aria-label', STR.suggestions || '' );
 		list.removeAttribute( 'aria-labelledby' );
@@ -223,6 +232,8 @@ function attach( prefix ) {
 		list.textContent = '';
 		items = entries;
 		active = -1;
+		busy.hidden = true;
+		input.removeAttribute( 'aria-busy' );
 
 		if ( ! entries.length ) {
 			close();
@@ -311,7 +322,6 @@ function attach( prefix ) {
 			if ( data === undefined ) {
 				return; // Overtaken by a newer keystroke.
 			}
-			input.removeAttribute( 'aria-busy' );
 			const suggestions =
 				data && Array.isArray( data.suggestions )
 					? data.suggestions
@@ -323,6 +333,8 @@ function attach( prefix ) {
 				input.value.trim().replace( /\s+/g, ' ' ) === query
 			) {
 				open( suggestions, false );
+			} else if ( ! busy.hidden ) {
+				close(); // Nobody is waiting for it any more.
 			}
 		} );
 	}
@@ -341,8 +353,10 @@ function attach( prefix ) {
 		const name = street.street.toLowerCase();
 		const typed = query.toLowerCase();
 		const postcode = field( 'postcode' );
+		// The street and then a space: "Fælledvejen 3" begins with
+		// "Fælledvej" too, and is another street.
 		if (
-			typed.indexOf( name ) !== 0 ||
+			( typed !== name && typed.indexOf( name + ' ' ) !== 0 ) ||
 			! postcode ||
 			postcode.value.trim() !== street.postal_code
 		) {
@@ -355,51 +369,66 @@ function attach( prefix ) {
 	}
 
 	/**
-	 * While the register is asked: a row saying so, so a customer on a slow
+	 * While the register is asked: a line saying so, so a customer on a slow
 	 * site waits for the list rather than typing on without it.
 	 */
 	function searching() {
 		if ( ! STR.searching ) {
 			return;
 		}
-		list.textContent = '';
-		items = [];
-		active = -1;
-		const row = document.createElement( 'li' );
-		row.className = 'okoskabet-address-searching';
-		row.setAttribute( 'aria-disabled', 'true' );
-		row.textContent = STR.searching;
-		list.appendChild( row );
-		heading.hidden = true;
+		close();
+		busy.hidden = false;
 		popup.hidden = false;
 		input.setAttribute( 'aria-busy', 'true' );
+		announce( STR.searching );
 	}
 
 	/**
 	 * A street: put it in with its postcode and city, and leave the cursor
 	 * after it for the house number. Nothing to look up — a street is not an
-	 * address yet.
+	 * address yet — and no checkout update: the address chosen next makes it.
 	 *
 	 * @param entry
 	 */
 	function chooseStreet( entry ) {
+		cancelPending();
 		close();
 		street = entry;
 		setValue( input, entry.street + ' ' );
-		if ( entry.postal_code ) {
-			setValue( field( 'postcode' ), entry.postal_code );
-		}
-		if ( entry.city ) {
-			setValue( field( 'city' ), entry.city );
-		}
+		place( entry.postal_code, entry.city );
 		input.focus();
 		const end = input.value.length;
 		if ( typeof input.setSelectionRange === 'function' ) {
 			input.setSelectionRange( end, end );
 		}
 		announce( STR.typeNumber );
-		if ( window.jQuery ) {
-			window.jQuery( document.body ).trigger( 'update_checkout' );
+	}
+
+	/**
+	 * Denmark, the postcode and the city, from a street or an address.
+	 *
+	 * @param postalCode
+	 * @param city
+	 */
+	function place( postalCode, city ) {
+		const country = field( 'country' );
+		if (
+			country &&
+			country.tagName === 'SELECT' &&
+			country.value !== 'DK' &&
+			country.querySelector( 'option[value="DK"]' )
+		) {
+			setValue( country, 'DK' );
+			// selectWoo shows the old country until told.
+			if ( window.jQuery ) {
+				window.jQuery( country ).trigger( 'change.select2' );
+			}
+		}
+		if ( postalCode ) {
+			setValue( field( 'postcode' ), postalCode );
+		}
+		if ( city ) {
+			setValue( field( 'city' ), city );
 		}
 	}
 
@@ -420,20 +449,6 @@ function attach( prefix ) {
 		const unit = address.address_2 || '';
 		let line1 = address.address_1;
 
-		const country = field( 'country' );
-		if (
-			country &&
-			country.tagName === 'SELECT' &&
-			country.value !== 'DK' &&
-			country.querySelector( 'option[value="DK"]' )
-		) {
-			setValue( country, 'DK' );
-			// selectWoo shows the old country until told.
-			if ( window.jQuery ) {
-				window.jQuery( country ).trigger( 'change.select2' );
-			}
-		}
-
 		if ( address2Field ) {
 			if ( unit ) {
 				setValue( address2Field, unit );
@@ -446,12 +461,7 @@ function attach( prefix ) {
 		}
 
 		setValue( input, line1 );
-		if ( address.postal_code ) {
-			setValue( field( 'postcode' ), address.postal_code );
-		}
-		if ( address.city ) {
-			setValue( field( 'city' ), address.city );
-		}
+		place( address.postal_code, address.city );
 
 		announce( STR.filled );
 
@@ -551,7 +561,7 @@ function attach( prefix ) {
 				}
 				break;
 			case 'Escape':
-				if ( isOpen ) {
+				if ( isOpen || ! busy.hidden ) {
 					event.preventDefault();
 					cancelPending();
 					close();

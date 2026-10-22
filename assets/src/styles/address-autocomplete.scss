@@ -65,22 +65,24 @@
 		background: #f0f0f1;
 		box-shadow: inset 3px 0 0 var(--wp--preset--color--primary, #2271b1);
 	}
-}
 
-// A street is a step towards the address: the ellipsis says there is more to
-// type after choosing it.
-.okoskabet-address-option.is-street::after {
-	content: " …";
-	opacity: 0.6;
+	// A street is a step towards the address: the ellipsis says there is
+	// more to type after choosing it.
+	&.is-street::after {
+		content: " …";
+		opacity: 0.6;
+	}
 }
 
 // Shown while the register is asked, which on a slow site takes seconds.
 .okoskabet-address-searching {
-	margin: 0;
 	padding: 0.65em 0.75em;
-	list-style: none;
 	opacity: 0.7;
 	font-style: italic;
+
+	&[hidden] {
+		display: none;
+	}
 }
 
 .okoskabet-address-status {

@@ -251,7 +251,7 @@ class Address_Autocomplete extends Base {
 	 * body at all — is no suggestions. Order is kept: the register's.
 	 *
 	 * @param array|null $body Decoded JSON, or null when there was no usable answer.
-	 * @return array<int,array<string,string>>
+	 * @return array<int,array{id:string,text:string}|array{kind:string,text:string,street:string,postal_code:string,city:string}>
 	 */
 	public static function parse_suggestions( ?array $body ): array {
 		if ( ! \is_array( $body ) || ! isset( $body['suggestions'] ) || ! \is_array( $body['suggestions'] ) ) {
@@ -261,7 +261,7 @@ class Address_Autocomplete extends Base {
 		foreach ( $body['suggestions'] as $hit ) {
 			$parsed = \is_array( $hit ) && ( $hit['kind'] ?? null ) === 'street'
 				? self::parse_street( $hit )
-				: ( self::parse_hits( array( $hit ) )[0] ?? null );
+				: self::parse_hit( $hit );
 			if ( $parsed !== null ) {
 				$out[] = $parsed;
 			}
@@ -282,7 +282,7 @@ class Address_Autocomplete extends Base {
 				return null;
 			}
 		}
-		if ( \preg_match( '/^\d{4}$/', \trim( $hit['postal_code'] ) ) !== 1 ) {
+		if ( ! (bool) \preg_match( '/^\d{4}$/', \trim( $hit['postal_code'] ) ) ) {
 			return null;
 		}
 		return array(
@@ -329,20 +329,26 @@ class Address_Autocomplete extends Base {
 	 * @return array<int,array{id:string,text:string}>
 	 */
 	private static function parse_hits( array $hits ): array {
-		$out = array();
-		foreach ( $hits as $hit ) {
-			if ( ! \is_array( $hit ) || ! isset( $hit['id'], $hit['text'] ) || ! \is_string( $hit['id'] ) || ! \is_string( $hit['text'] ) ) {
-				continue;
-			}
-			if ( ! self::is_address_id( $hit['id'] ) || \trim( $hit['text'] ) === '' ) {
-				continue;
-			}
-			$out[] = array(
-				'id'   => $hit['id'],
-				'text' => \trim( $hit['text'] ),
-			);
+		return \array_values( \array_filter( \array_map( array( self::class, 'parse_hit' ), $hits ) ) );
+	}
+
+	/**
+	 * One address hit, reduced to id and text; null when it is not one.
+	 *
+	 * @param mixed $hit
+	 * @return array{id:string,text:string}|null
+	 */
+	private static function parse_hit( $hit ): ?array {
+		if ( ! \is_array( $hit ) || ! isset( $hit['id'], $hit['text'] ) || ! \is_string( $hit['id'] ) || ! \is_string( $hit['text'] ) ) {
+			return null;
 		}
-		return $out;
+		if ( ! self::is_address_id( $hit['id'] ) || \trim( $hit['text'] ) === '' ) {
+			return null;
+		}
+		return array(
+			'id'   => $hit['id'],
+			'text' => \trim( $hit['text'] ),
+		);
 	}
 
 	/**
