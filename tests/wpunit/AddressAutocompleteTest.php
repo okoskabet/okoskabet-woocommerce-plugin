@@ -123,10 +123,49 @@ class AddressAutocompleteTest extends \Codeception\TestCase\WPTestCase {
 			$response->get_data()
 		);
 		$this->assertCount( 1, $this->requests );
-		$this->assertSame( 'https://okoskabet.dk/api/v1/addresses?q=Sankt%20Nikolaj%20Vej%2015', $this->requests[0]['url'] );
+		$this->assertSame( 'https://okoskabet.dk/api/v1/addresses?q=Sankt%20Nikolaj%20Vej%2015&streets=1', $this->requests[0]['url'] );
 		$this->assertSame( self::KEY, $this->requests[0]['args']['headers']['Authorization'] );
 		$this->assertStringNotContainsString( self::KEY, wp_json_encode( $response->get_data() ) );
 		$this->assertSame( 'no-store, private', $response->get_headers()['Cache-Control'] );
+	}
+
+	/**
+	 * A customer types the street before the number. The streets come along,
+	 * in the register's order between the addresses, with exactly the fields
+	 * the script fills and no id: a street cannot be looked up.
+	 *
+	 * @test
+	 */
+	public function it_passes_on_a_street_as_a_street() {
+		$this->answer( 200, array( 'suggestions' => array(
+			array( 'kind' => 'street', 'text' => 'Fælledvej, 2200 København N', 'street' => 'Fælledvej', 'postal_code' => '2200', 'city' => 'København N', 'extra' => 'dropped' ),
+			array( 'id' => self::FLAT, 'text' => 'Fælledvej 1, 2200 København N' ),
+		) ) );
+
+		$this->assertSame(
+			array( 'suggestions' => array(
+				array( 'kind' => 'street', 'text' => 'Fælledvej, 2200 København N', 'street' => 'Fælledvej', 'postal_code' => '2200', 'city' => 'København N' ),
+				array( 'id' => self::FLAT, 'text' => 'Fælledvej 1, 2200 København N' ),
+			) ),
+			$this->suggest( 'fælled' )->get_data()
+		);
+	}
+
+	/**
+	 * A street missing a part, or with a postcode that is not one, would fill
+	 * the checkout with something wrong. It is not offered.
+	 *
+	 * @test
+	 */
+	public function a_street_without_all_its_parts_is_not_offered() {
+		$this->answer( 200, array( 'suggestions' => array(
+			array( 'kind' => 'street', 'text' => 'Fælledvej, 2200 København N', 'street' => 'Fælledvej', 'city' => 'København N' ),
+			array( 'kind' => 'street', 'text' => 'Fælledvej, 22 København N', 'street' => 'Fælledvej', 'postal_code' => '22', 'city' => 'København N' ),
+			array( 'kind' => 'street', 'text' => '', 'street' => 'Fælledvej', 'postal_code' => '2200', 'city' => 'København N' ),
+			array( 'kind' => 'street', 'text' => 'Fælledvej, 2200 København N', 'street' => array( 'x' ), 'postal_code' => '2200', 'city' => 'København N' ),
+		) ) );
+
+		$this->assertSame( array( 'suggestions' => array() ), $this->suggest( 'fælled' )->get_data() );
 	}
 
 	/**

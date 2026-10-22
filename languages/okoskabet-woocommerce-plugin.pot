@@ -2469,3 +2469,44 @@ msgstr ""
 #, php-format
 msgid "Ordre markeret som afsluttet via Økoskabet webhook. Event: %s"
 msgstr ""
+
+msgid "Address suggestions"
+msgstr ""
+
+msgid "Choose apartment"
+msgstr ""
+
+msgid "No apartment / the whole house"
+msgstr ""
+
+#. translators: %d = number of suggestions
+#, php-format
+msgid "%d suggestions. Use the up and down arrows to choose."
+msgstr ""
+
+msgid "1 suggestion. Use the up and down arrows to choose."
+msgstr ""
+
+#. translators: %d = number of apartments
+#, php-format
+msgid "%d apartments. Use the up and down arrows to choose."
+msgstr ""
+
+msgid "The address has been filled in."
+msgstr ""
+
+msgid "Address suggestions at checkout"
+msgstr ""
+
+msgid ""
+"While the customer types their address, suggest addresses from the Danish "
+"address register and fill in street, floor and door, postcode and city. "
+"Fewer parcels go to an address that cannot be found. The customer can ignore"
+" the suggestions and type as before. Works in the classic checkout."
+msgstr ""
+
+msgid "Searching…"
+msgstr ""
+
+msgid "Now type the house number."
+msgstr ""

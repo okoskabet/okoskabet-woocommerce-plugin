@@ -6,6 +6,10 @@
  * from the one they choose. When the chosen address is a building with flats
  * and no floor or door, the flats are offered as a second list.
  *
+ * A customer types the street before the house number, so the streets come
+ * too. Choosing one puts the street, postcode and city in and leaves the
+ * cursor for the number; the next searches keep to that street's postcode.
+ *
  * The suggestions come from the shop's own REST routes (see
  * integrations/Address_Autocomplete.php), which ask Økoskabet with the shop's
  * API key. The key is never in the browser.
@@ -137,11 +141,19 @@ function attach( prefix ) {
 	list.setAttribute( 'role', 'listbox' );
 	list.setAttribute( 'aria-label', STR.suggestions || '' );
 
+	// While the register is asked. Outside the listbox: it is not an option,
+	// and a list with one row in it reads as a list of one.
+	const busy = document.createElement( 'div' );
+	busy.className = 'okoskabet-address-searching';
+	busy.hidden = true;
+	busy.textContent = STR.searching || '';
+
 	const status = document.createElement( 'div' );
 	status.className = 'okoskabet-address-status';
 	status.setAttribute( 'role', 'status' );
 	status.setAttribute( 'aria-live', 'polite' );
 
+	popup.appendChild( busy );
 	popup.appendChild( heading );
 	popup.appendChild( list );
 	wrapper.appendChild( popup );
@@ -152,8 +164,11 @@ function attach( prefix ) {
 	input.setAttribute( 'aria-expanded', 'false' );
 	input.setAttribute( 'aria-controls', listId );
 
-	// What the list currently shows: [{ id, text, building? }].
+	// What the list currently shows: [{ id, text, building? }] or a street,
+	// [{ kind: 'street', text, street, postal_code, city }].
 	let items = [];
+	// The street the customer chose, until they type something else.
+	let street = null;
 	let active = -1;
 	let timer = null;
 	let controller = null;
@@ -173,6 +188,7 @@ function attach( prefix ) {
 	 */
 	function close() {
 		popup.hidden = true;
+		busy.hidden = true;
 		heading.hidden = true;
 		list.setAttribute( 'aria-label', STR.suggestions || '' );
 		list.removeAttribute( 'aria-labelledby' );
@@ -181,6 +197,7 @@ function attach( prefix ) {
 		active = -1;
 		input.setAttribute( 'aria-expanded', 'false' );
 		input.removeAttribute( 'aria-activedescendant' );
+		input.removeAttribute( 'aria-busy' );
 	}
 
 	/**
@@ -215,6 +232,8 @@ function attach( prefix ) {
 		list.textContent = '';
 		items = entries;
 		active = -1;
+		busy.hidden = true;
+		input.removeAttribute( 'aria-busy' );
 
 		if ( ! entries.length ) {
 			close();
@@ -224,7 +243,9 @@ function attach( prefix ) {
 		entries.forEach( ( entry, index ) => {
 			const option = document.createElement( 'li' );
 			option.id = listId + '-' + index;
-			option.className = 'okoskabet-address-option';
+			option.className =
+				'okoskabet-address-option' +
+				( entry.kind === 'street' ? ' is-street' : '' );
 			option.setAttribute( 'role', 'option' );
 			option.setAttribute( 'aria-selected', 'false' );
 			option.textContent = entry.text;
@@ -291,11 +312,13 @@ function attach( prefix ) {
 	 * @param query
 	 */
 	function search( query ) {
-		if ( cache.has( query ) ) {
-			open( cache.get( query ), false );
+		const asked = narrowed( query );
+		if ( cache.has( asked ) ) {
+			open( cache.get( asked ), false );
 			return;
 		}
-		request( suggestUrl( query ) ).then( ( data ) => {
+		searching();
+		request( suggestUrl( asked ) ).then( ( data ) => {
 			if ( data === undefined ) {
 				return; // Overtaken by a newer keystroke.
 			}
@@ -303,15 +326,110 @@ function attach( prefix ) {
 				data && Array.isArray( data.suggestions )
 					? data.suggestions
 					: [];
-			cache.set( query, suggestions );
+			cache.set( asked, suggestions );
 			// Only if the customer is still here and hasn't typed on.
 			if (
 				input.ownerDocument.activeElement === input &&
 				input.value.trim().replace( /\s+/g, ' ' ) === query
 			) {
 				open( suggestions, false );
+			} else if ( ! busy.hidden ) {
+				close(); // Nobody is waiting for it any more.
 			}
 		} );
+	}
+
+	/**
+	 * The text to search for: what was typed, kept to the chosen street's
+	 * postcode once the customer is typing its number. "Fælledvej 12" is in a
+	 * dozen towns; "Fælledvej 12 2200" is the one they picked.
+	 *
+	 * @param query
+	 */
+	function narrowed( query ) {
+		if ( ! street ) {
+			return query;
+		}
+		const name = street.street.toLowerCase();
+		const typed = query.toLowerCase();
+		const postcode = field( 'postcode' );
+		// The street and then a space: "Fælledvejen 3" begins with
+		// "Fælledvej" too, and is another street.
+		if (
+			( typed !== name && typed.indexOf( name + ' ' ) !== 0 ) ||
+			! postcode ||
+			postcode.value.trim() !== street.postal_code
+		) {
+			street = null; // The customer has moved on from that street.
+			return query;
+		}
+		return /\d/.test( typed.slice( name.length ) )
+			? query + ' ' + street.postal_code
+			: query;
+	}
+
+	/**
+	 * While the register is asked: a line saying so, so a customer on a slow
+	 * site waits for the list rather than typing on without it.
+	 */
+	function searching() {
+		if ( ! STR.searching ) {
+			return;
+		}
+		close();
+		busy.hidden = false;
+		popup.hidden = false;
+		input.setAttribute( 'aria-busy', 'true' );
+		announce( STR.searching );
+	}
+
+	/**
+	 * A street: put it in with its postcode and city, and leave the cursor
+	 * after it for the house number. Nothing to look up — a street is not an
+	 * address yet — and no checkout update: the address chosen next makes it.
+	 *
+	 * @param entry
+	 */
+	function chooseStreet( entry ) {
+		cancelPending();
+		close();
+		street = entry;
+		setValue( input, entry.street + ' ' );
+		place( entry.postal_code, entry.city );
+		input.focus();
+		const end = input.value.length;
+		if ( typeof input.setSelectionRange === 'function' ) {
+			input.setSelectionRange( end, end );
+		}
+		announce( STR.typeNumber );
+	}
+
+	/**
+	 * Denmark, the postcode and the city, from a street or an address.
+	 *
+	 * @param postalCode
+	 * @param city
+	 */
+	function place( postalCode, city ) {
+		const country = field( 'country' );
+		if (
+			country &&
+			country.tagName === 'SELECT' &&
+			country.value !== 'DK' &&
+			country.querySelector( 'option[value="DK"]' )
+		) {
+			setValue( country, 'DK' );
+			// selectWoo shows the old country until told.
+			if ( window.jQuery ) {
+				window.jQuery( country ).trigger( 'change.select2' );
+			}
+		}
+		if ( postalCode ) {
+			setValue( field( 'postcode' ), postalCode );
+		}
+		if ( city ) {
+			setValue( field( 'city' ), city );
+		}
 	}
 
 	/**
@@ -331,20 +449,6 @@ function attach( prefix ) {
 		const unit = address.address_2 || '';
 		let line1 = address.address_1;
 
-		const country = field( 'country' );
-		if (
-			country &&
-			country.tagName === 'SELECT' &&
-			country.value !== 'DK' &&
-			country.querySelector( 'option[value="DK"]' )
-		) {
-			setValue( country, 'DK' );
-			// selectWoo shows the old country until told.
-			if ( window.jQuery ) {
-				window.jQuery( country ).trigger( 'change.select2' );
-			}
-		}
-
 		if ( address2Field ) {
 			if ( unit ) {
 				setValue( address2Field, unit );
@@ -357,12 +461,7 @@ function attach( prefix ) {
 		}
 
 		setValue( input, line1 );
-		if ( address.postal_code ) {
-			setValue( field( 'postcode' ), address.postal_code );
-		}
-		if ( address.city ) {
-			setValue( field( 'city' ), address.city );
-		}
+		place( address.postal_code, address.city );
 
 		announce( STR.filled );
 
@@ -385,6 +484,11 @@ function attach( prefix ) {
 		// "No apartment": the building, which is already filled in.
 		if ( entry.building ) {
 			close();
+			return;
+		}
+
+		if ( entry.kind === 'street' ) {
+			chooseStreet( entry );
 			return;
 		}
 
@@ -457,7 +561,7 @@ function attach( prefix ) {
 				}
 				break;
 			case 'Escape':
-				if ( isOpen ) {
+				if ( isOpen || ! busy.hidden ) {
 					event.preventDefault();
 					cancelPending();
 					close();
