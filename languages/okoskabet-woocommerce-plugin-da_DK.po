@@ -1837,3 +1837,9 @@ msgstr "%d lejligheder. Brug pil op og pil ned for at vælge."
 
 msgid "The address has been filled in."
 msgstr "Adressen er udfyldt."
+
+msgid "Searching…"
+msgstr "Søger …"
+
+msgid "Now type the house number."
+msgstr "Skriv nu husnummeret."

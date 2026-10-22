@@ -2469,3 +2469,9 @@ msgstr ""
 #, php-format
 msgid "Ordre markeret som afsluttet via Økoskabet webhook. Event: %s"
 msgstr ""
+
+msgid "Searching…"
+msgstr ""
+
+msgid "Now type the house number."
+msgstr ""

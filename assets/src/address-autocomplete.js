@@ -6,6 +6,10 @@
  * from the one they choose. When the chosen address is a building with flats
  * and no floor or door, the flats are offered as a second list.
  *
+ * A customer types the street before the house number, so the streets come
+ * too. Choosing one puts the street, postcode and city in and leaves the
+ * cursor for the number; the next searches keep to that street's postcode.
+ *
  * The suggestions come from the shop's own REST routes (see
  * integrations/Address_Autocomplete.php), which ask Økoskabet with the shop's
  * API key. The key is never in the browser.
@@ -41,7 +45,7 @@ let instances = 0;
 function suggestUrl( query ) {
 	const base = CONFIG.suggestUrl || '';
 	const glue = base.indexOf( '?' ) === -1 ? '?' : '&';
-	return base + glue + 'q=' + encodeURIComponent( query );
+	return base + glue + 'q=' + encodeURIComponent( query ) + '&streets=1';
 }
 
 /**
@@ -152,8 +156,11 @@ function attach( prefix ) {
 	input.setAttribute( 'aria-expanded', 'false' );
 	input.setAttribute( 'aria-controls', listId );
 
-	// What the list currently shows: [{ id, text, building? }].
+	// What the list currently shows: [{ id, text, building? }] or a street,
+	// [{ kind: 'street', text, street, postal_code, city }].
 	let items = [];
+	// The street the customer chose, until they type something else.
+	let street = null;
 	let active = -1;
 	let timer = null;
 	let controller = null;
@@ -181,6 +188,7 @@ function attach( prefix ) {
 		active = -1;
 		input.setAttribute( 'aria-expanded', 'false' );
 		input.removeAttribute( 'aria-activedescendant' );
+		input.removeAttribute( 'aria-busy' );
 	}
 
 	/**
@@ -224,7 +232,9 @@ function attach( prefix ) {
 		entries.forEach( ( entry, index ) => {
 			const option = document.createElement( 'li' );
 			option.id = listId + '-' + index;
-			option.className = 'okoskabet-address-option';
+			option.className =
+				'okoskabet-address-option' +
+				( entry.kind === 'street' ? ' is-street' : '' );
 			option.setAttribute( 'role', 'option' );
 			option.setAttribute( 'aria-selected', 'false' );
 			option.textContent = entry.text;
@@ -291,19 +301,22 @@ function attach( prefix ) {
 	 * @param query
 	 */
 	function search( query ) {
-		if ( cache.has( query ) ) {
-			open( cache.get( query ), false );
+		const asked = narrowed( query );
+		if ( cache.has( asked ) ) {
+			open( cache.get( asked ), false );
 			return;
 		}
-		request( suggestUrl( query ) ).then( ( data ) => {
+		searching();
+		request( suggestUrl( asked ) ).then( ( data ) => {
 			if ( data === undefined ) {
 				return; // Overtaken by a newer keystroke.
 			}
+			input.removeAttribute( 'aria-busy' );
 			const suggestions =
 				data && Array.isArray( data.suggestions )
 					? data.suggestions
 					: [];
-			cache.set( query, suggestions );
+			cache.set( asked, suggestions );
 			// Only if the customer is still here and hasn't typed on.
 			if (
 				input.ownerDocument.activeElement === input &&
@@ -312,6 +325,82 @@ function attach( prefix ) {
 				open( suggestions, false );
 			}
 		} );
+	}
+
+	/**
+	 * The text to search for: what was typed, kept to the chosen street's
+	 * postcode once the customer is typing its number. "Fælledvej 12" is in a
+	 * dozen towns; "Fælledvej 12 2200" is the one they picked.
+	 *
+	 * @param query
+	 */
+	function narrowed( query ) {
+		if ( ! street ) {
+			return query;
+		}
+		const name = street.street.toLowerCase();
+		const typed = query.toLowerCase();
+		const postcode = field( 'postcode' );
+		if (
+			typed.indexOf( name ) !== 0 ||
+			! postcode ||
+			postcode.value.trim() !== street.postal_code
+		) {
+			street = null; // The customer has moved on from that street.
+			return query;
+		}
+		return /\d/.test( typed.slice( name.length ) )
+			? query + ' ' + street.postal_code
+			: query;
+	}
+
+	/**
+	 * While the register is asked: a row saying so, so a customer on a slow
+	 * site waits for the list rather than typing on without it.
+	 */
+	function searching() {
+		if ( ! STR.searching ) {
+			return;
+		}
+		list.textContent = '';
+		items = [];
+		active = -1;
+		const row = document.createElement( 'li' );
+		row.className = 'okoskabet-address-searching';
+		row.setAttribute( 'aria-disabled', 'true' );
+		row.textContent = STR.searching;
+		list.appendChild( row );
+		heading.hidden = true;
+		popup.hidden = false;
+		input.setAttribute( 'aria-busy', 'true' );
+	}
+
+	/**
+	 * A street: put it in with its postcode and city, and leave the cursor
+	 * after it for the house number. Nothing to look up — a street is not an
+	 * address yet.
+	 *
+	 * @param entry
+	 */
+	function chooseStreet( entry ) {
+		close();
+		street = entry;
+		setValue( input, entry.street + ' ' );
+		if ( entry.postal_code ) {
+			setValue( field( 'postcode' ), entry.postal_code );
+		}
+		if ( entry.city ) {
+			setValue( field( 'city' ), entry.city );
+		}
+		input.focus();
+		const end = input.value.length;
+		if ( typeof input.setSelectionRange === 'function' ) {
+			input.setSelectionRange( end, end );
+		}
+		announce( STR.typeNumber );
+		if ( window.jQuery ) {
+			window.jQuery( document.body ).trigger( 'update_checkout' );
+		}
 	}
 
 	/**
@@ -385,6 +474,11 @@ function attach( prefix ) {
 		// "No apartment": the building, which is already filled in.
 		if ( entry.building ) {
 			close();
+			return;
+		}
+
+		if ( entry.kind === 'street' ) {
+			chooseStreet( entry );
 			return;
 		}
 

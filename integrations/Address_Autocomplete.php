@@ -126,6 +126,8 @@ class Address_Autocomplete extends Base {
 				/* translators: %d = number of apartments */
 				'unitCount'   => \__( '%d apartments. Use the up and down arrows to choose.', O_TEXTDOMAIN ),
 				'filled'      => \__( 'The address has been filled in.', O_TEXTDOMAIN ),
+				'searching'   => \__( 'Searching…', O_TEXTDOMAIN ),
+				'typeNumber'  => \__( 'Now type the house number.', O_TEXTDOMAIN ),
 			),
 		);
 
@@ -162,7 +164,19 @@ class Address_Autocomplete extends Base {
 			return self::suggestions_response( array() );
 		}
 
-		$body = self::ask_okoskabet( '/api/v1/addresses?' . \http_build_query( array( 'q' => $query ), '', '&', PHP_QUERY_RFC3986 ) );
+		// With the streets: a customer types the street before the number, and
+		// until the number is there the register finds streets, not addresses.
+		$body = self::ask_okoskabet(
+			'/api/v1/addresses?' . \http_build_query(
+				array(
+					'q'       => $query,
+					'streets' => '1',
+				),
+				'',
+				'&',
+				PHP_QUERY_RFC3986
+			)
+		);
 
 		return self::suggestions_response( self::parse_suggestions( $body ) );
 	}
@@ -232,17 +246,52 @@ class Address_Autocomplete extends Base {
 	}
 
 	/**
-	 * Økoskabet's suggestions, reduced to id and text. Anything else — an
-	 * error body, a 503, no body at all — is no suggestions.
+	 * Økoskabet's suggestions, reduced to id and text — or, for a street, to
+	 * the street, postcode and city. Anything else — an error body, a 503, no
+	 * body at all — is no suggestions. Order is kept: the register's.
 	 *
 	 * @param array|null $body Decoded JSON, or null when there was no usable answer.
-	 * @return array<int,array{id:string,text:string}>
+	 * @return array<int,array<string,string>>
 	 */
 	public static function parse_suggestions( ?array $body ): array {
 		if ( ! \is_array( $body ) || ! isset( $body['suggestions'] ) || ! \is_array( $body['suggestions'] ) ) {
 			return array();
 		}
-		return \array_slice( self::parse_hits( $body['suggestions'] ), 0, self::MAX_SUGGESTIONS );
+		$out = array();
+		foreach ( $body['suggestions'] as $hit ) {
+			$parsed = \is_array( $hit ) && ( $hit['kind'] ?? null ) === 'street'
+				? self::parse_street( $hit )
+				: ( self::parse_hits( array( $hit ) )[0] ?? null );
+			if ( $parsed !== null ) {
+				$out[] = $parsed;
+			}
+		}
+		return \array_slice( $out, 0, self::MAX_SUGGESTIONS );
+	}
+
+	/**
+	 * A street, passed on with exactly the fields the script fills in. It has
+	 * no id: a street cannot be looked up, only typed on from.
+	 *
+	 * @param array<mixed> $hit
+	 * @return array{kind:string,text:string,street:string,postal_code:string,city:string}|null
+	 */
+	private static function parse_street( array $hit ): ?array {
+		foreach ( array( 'text', 'street', 'postal_code', 'city' ) as $field ) {
+			if ( ! isset( $hit[ $field ] ) || ! \is_string( $hit[ $field ] ) || \trim( $hit[ $field ] ) === '' ) {
+				return null;
+			}
+		}
+		if ( \preg_match( '/^\d{4}$/', \trim( $hit['postal_code'] ) ) !== 1 ) {
+			return null;
+		}
+		return array(
+			'kind'        => 'street',
+			'text'        => \trim( $hit['text'] ),
+			'street'      => \trim( $hit['street'] ),
+			'postal_code' => \trim( $hit['postal_code'] ),
+			'city'        => \trim( $hit['city'] ),
+		);
 	}
 
 	/**
