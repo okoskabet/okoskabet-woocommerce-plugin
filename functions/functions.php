@@ -644,21 +644,9 @@ function oko_render_delivery_ui(string $context = 'table'): void
 	}
 
 	oko_print_checkout_layout_script((string) ($settings['_separate_shipping_label'] ?? ''));
-	// CSS: hide WooCommerce-rendered billing input fields — our JS injects
-	// the visible UI dynamically. We hide only the labels and inputs, not the
-	// wrapper, so our injected UI inside the wrapper remains visible.
-	echo '<style>
-		/* The pickup-location field is written by the checkout JS, never typed
-		   into, so the raw WooCommerce input must not be shown. */
-		#billing_okoskabet_pickup_location_id_field { display: none !important; }
-		#billing_okoskabet_pre_order_field { display: none !important; }
-		.okoskabet-delivery-location > label,
-		.okoskabet-delivery-location > .woocommerce-input-wrapper > input,
-		.okoskabet-delivery-note > label,
-		.okoskabet-delivery-note > .woocommerce-input-wrapper > input {
-			display: none !important;
-		}
-	</style>';
+	// The raw billing fields are hidden by the checkout stylesheet
+	// (assets/src/styles/public.scss), not here: this row is not drawn in a
+	// checkout that waits for an address before showing shipping.
 }
 
 /**
@@ -4121,8 +4109,8 @@ function oko_logistics_note(\WC_Order $order): string
  *
  * @param \WC_Order $order
  * @param array     $merchant The merchant this order routes to.
- * @return array|null Null when the order is none of ours — no delivery date
- *                    and none of our shipping methods.
+ * @return array|null Null when the order is none of ours: none of our
+ *                    shipping methods, whatever dates or sheds it carries.
  */
 function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 {
@@ -4148,10 +4136,17 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	// An order with no method of ours is a different matter: the shop's own
 	// couriers carry those, and sending them would fill the packing room's
 	// list with orders it must not touch.
-	$without_date = empty($order_delivery_date) && oko_order_is_ours($order);
-	if (empty($order_delivery_date) && ! $without_date) {
+	//
+	// That holds with a date as well. The picker writes a shed and a date the
+	// moment a customer picks Økoskabet, and only the browser clears them
+	// again when the customer moves on to the shop's own courier. An order
+	// that kept them was sent here as a home delivery, with no shed to send it
+	// to: Slagter Bob, who has only sheds with us, had nine of those between
+	// February and May 2026, each moved to a shed by hand.
+	if (! oko_order_is_ours($order)) {
 		return null;
 	}
+	$without_date = empty($order_delivery_date);
 
 	$is_shed_delivery  = false;
 	$is_store_pickup   = false;

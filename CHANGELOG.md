@@ -4,6 +4,20 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 ## Unreleased
 
+= Kun ordrer med vores fragt sendes til Økoskabet =
+
+En ordre, hvor kunden først valgte Økoskabet og så skiftede til butikkens egen
+fragt, kunne beholde den dato og det skab, vælgeren havde sat. Den blev så sendt
+til Økoskabet alligevel: med skab som skabslevering, uden som hjemmelevering.
+Nu afgør fragtmetoden alene, om ordren er vores. Ordrer med Økoskabets egne
+fragtmetoder sendes præcis som før.
+
+= Vores interne felter står ikke længere frit i kassen =
+
+I en kasse, der først viser fragtmetoderne, når kunden har skrevet en adresse,
+stod felterne Afhentningssted, Leveringssted, Besked til chaufføren og
+Forudbestilling synlige, indtil adressen var skrevet. De skjules nu altid.
+
 = Address suggestions at checkout =
 
 While a customer types their street address at checkout, the plugin can now

@@ -2,3 +2,22 @@
 @import "custom_props";
 
 // This stylesheet is used to style the public-facing components of the plugin.
+
+// Our billing fields, which the checkout script fills in and never asks the
+// customer to type into. Hidden here, in the stylesheet every checkout loads,
+// and not beside the picker: a shop that shows its shipping methods only once
+// an address is typed (Slagter Bob) has no shipping row to draw the picker in
+// until then, and the raw fields stood open in the form ("Afhentningssted",
+// "Forudbestilling"). Only the labels and inputs of the delivery location and
+// the driver's note, not their wrappers: the script puts its own UI inside.
+#billing_okoskabet_pickup_location_id_field,
+#billing_okoskabet_pre_order_field {
+	display: none !important;
+}
+
+.okoskabet-delivery-location > label,
+.okoskabet-delivery-location > .woocommerce-input-wrapper > input,
+.okoskabet-delivery-note > label,
+.okoskabet-delivery-note > .woocommerce-input-wrapper > input {
+	display: none !important;
+}
