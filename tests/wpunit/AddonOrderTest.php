@@ -53,8 +53,8 @@ class AddonOrderTest extends \Codeception\TestCase\WPTestCase
 	public function test_a_fresh_checkout_still_remembers_the_address(): void
 	{
 		$this->assertSame(
-			'Korsløkkevej 51',
-			apply_filters('woocommerce_checkout_get_value', 'Korsløkkevej 51', 'billing_address_1')
+			'Prøvegade 51',
+			apply_filters('woocommerce_checkout_get_value', 'Prøvegade 51', 'billing_address_1')
 		);
 	}
 
