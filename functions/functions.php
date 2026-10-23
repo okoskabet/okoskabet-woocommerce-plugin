@@ -3332,12 +3332,12 @@ function custom_override_checkout_fields(array $fields): array
 	//
 	// Off unless the shop turns it on, because there is a second way the floor
 	// arrives and it is already working: a customer with nowhere else to put
-	// it writes it on the street line — "Byagervej 194, 1. tv" — and
+	// it writes it on the street line — "Eksempelvej 12, 1. tv" — and
 	// Økoskabet's address client lifts the unit out of that line itself.
 	// gaardmester.dk delivers to blocks of flats that way today, with no
 	// second address line in their checkout at all. Handing such a shop one
 	// repairs nothing and adds a way to go wrong: a customer who writes the
-	// floor in both places sends "Byagervej 194, 1. tv, 1. tv", and the
+	// floor in both places sends "Eksempelvej 12, 1. tv, 1. tv", and the
 	// register refuses that outright.
 	//
 	// The shop's own field rather than one of ours, so there is one second
@@ -4634,7 +4634,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 
 	$address = (array) ($home['address'] ?? array());
 	// Named once, as an address, rather than field by field. The note is read
-	// by whoever runs the shop, and "shipping_address_1: Byagervej 194,
+	// by whoever runs the shop, and "shipping_address_1: Eksempelvej 12,
 	// shipping_address_2: 1 tv" is our own column names read out loud.
 	//
 	// Written through the named setters rather than `$order->{'set_' . $key}`:

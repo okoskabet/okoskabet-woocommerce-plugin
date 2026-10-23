@@ -1748,8 +1748,8 @@ msgstr "Økoskabet ændrede leveringen: %s. Ændret dér, ikke her."
 msgid "Ask for flat, floor and door"
 msgstr "Spørg om lejlighed, etage og dør"
 
-msgid "Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself (\"Byagervej 194, 1. tv\") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice."
-msgstr "Lægger en anden adresselinje i kassen, til en butik hvis kasse ingen har. Lad den være slukket, hvis jeres kunder skriver etagen på selve gadelinjen (\"Byagervej 194, 1. tv\") — adresseregistret får den dér og læser den, og to steder at skrive én ting betyder, at nogle kunder skriver den to gange."
+msgid "Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself (\"Eksempelvej 12, 1. tv\") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice."
+msgstr "Lægger en anden adresselinje i kassen, til en butik hvis kasse ingen har. Lad den være slukket, hvis jeres kunder skriver etagen på selve gadelinjen (\"Eksempelvej 12, 1. tv\") — adresseregistret får den dér og læser den, og to steder at skrive én ting betyder, at nogle kunder skriver den to gange."
 
 msgid "Flat, floor and door"
 msgstr "Lejlighed, etage og dør"
