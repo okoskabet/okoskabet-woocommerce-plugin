@@ -59,15 +59,15 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	public function test_the_address_is_composed_the_way_it_is_sent(): void
 	{
 		$lines = oko_delivery_address_lines(array(
-			'street_name'  => 'Byagervej',
-			'house_number' => '194',
+			'street_name'  => 'Eksempelvej',
+			'house_number' => '12',
 			'floor'        => '1.',
 			'door'         => 'tv',
 			'city'         => 'Beder',
 			'postal_code'  => '8330',
 		));
 
-		$this->assertSame('Byagervej 194', $lines['shipping_address_1']);
+		$this->assertSame('Eksempelvej 12', $lines['shipping_address_1']);
 		$this->assertSame('1. tv', $lines['shipping_address_2']);
 		$this->assertSame('Beder', $lines['shipping_city']);
 		$this->assertSame('8330', $lines['shipping_postcode']);
@@ -145,7 +145,7 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	 * The note names an address, not our column names.
 	 *
 	 * Measured on Gaardmester's staging, where the first version wrote
-	 * "shipping_address_1: Byagervej 194, shipping_address_2: 1 tv,
+	 * "shipping_address_1: Eksempelvej 12, shipping_address_2: 1 tv,
 	 * shipping_city: Beder" into a note the shop's own people read.
 	 */
 	public function test_the_note_reads_as_an_address(): void
@@ -156,8 +156,8 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			'shipment_type' => 'home_delivery',
 			'delivery_date' => '2026-10-20',
 			'home_delivery' => array('address' => array(
-				'street_name'  => 'Byagervej',
-				'house_number' => '194',
+				'street_name'  => 'Eksempelvej',
+				'house_number' => '12',
 				'floor'        => '1.',
 				'door'         => 'tv',
 				'city'         => 'Beder',
@@ -165,7 +165,7 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			)),
 		));
 
-		$this->assertContains('delivery address Byagervej 194 1. tv, 8330 Beder', $changed);
+		$this->assertContains('delivery address Eksempelvej 12 1. tv, 8330 Beder', $changed);
 		$this->assertStringNotContainsString('shipping_address_1', implode(' ', $changed));
 	}
 
@@ -228,8 +228,8 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			'shipment_type'      => 'home_delivery',
 			'delivery_date'      => '2026-10-22',
 			'home_delivery'      => array('address' => array(
-				'street_name'  => 'Byagervej',
-				'house_number' => '194',
+				'street_name'  => 'Eksempelvej',
+				'house_number' => '12',
 				'city'         => 'Beder',
 				'postal_code'  => '8330',
 			)),
@@ -279,8 +279,8 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 					'shipment_type'      => 'home_delivery',
 					'delivery_date'      => '2026-10-20',
 					'home_delivery'      => array('address' => array(
-						'street_name'  => 'Byagervej',
-						'house_number' => '194',
+						'street_name'  => 'Eksempelvej',
+						'house_number' => '12',
 						'city'         => 'Beder',
 						'postal_code'  => '8330',
 					)),

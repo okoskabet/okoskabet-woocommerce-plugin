@@ -73,11 +73,11 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	public function test_an_order_that_moved_since_is_still_sent(): void
 	{
 		$order = $this->an_order_sent_by_1_5_2();
-		$order->set_shipping_address_1('Byagervej 196');
+		$order->set_shipping_address_1('Eksempelvej 14');
 		$order->save();
 
 		$this->assertCount(1, $this->puts);
-		$this->assertSame('Byagervej 196', json_decode($this->puts[0], true)['home_delivery']['address_1'] ?? null);
+		$this->assertSame('Eksempelvej 14', json_decode($this->puts[0], true)['home_delivery']['address_1'] ?? null);
 	}
 
 	/**
@@ -104,7 +104,7 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$order->set_billing_email('pernille@example.org');
 		$order->set_shipping_first_name('Pernille');
 		$order->set_shipping_last_name('Hansen');
-		$order->set_shipping_address_1('Byagervej 194');
+		$order->set_shipping_address_1('Eksempelvej 12');
 		$order->set_shipping_city('Beder');
 		$order->set_shipping_postcode('8330');
 		$order->set_customer_note('Ring på');
@@ -142,7 +142,7 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 			)),
 			'home_delivery'           => array(
 				'recipient_name' => 'Pernille Hansen',
-				'address_1'      => 'Byagervej 194',
+				'address_1'      => 'Eksempelvej 12',
 				'city'           => 'Beder',
 				'postal_code'    => '8330',
 				'location'       => 'In front of the door — Bag skuret',

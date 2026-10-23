@@ -124,7 +124,7 @@ class FloorFieldTest extends \Codeception\TestCase\WPTestCase
 		$order->set_billing_address_1('Korsløkkevej 51');
 		$order->set_billing_postcode('5220');
 		$order->set_billing_address_2('2. sal');
-		$order->set_shipping_address_1('Byagervej 194');
+		$order->set_shipping_address_1('Eksempelvej 12');
 		$order->set_shipping_postcode('8330');
 		$order->save();
 
