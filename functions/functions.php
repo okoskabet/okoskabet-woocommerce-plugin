@@ -5092,17 +5092,17 @@ function oko_shipment_fingerprint(array $payload): string
  * `allow_invalid` are in it. Rebuilt here from today's payload so an order that
  * has not moved since 1.5.2 sent it can be told apart from one that has.
  *
- * An order with additions was never 1.5.2's to send, and answers nothing.
+ * Only the order's own goods. 1.5.2 had no additions, so what it hashed was
+ * the order's lines alone; an addition placed after the update puts its goods
+ * at the end of today's list, and counting them made every 1.5.2 order that
+ * took an addition look changed — and its first save sent the whole order,
+ * over the packing room's corrections. Seen on staging 23/10.
  *
  * @param \WC_Order           $order
  * @param array<string,mixed> $payload Today's payload for it, whole.
  */
-function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload): string
+function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload, ?array $merchant = null): string
 {
-	if (oko_addition_ids($order) !== array()) {
-		return '';
-	}
-
 	$payload['shipment_reference'] = (string) $order->get_order_number();
 
 	$payload['line_items'] = array_map(static function (array $line): array {
@@ -5114,7 +5114,7 @@ function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload): string
 			'sku'           => $line['sku'] ?? '',
 			'quantity'      => $line['quantity'] ?? 0,
 		);
-	}, (array) ($payload['line_items'] ?? array()));
+	}, oko_order_line_items($order, $merchant));
 
 	if (isset($payload['home_delivery'])) {
 		$recipient = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
@@ -5405,7 +5405,7 @@ function oko_resend_shipment_on_update(int $order_id): void
 	if (is_array($sent)) {
 		$changes = oko_payload_changes($sent, $comparable);
 	} elseif (oko_shipment_fingerprint($comparable) === $sent_fingerprint
-		|| oko_fingerprint_as_1_5_2($order, $payload) === $sent_fingerprint) {
+		|| oko_fingerprint_as_1_5_2($order, $payload, $merchant) === $sent_fingerprint) {
 		// Sent by a version that recorded a fingerprint and not the payload.
 		// Nothing has moved, so this is the free moment to write down what
 		// Økoskabet holds — after this the order compares like any other.

@@ -20,15 +20,32 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	/** @var array<int,string> */
 	private $puts = array();
 
+	/** The status Økoskabet answers a PUT with. */
+	private $put_answer = 200;
+
 	public function setUp(): void
 	{
 		parent::setUp();
 		$this->a_merchant_with_an_account();
-		$this->puts = array();
+		$this->puts       = array();
+		$this->put_answer = 200;
 
 		add_filter('pre_http_request', function ($preempt, $args, $url) {
 			if (($args['method'] ?? '') === 'PUT') {
 				$this->puts[] = (string) ($args['body'] ?? '');
+
+				return array('response' => array('code' => $this->put_answer), 'body' => '{}');
+			}
+
+			// The shipment is still with the merchant, and the account's day
+			// is open — what an addition needs before it may ride along.
+			if (($args['method'] ?? 'GET') === 'GET' && strpos($url, '/api/v1/shipments/') !== false) {
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('shipment_reference' => 'x', 'status' => 'registered', 'notes' => '')));
+			}
+			if (strpos($url, '/api/v1/configuration') !== false) {
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('order_cutoff' => array(
+					'time' => '23:59:00', 'days_before_delivery' => 1, 'time_zone' => 'Europe/Copenhagen',
+				))));
 			}
 
 			return array('response' => array('code' => 200), 'body' => '{}');
@@ -69,6 +86,155 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$this->assertSame(array('customer' => array('phone' => '+4599887766')), json_decode($this->puts[0], true));
 	}
 
+	/**
+	 * An addition placed after the update does not send the 1.5.2 order whole.
+	 *
+	 * The addition's goods go onto the shipment in one write. The earlier
+	 * order is saved once they are on it, and its 1.5.2 fingerprint has to be
+	 * asked about its own goods only — counting the addition's made it look
+	 * changed, and the whole order was sent over the packing room's
+	 * corrections. Seen on staging on 23 October 2026, on a home delivery and
+	 * on a shed.
+	 */
+	public function test_an_addition_to_a_1_5_2_order_does_not_send_it_whole(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2();
+
+		$addition = wc_create_order();
+		$addition->add_product(wc_get_product($this->product_on($order)), 1);
+		$addition->save();
+
+		oko_send_addition_to_its_order($addition, $order->get_id(), array());
+
+		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment.');
+		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
+		$sent = wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true);
+		$this->assertIsArray($sent, 'The order is upgraded to a record of what was sent.');
+		$this->assertSame(
+			json_decode($this->puts[0], true)['line_items'],
+			$sent['line_items'],
+			'The record holds what the addition just wrote, its goods included.'
+		);
+	}
+
+	/**
+	 * A shed, booked by 1.5.2, takes an addition: nothing but the addition is
+	 * sent. The second shape seen on staging on 23 October 2026 — no
+	 * recipient, no address, the note without the driver's part.
+	 */
+	public function test_an_addition_to_a_1_5_2_shed_order_does_not_send_it_whole(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('shed' => 'shed-42'));
+
+		$this->an_addition_to($order);
+
+		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment.');
+		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
+		$this->assertIsArray(wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true));
+	}
+
+	/**
+	 * The goods 1.5.2 hashed are the order's lines as 1.5.2 read them: a
+	 * variation under its parent's name, a refunded unit off the count, no
+	 * packaging fee — and a second address line as typed. An addition on such
+	 * an order still sends nothing but itself.
+	 */
+	public function test_an_addition_to_a_1_5_2_order_of_many_shapes_does_not_send_it_whole(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('more_goods' => true, 'address_2' => '2. tv'));
+
+		$this->an_addition_to($order);
+
+		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment.');
+		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
+		$this->assertIsArray(wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true));
+	}
+
+	/**
+	 * A 1.5.2 order that really did move is still sent, addition or not.
+	 *
+	 * Økoskabet holds the old address — 1.5.2's resend of the new one never
+	 * got through. The addition must not be what quietly settles it: the
+	 * order goes whole, the way any moved 1.5.2 order does, with the
+	 * addition's goods on it.
+	 */
+	public function test_a_1_5_2_order_that_moved_is_still_sent_when_it_takes_an_addition(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('sent_address_1' => 'Eksempelvej 10'));
+
+		$this->an_addition_to($order);
+
+		$this->assertCount(2, $this->puts, 'The addition, and then the order that moved.');
+		$whole = json_decode($this->puts[1], true);
+		$this->assertSame('Eksempelvej 12', $whole['home_delivery']['address_1'] ?? null);
+		$this->assertSame(
+			json_decode($this->puts[0], true)['line_items'],
+			$whole['line_items'],
+			'The whole order carries the addition\'s goods, or the PUT would take them off.'
+		);
+	}
+
+	/** And the same when it is the date that moved. */
+	public function test_a_1_5_2_order_whose_date_moved_is_still_sent_when_it_takes_an_addition(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('sent_date' => gmdate('Y-m-d', strtotime('+8 days'))));
+
+		$this->an_addition_to($order);
+
+		$this->assertCount(2, $this->puts, 'The addition, and then the order that moved.');
+		$this->assertSame(
+			(string) $order->get_meta('_billing_okoskabet_delivery_date', true),
+			json_decode($this->puts[1], true)['delivery_date'] ?? null
+		);
+	}
+
+	/**
+	 * An addition Økoskabet refused is not in the record.
+	 *
+	 * The record is what Økoskabet holds. Writing the addition's goods into it
+	 * after a refusal would make the shop's next save compare against goods
+	 * that never arrived — and never send them.
+	 */
+	public function test_a_refused_addition_is_not_recorded_as_sent(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2();
+
+		$this->put_answer = 500;
+		$this->an_addition_to($order);
+		$this->put_answer = 200;
+
+		$this->assertCount(1, $this->puts, 'The addition was tried once.');
+
+		$order = wc_get_order($order->get_id());
+		$order->update_status('completed');
+
+		$this->assertCount(1, $this->puts, 'An untouched order is still not sent.');
+		$sent = wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true);
+		$this->assertIsArray($sent);
+		$this->assertCount(1, $sent['line_items'], 'Only the order\'s own goods: the addition never arrived.');
+	}
+
+	/** An addition of one of the order's own products, sent onto it. */
+	private function an_addition_to(\WC_Order $order): \WC_Order
+	{
+		$addition = wc_create_order();
+		$addition->add_product(wc_get_product($this->product_on($order)), 1);
+		$addition->save();
+
+		oko_send_addition_to_its_order($addition, $order->get_id(), array());
+
+		return $addition;
+	}
+
+	private function product_on(\WC_Order $order): int
+	{
+		foreach ($order->get_items() as $item) {
+			return (int) $item->get_product_id();
+		}
+
+		return 0;
+	}
+
 	/** An order that did move since 1.5.2 sent it is still sent, whole, as before. */
 	public function test_an_order_that_moved_since_is_still_sent(): void
 	{
@@ -81,10 +247,23 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
-	 * A home delivery, booked by 1.5.2, with a driver's note and a customer note.
+	 * An order booked by 1.5.2, and the fingerprint 1.5.2 took of it.
+	 *
+	 * A home delivery with a driver's note and a customer note, unless the
+	 * shape says otherwise:
+	 *   - `shed`           a shed reservation instead;
+	 *   - `address_2`      a second address line;
+	 *   - `more_goods`     a variation, a packaging fee and a refunded unit
+	 *                      beside the simple product;
+	 *   - `sent_address_1` / `sent_date`  what 1.5.2 sent, where the order has
+	 *                      moved since and the resend never got through.
+	 *
+	 * @param array<string,mixed> $shape
 	 */
-	private function an_order_sent_by_1_5_2(): \WC_Order
+	private function an_order_sent_by_1_5_2(array $shape = array()): \WC_Order
 	{
+		$shed = (string) ($shape['shed'] ?? '');
+
 		$product = new \WC_Product_Simple();
 		$product->set_name('Økologisk ribbensteg');
 		$product->set_regular_price('199');
@@ -93,9 +272,55 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$order = wc_create_order();
 		$order->add_product($product, 1);
 
+		$lines = array(array(
+			'product_id'    => $product->get_id(),
+			'variant_id'    => null,
+			'name'          => 'Økologisk ribbensteg',
+			'variant_title' => null,
+			'sku'           => '',
+			'quantity'      => 1,
+		));
+
+		$variation = null;
+		if (! empty($shape['more_goods'])) {
+			$parent = new \WC_Product_Variable();
+			$parent->set_name('Økologiske hakkebøffer, 8 stk.');
+			$attribute = new \WC_Product_Attribute();
+			$attribute->set_name('Størrelse');
+			$attribute->set_options(array('3 pakker'));
+			$attribute->set_visible(true);
+			$attribute->set_variation(true);
+			$parent->set_attributes(array($attribute));
+			$parent->save();
+
+			$variation = new \WC_Product_Variation();
+			$variation->set_parent_id($parent->get_id());
+			$variation->set_attributes(array('storrelse' => '3 pakker'));
+			$variation->set_regular_price('50');
+			$variation->set_sku('HAK-3');
+			$variation->save();
+
+			$order->add_product($variation, 3);
+
+			$fee = new \WC_Order_Item_Fee();
+			$fee->set_name('Emballage');
+			$fee->set_total('10');
+			$order->add_item($fee);
+
+			// One of the three refunded below: 1.5.2 sent two.
+			$lines[] = array(
+				'product_id'    => $parent->get_id(),
+				'variant_id'    => $variation->get_id(),
+				'name'          => 'Økologiske hakkebøffer, 8 stk.',
+				'variant_title' => '3 pakker',
+				'sku'           => 'HAK-3',
+				'quantity'      => 2,
+			);
+		}
+
 		$shipping = new \WC_Order_Item_Shipping();
-		$shipping->set_method_id('hey_okoskabet_shipping_home');
-		$shipping->set_method_title('Hjemmelevering');
+		$shipping->set_method_id($shed !== '' ? 'hey_okoskabet_shipping_shed' : 'hey_okoskabet_shipping_home');
+		$shipping->set_method_title($shed !== '' ? 'Økoskab' : 'Hjemmelevering');
 		$order->add_item($shipping);
 
 		$order->set_billing_first_name('Pernille');
@@ -105,49 +330,81 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$order->set_shipping_first_name('Pernille');
 		$order->set_shipping_last_name('Hansen');
 		$order->set_shipping_address_1('Eksempelvej 12');
+		if (isset($shape['address_2'])) {
+			$order->set_shipping_address_2((string) $shape['address_2']);
+		}
 		$order->set_shipping_city('Beder');
 		$order->set_shipping_postcode('8330');
 		$order->set_customer_note('Ring på');
-		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-10-27');
-		$order->update_meta_data('_billing_okoskabet_delivery_location', 'In front of the door');
-		$order->update_meta_data('_billing_okoskabet_delivery_note', 'Bag skuret');
+		// A week ahead, so the day is still open for an addition whenever the
+		// suite runs.
+		$delivery_date = gmdate('Y-m-d', strtotime('+7 days'));
+		$order->update_meta_data('_billing_okoskabet_delivery_date', $delivery_date);
+		if ($shed !== '') {
+			$order->update_meta_data('_billing_okoskabet_shed_id', $shed);
+		} else {
+			$order->update_meta_data('_billing_okoskabet_delivery_location', 'In front of the door');
+			$order->update_meta_data('_billing_okoskabet_delivery_note', 'Bag skuret');
+		}
 		$order->update_meta_data('billing_okoskabet_done', true);
 		$order->set_status('processing');
 		$order->calculate_totals(false);
 		$order->save();
 
+		if ($variation instanceof \WC_Product_Variation) {
+			foreach ($order->get_items('line_item') as $item) {
+				if ((int) $item->get_variation_id() === $variation->get_id()) {
+					$refund = wc_create_refund(array(
+						'order_id'       => $order->get_id(),
+						'amount'         => 50,
+						'line_items'     => array($item->get_id() => array('qty' => 1, 'refund_total' => 50)),
+						'refund_payment' => false,
+						'restock_items'  => false,
+					));
+					$this->assertNotWPError($refund);
+				}
+			}
+			$order = wc_get_order($order->get_id());
+		}
+
 		// What 1.5.2's oko_shipment_payload() built for it, less the two keys
 		// its fingerprint left out (`locale` and `webshop_products_url`).
+		$customer = array(
+			'first_name' => 'Pernille',
+			'last_name'  => 'Hansen',
+			'phone'      => '+4512345678',
+			'email'      => 'pernille@example.org',
+		);
+		if ($shed === '') {
+			$customer['recipient_name'] = 'Pernille Hansen';
+		}
+
 		$sent_by_1_5_2 = array(
 			'allow_invalid'           => true,
 			'shipment_reference'      => (string) $order->get_order_number(),
 			'webshop_order_number'    => (string) $order->get_id(),
 			'webshop_order_reference' => (string) $order->get_order_number(),
-			'customer'                => array(
-				'first_name'     => 'Pernille',
-				'last_name'      => 'Hansen',
-				'phone'          => '+4512345678',
-				'email'          => 'pernille@example.org',
+			'customer'                => $customer,
+			'notes'                   => $shed !== '' ? 'Ring på' : "In front of the door — Bag skuret\nRing på",
+			'delivery_date'           => (string) ($shape['sent_date'] ?? $delivery_date),
+			'line_items'              => $lines,
+		);
+
+		if ($shed !== '') {
+			$sent_by_1_5_2['reservation'] = array(
+				'shed_id'           => $shed,
+				'max_duration_days' => 1,
+			);
+		} else {
+			$sent_by_1_5_2['home_delivery'] = array_filter(array(
 				'recipient_name' => 'Pernille Hansen',
-			),
-			'notes'                   => "In front of the door — Bag skuret\nRing på",
-			'delivery_date'           => '2026-10-27',
-			'line_items'              => array(array(
-				'product_id'    => $product->get_id(),
-				'variant_id'    => null,
-				'name'          => 'Økologisk ribbensteg',
-				'variant_title' => null,
-				'sku'           => '',
-				'quantity'      => 1,
-			)),
-			'home_delivery'           => array(
-				'recipient_name' => 'Pernille Hansen',
-				'address_1'      => 'Eksempelvej 12',
+				'address_1'      => (string) ($shape['sent_address_1'] ?? 'Eksempelvej 12'),
+				'address_2'      => (string) ($shape['address_2'] ?? ''),
 				'city'           => 'Beder',
 				'postal_code'    => '8330',
 				'location'       => 'In front of the door — Bag skuret',
-			),
-		);
+			));
+		}
 
 		$order->update_meta_data(OKO_SENT_FINGERPRINT_META, md5((string) wp_json_encode($sent_by_1_5_2)));
 		$order->save_meta_data();
