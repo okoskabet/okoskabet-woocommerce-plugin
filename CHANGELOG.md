@@ -73,6 +73,13 @@ En ordre med en af Økoskabets fragtmetoder, men uden leveringsdato, blev før
 droppet uden et ord. Nu sendes den og lander blandt Økoskabets ubehandlede
 forsendelser, hvor den kan få en dato, og ordren siger »uden leveringsdato«.
 
+= Chaufføren får altid et leveringssted =
+
+Har kunden hverken valgt et leveringssted eller skrevet en besked til
+chaufføren, sendes en hjemmelevering nu med leveringsstedet »In front of the
+front door« (foran hoveddøren). Før kom den uden, fx når kassens vælger ikke
+blev vist.
+
 = Varens oplysninger følger med ordren =
 
 Tags, billede, kategorier og varens egenskaber — fx producent og
@@ -122,25 +129,28 @@ I en kasse, der først viser fragtmetoderne, når kunden har skrevet en adresse,
 stod felterne Afhentningssted, Leveringssted, Besked til chaufføren og
 Forudbestilling synlige, indtil adressen var skrevet. De skjules nu altid.
 
-= Address suggestions at checkout =
+= Adresseforslag i kassen =
 
-While a customer types their street address at checkout, the plugin can now
-suggest addresses from the Danish address register. Choosing one fills in the
-street and house number, floor and door, postcode and city, so fewer parcels
-end up at an address Økoskabet cannot find.
+Mens kunden skriver sin adresse i kassen, kan pluginet nu foreslå adresser fra
+det danske adresseregister. Vælger kunden en, udfyldes vej og husnummer, etage
+og dør, postnummer og by, så færre pakker ender på en adresse, Økoskabet ikke
+kan finde.
 
-When the chosen address is a building with flats, the customer is offered a
-second list — "Vælg lejlighed" — with an option for no flat at all. The floor
-and door go in the second address line, or after a comma on the first line when
-the checkout has no second line. Delivery dates and Økoskabe are updated
-straight away, since they depend on the postcode.
+Er den valgte adresse en ejendom med lejligheder, får kunden en liste mere,
+»Vælg lejlighed«, med valget »Ingen lejlighed / hele huset«. Etage og dør
+skrives i anden adresselinje, eller efter et komma på første linje, når kassen
+ikke har nogen anden linje. Leveringsdatoer og Økoskabe opdateres med det samme,
+fordi de afhænger af postnummeret.
 
-It is off until you turn it on: **Address suggestions at checkout** in the
-plugin settings. The suggestions are fetched through your own shop with your
-API key, which never reaches the customer's browser. A customer who ignores
-them checks out exactly as before, and if the address lookup is unavailable the
-checkout simply shows no suggestions. Works in the classic checkout, not the
-block checkout.
+Mens der ventes på forslagene, står der »Søger…«. Sender Økoskabet gader med,
+før husnummeret er skrevet, står de i listen med »…« efter. Vælger kunden en
+gade, udfyldes vejnavn, postnummer og by, og kunden skriver selv husnummeret.
+
+Det er slået fra, indtil du slår det til: **Adresseforslag i kassen** i
+pluginets indstillinger. Forslagene hentes gennem din egen butik med din
+API-nøgle, som aldrig når ud til kundens browser. En kunde, der ser bort fra
+dem, handler præcis som før, og kan adresseopslaget ikke svare, viser kassen
+bare ingen forslag. Virker i den klassiske kasse, ikke i blokkassen.
 
 = Et tillæg, der ikke når med, sættes på hold =
 
