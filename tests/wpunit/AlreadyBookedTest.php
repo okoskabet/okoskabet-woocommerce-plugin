@@ -115,7 +115,7 @@ class AlreadyBookedTest extends \Codeception\TestCase\WPTestCase
 		$shipping->set_method_title('Hjemmelevering');
 		$order->add_item($shipping);
 		$order->set_billing_email('kunde@example.org');
-		$order->set_shipping_address_1('Byagervej 194');
+		$order->set_shipping_address_1('Eksempelvej 12');
 		$order->set_shipping_postcode('8330');
 		$order->set_shipping_city('Beder');
 		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-10-27');

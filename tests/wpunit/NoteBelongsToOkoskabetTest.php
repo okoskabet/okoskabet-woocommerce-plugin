@@ -118,9 +118,9 @@ class NoteBelongsToOkoskabetTest extends \Codeception\TestCase\WPTestCase
 		$shipping->set_total('99');
 		$order->add_item($shipping);
 
-		$order->set_shipping_address_1('Kildeparken 98');
-		$order->set_shipping_city('Kolding');
-		$order->set_shipping_postcode('6000');
+		$order->set_shipping_address_1('Prøvevej 98');
+		$order->set_shipping_city('København N');
+		$order->set_shipping_postcode('2200');
 		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-10-20');
 		$order->update_meta_data('_billing_okoskabet_delivery_note', 'ring på');
 		$order->calculate_totals(false);

@@ -121,10 +121,10 @@ class FloorFieldTest extends \Codeception\TestCase\WPTestCase
 	public function test_the_invoice_floor_does_not_follow_to_another_address(): void
 	{
 		$order = new \WC_Order();
-		$order->set_billing_address_1('Korsløkkevej 51');
-		$order->set_billing_postcode('5220');
+		$order->set_billing_address_1('Prøvegade 51');
+		$order->set_billing_postcode('2200');
 		$order->set_billing_address_2('2. sal');
-		$order->set_shipping_address_1('Byagervej 194');
+		$order->set_shipping_address_1('Eksempelvej 12');
 		$order->set_shipping_postcode('8330');
 		$order->save();
 
@@ -135,11 +135,11 @@ class FloorFieldTest extends \Codeception\TestCase\WPTestCase
 	public function test_the_same_address_typed_loosely_still_answers(): void
 	{
 		$order = new \WC_Order();
-		$order->set_billing_address_1('  Korsløkkevej   51 ');
-		$order->set_billing_postcode('5220');
+		$order->set_billing_address_1('  Prøvegade   51 ');
+		$order->set_billing_postcode('2200');
 		$order->set_billing_address_2('3 th');
-		$order->set_shipping_address_1('Korsløkkevej 51');
-		$order->set_shipping_postcode('5220');
+		$order->set_shipping_address_1('Prøvegade 51');
+		$order->set_shipping_postcode('2200');
 		$order->save();
 
 		$this->assertSame('3 th', oko_second_address_line($order));

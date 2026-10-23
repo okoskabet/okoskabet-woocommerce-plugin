@@ -87,7 +87,7 @@ class MerchantWithoutKeyTest extends \Codeception\TestCase\WPTestCase
 		$shipping->set_method_id('hey_okoskabet_shipping_home');
 		$shipping->set_method_title('Hjemmelevering');
 		$order->add_item($shipping);
-		$order->set_shipping_address_1('Byagervej 194');
+		$order->set_shipping_address_1('Eksempelvej 12');
 		$order->set_shipping_postcode('8330');
 		$order->set_shipping_city('Beder');
 		$order->set_transaction_id('t-1');
