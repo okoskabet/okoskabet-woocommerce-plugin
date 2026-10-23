@@ -115,9 +115,9 @@ class OrderWithoutDeliveryDateTest extends \Codeception\TestCase\WPTestCase
 
 		$order->set_billing_first_name('Birgitte');
 		$order->set_billing_last_name('Bennedsen');
-		$order->set_shipping_address_1('Kildeparken 98');
-		$order->set_shipping_postcode('6000');
-		$order->set_shipping_city('Kolding');
+		$order->set_shipping_address_1('Prøvevej 98');
+		$order->set_shipping_postcode('2200');
+		$order->set_shipping_city('København N');
 		$order->calculate_totals(false);
 		$order->save();
 

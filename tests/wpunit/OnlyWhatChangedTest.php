@@ -97,7 +97,7 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 	{
 		$before = $this->payload();
 		$after  = $this->payload();
-		$after['home_delivery']['address_1'] = 'Kildeparken 99';
+		$after['home_delivery']['address_1'] = 'Prøvevej 99';
 
 		$changes = oko_payload_changes($before, $after);
 
@@ -148,7 +148,7 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 		$changes = oko_payload_changes($before, $after);
 
 		$this->assertArrayHasKey('home_delivery', $changes);
-		$this->assertSame('Kildeparken 98', $changes['home_delivery']['address_1']);
+		$this->assertSame('Prøvevej 98', $changes['home_delivery']['address_1']);
 		$this->assertArrayNotHasKey('address_2', $changes['home_delivery']);
 	}
 
@@ -496,10 +496,10 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 			),
 			'home_delivery'           => array(
 				'recipient_name' => 'Pernille Testmodtager',
-				'address_1'      => 'Kildeparken 98',
+				'address_1'      => 'Prøvevej 98',
 				'address_2'      => '3 th',
-				'city'           => 'Kolding',
-				'postal_code'    => '6000',
+				'city'           => 'København N',
+				'postal_code'    => '2200',
 			),
 			'webshop_products_url'    => 'https://example.test/products',
 		);
@@ -528,9 +528,9 @@ class OnlyWhatChangedTest extends \Codeception\TestCase\WPTestCase
 		$order->set_billing_email('marc@example.test');
 		$order->set_shipping_first_name('Marc Seerup');
 		$order->set_shipping_last_name('Hansen');
-		$order->set_shipping_address_1('Kildeparken 98');
-		$order->set_shipping_city('Kolding');
-		$order->set_shipping_postcode('6000');
+		$order->set_shipping_address_1('Prøvevej 98');
+		$order->set_shipping_city('København N');
+		$order->set_shipping_postcode('2200');
 		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-10-22');
 		$order->update_meta_data('billing_okoskabet_done', true);
 		$order->calculate_totals(false);

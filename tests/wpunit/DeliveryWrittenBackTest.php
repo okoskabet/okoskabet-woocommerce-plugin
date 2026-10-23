@@ -30,7 +30,7 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	/** A webhook that moved nothing about the delivery is not acted on. */
 	public function test_only_the_delivery_fields_count(): void
 	{
-		$this->assertTrue(oko_changes_touch_the_delivery(array('city' => array('value' => 'Kolding'))));
+		$this->assertTrue(oko_changes_touch_the_delivery(array('city' => array('value' => 'København N'))));
 		$this->assertTrue(oko_changes_touch_the_delivery(array('shed_id' => array('value' => 3))));
 		$this->assertTrue(oko_changes_touch_the_delivery(array('shipment_type' => array('value' => 'home_delivery'))));
 
@@ -129,16 +129,16 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			'shipment_type'      => 'home_delivery',
 			'delivery_date'      => '2026-10-22',
 			'home_delivery'      => array('address' => array(
-				'street_name'  => 'Kildeparken',
+				'street_name'  => 'Prøvevej',
 				'house_number' => '98',
-				'city'         => 'Kolding',
-				'postal_code'  => '6000',
+				'city'         => 'København N',
+				'postal_code'  => '2200',
 			)),
 		));
 
 		$this->assertSame('', $order->get_meta('_billing_okoskabet_shed_id', true));
-		$this->assertSame('Kildeparken 98', $order->get_shipping_address_1());
-		$this->assertSame('Kolding', $order->get_shipping_city());
+		$this->assertSame('Prøvevej 98', $order->get_shipping_address_1());
+		$this->assertSame('København N', $order->get_shipping_city());
 	}
 
 	/**
@@ -201,10 +201,10 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			'shipment_type' => 'home_delivery',
 			'delivery_date' => '2026-10-20',
 			'home_delivery' => array('address' => array(
-				'street_name'  => 'Kildeparken',
+				'street_name'  => 'Prøvevej',
 				'house_number' => '98',
-				'city'         => 'Kolding',
-				'postal_code'  => '6000',
+				'city'         => 'København N',
+				'postal_code'  => '2200',
 			)),
 		));
 
@@ -295,7 +295,7 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 
 		$fresh = wc_get_order($order->get_id());
 		$this->assertSame(array(), $changed);
-		$this->assertSame('Kildeparken 98', $fresh->get_shipping_address_1());
+		$this->assertSame('Prøvevej 98', $fresh->get_shipping_address_1());
 		$this->assertSame(0, $asked, 'The other account is not even asked about it.');
 	}
 
@@ -476,8 +476,8 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		// Gaardmester's checkout has no second shipping line at all; the flat
 		// is only ever in the billing address.
 		$order = $this->an_order_delivered_to_the_door();
-		$order->set_billing_address_1('Kildeparken 98');
-		$order->set_billing_postcode('6000');
+		$order->set_billing_address_1('Prøvevej 98');
+		$order->set_billing_postcode('2200');
 		$order->set_billing_address_2('3 th');
 		$order->save();
 
@@ -493,12 +493,12 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		oko_write_delivery_back($order, array(
 			'home_delivery' => array(
 				'address' => array(
-					'street_name'  => 'Kildeparken',
+					'street_name'  => 'Prøvevej',
 					'house_number' => '98',
 					'floor'        => '',
 					'door'         => '',
-					'city'         => 'Kolding',
-					'postal_code'  => '6000',
+					'city'         => 'København N',
+					'postal_code'  => '2200',
 				),
 			),
 		));
@@ -534,8 +534,8 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	public function test_the_mark_survives_the_request_it_was_made_in(): void
 	{
 		$order = $this->an_order_delivered_to_the_door();
-		$order->set_billing_address_1('Kildeparken 98');
-		$order->set_billing_postcode('6000');
+		$order->set_billing_address_1('Prøvevej 98');
+		$order->set_billing_postcode('2200');
 		$order->set_billing_address_2('3 th');
 		$order->save();
 
@@ -544,12 +544,12 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			'delivery_date'      => '2026-10-20',
 			'home_delivery'      => array(
 				'address' => array(
-					'street_name'  => 'Kildeparken',
+					'street_name'  => 'Prøvevej',
 					'house_number' => '98',
 					'floor'        => '',
 					'door'         => '',
-					'city'         => 'Kolding',
-					'postal_code'  => '6000',
+					'city'         => 'København N',
+					'postal_code'  => '2200',
 				),
 			),
 		));
@@ -626,10 +626,10 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			'home_delivery' => array(
 				'recipient_name' => 'Marc Seerup Hansen',
 				'address'        => array(
-					'street_name'  => 'Kildeparken',
+					'street_name'  => 'Prøvevej',
 					'house_number' => '98',
-					'city'         => 'Kolding',
-					'postal_code'  => '6000',
+					'city'         => 'København N',
+					'postal_code'  => '2200',
 				),
 			),
 		));
@@ -647,7 +647,7 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		return array('id' => 'default', 'api_key' => 'test-key', 'staging' => true);
 	}
 
-	/** An order delivered to Kildeparken 98 on 20 October. */
+	/** An order delivered to Prøvevej 98 on 20 October. */
 	private function an_order_delivered_to_the_door(): \WC_Order
 	{
 		$product = new \WC_Product_Simple();
@@ -664,9 +664,9 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$shipping->set_total('99');
 		$order->add_item($shipping);
 
-		$order->set_shipping_address_1('Kildeparken 98');
-		$order->set_shipping_city('Kolding');
-		$order->set_shipping_postcode('6000');
+		$order->set_shipping_address_1('Prøvevej 98');
+		$order->set_shipping_city('København N');
+		$order->set_shipping_postcode('2200');
 		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-10-20');
 		$order->calculate_totals(false);
 		$order->save();
