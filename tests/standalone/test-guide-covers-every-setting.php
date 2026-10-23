@@ -2,20 +2,18 @@
 /**
  * GuideCoversEverySettingTest: the installation guide names every setting.
  *
- * The guide under docs/guide/ is written for shop owners, and a setting it does
- * not mention is a setting a shop meets with no explanation. So every field a
- * shop can fill in — on the plugin's own settings page, in the extras below it,
- * on a coupon or a product, and in each of the three Økoskabet shipping methods
- * — has to carry a marker in the guide, right before the part that explains it:
+ * The guide is written for shop owners and lives in Økoskabet's backoffice
+ * (delivery_backend, priv/guides/woocommerce-plugin/), where the plugin's
+ * settings are out of reach of any test. This is the reminder from this side:
+ * docs/guide-indstillinger.txt lists every setting the guide describes, and
+ * this test reads the fields out of the source and fails when the two differ.
  *
- *     <!-- setting: _api_key -->
+ * Adding a setting therefore means: describe it in the guide in
+ * delivery_backend, under a marker `<!-- setting: id -->` and with
+ * "**Fra version x.**", and add the id to docs/guide-indstillinger.txt. A
+ * removed setting goes out of both.
  *
- * The test reads the fields out of the source, not out of a list kept here, so
- * a field added tomorrow fails it until the guide says what the field does. It
- * fails the other way too: a marker for a field that has since gone means the
- * guide explains something the shop can no longer find.
- *
- * How a field is named in a marker:
+ * How a field is named in the list and in the guide's markers:
  *
  *   - CMB2 fields on the main page, and WooCommerce's own field helpers, by
  *     their `'id'`: `_api_key`, `okoskabet_free_packaging`.
@@ -277,22 +275,24 @@ function oko_guide_all_settings(): array {
 }
 
 /**
- * Every marker in the guide, with how many times each appears.
+ * Every setting the guide describes, as listed in docs/guide-indstillinger.txt,
+ * with how many times each is listed.
  *
  * @return array<string,int>
  */
 function oko_guide_markers(): array {
-	$files = glob( oko_guide_root() . '/docs/guide/*.md' );
-	if ( ! $files ) {
-		fail( 'docs/guide/ holds no guide' );
+	$path = oko_guide_root() . '/docs/guide-indstillinger.txt';
+	if ( ! is_readable( $path ) ) {
+		fail( 'docs/guide-indstillinger.txt is missing' );
 	}
 
 	$markers = array();
-	foreach ( $files as $path ) {
-		preg_match_all( '/<!--\s*setting:\s*(.+?)\s*-->/', (string) file_get_contents( $path ), $m );
-		foreach ( $m[1] as $id ) {
-			$markers[ $id ] = ( $markers[ $id ] ?? 0 ) + 1;
+	foreach ( preg_split( '/\R/', (string) file_get_contents( $path ) ) as $line ) {
+		$id = trim( $line );
+		if ( $id === '' || $id[0] === '#' ) {
+			continue;
 		}
+		$markers[ $id ] = ( $markers[ $id ] ?? 0 ) + 1;
 	}
 
 	return $markers;
@@ -328,14 +328,14 @@ it( 'reads the fields it is meant to find out of the source', function () {
 it( 'has a marker in the guide for every setting', function () {
 	$missing = array_values( array_diff( oko_guide_all_settings(), array_keys( oko_guide_markers() ) ) );
 	if ( $missing !== array() ) {
-		fail( "the guide does not explain:\n         " . implode( "\n         ", $missing ) );
+		fail( "new settings — describe them in the WooCommerce guide in delivery_backend (priv/guides/woocommerce-plugin/), then add them to docs/guide-indstillinger.txt:\n         " . implode( "\n         ", $missing ) );
 	}
 } );
 
 it( 'has no marker for a setting that no longer exists', function () {
 	$stale = array_values( array_diff( array_keys( oko_guide_markers() ), oko_guide_all_settings() ) );
 	if ( $stale !== array() ) {
-		fail( "the guide explains settings that are gone:\n         " . implode( "\n         ", $stale ) );
+		fail( "settings that are gone — take them out of the WooCommerce guide in delivery_backend and out of docs/guide-indstillinger.txt:\n         " . implode( "\n         ", $stale ) );
 	}
 } );
 
@@ -345,110 +345,5 @@ it( 'marks every setting exactly once', function () {
 	} ) );
 	if ( $twice !== array() ) {
 		fail( "marked more than once:\n         " . implode( "\n         ", $twice ) );
-	}
-} );
-
-/**
- * The guide's "Fra version x" for one marker: the text from the marker to the
- * next one, shared by markers that stand together over one heading.
- *
- * @return array<string,string> Marker => its section.
- */
-function oko_guide_sections(): array {
-	$sections = array();
-	foreach ( glob( oko_guide_root() . '/docs/guide/*.md' ) ?: array() as $path ) {
-		$parts   = preg_split( '/(<!--\s*setting:\s*\S+\s*-->)/', (string) file_get_contents( $path ), -1, PREG_SPLIT_DELIM_CAPTURE );
-		$pending = array();
-		foreach ( $parts as $part ) {
-			if ( preg_match( '/<!--\s*setting:\s*(\S+)\s*-->/', $part, $m ) ) {
-				$pending[] = $m[1];
-				continue;
-			}
-			if ( $pending === array() || trim( $part ) === '' ) {
-				continue;
-			}
-			foreach ( $pending as $id ) {
-				$sections[ $id ] = $part;
-			}
-			$pending = array();
-		}
-	}
-
-	return $sections;
-}
-
-/**
- * Settings that were already there in 1.4.2. Everything else has to say which
- * version it arrived in, so a shop that has not updated knows why it cannot
- * find it. A new setting is not added here: it gets "**Fra version x.**".
- */
-const OKO_GUIDE_SETTINGS_IN_1_4_2 = array(
-		'shipping:title',
-		'shipping:description',
-		'shipping:cost',
-		'shipping:costDiscountLimit',
-		'shipping:costDiscount',
-		'shipping:costFreeLimit',
-		'_api_key',
-		'_display_option',
-		'_maximum_days_in_future',
-		'_staging_api',
-		'_description_shipping_okoskabet',
-		'_description_shipping_private',
-		'_delivery_location_dropdown',
-		'_delivery_location_dropdown_label',
-		'_delivery_location_note_label',
-		'_hide_wc_order_comments',
-		'_webhook_enabled',
-		'_payment_gateway',
-		'_capture_events',
-		'_webhook_events',
-		'_webhook_url_display',
-		'okoskabet_merchants_config:default_merchant_id',
-		'okoskabet_merchants_config:merchant[label]',
-		'okoskabet_merchants_config:merchant[id]',
-		'okoskabet_merchants_config:merchant[api_key]',
-		'okoskabet_merchants_config:merchant[webhook_secret]',
-		'okoskabet_merchants_config:merchant[staging]',
-		'okoskabet_merchants_config:merchant[maximum_days_in_future]',
-		'okoskabet_merchants_config:merchant[description_shipping_okoskabet]',
-		'okoskabet_merchants_config:merchant[description_shipping_private]',
-		'okoskabet_merchants_config:merchant[payment_gateway]',
-		'okoskabet_merchants_config:merchant[capture_events][]',
-		'okoskabet_merchants_config:merchant[webhook_events][]',
-		'okoskabet_merchants_config:merchant[product_categories][]',
-		'okoskabet_merchants_config:merchant[product_tags][]',
-		'okoskabet_merchants_config:merchant[shipping_zones][]',
-		'okoskabet_merchants_config:merchant[priority]',
-		'okoskabet_delivery_exceptions:weekdays_enabled',
-		'okoskabet_delivery_exceptions:weekdays[][enabled]',
-		'okoskabet_delivery_exceptions:weekdays[][categories][]',
-		'okoskabet_delivery_exceptions:weekdays[][tags][]',
-		'okoskabet_delivery_exceptions:only_on_enabled',
-		'okoskabet_delivery_exceptions:only_on[][label]',
-		'okoskabet_delivery_exceptions:only_on[][date]',
-		'okoskabet_delivery_exceptions:only_on[][enabled]',
-		'okoskabet_delivery_exceptions:only_on[][categories][]',
-		'okoskabet_delivery_exceptions:only_on[][tags][]',
-		'okoskabet_delivery_exceptions:from_until_enabled',
-		'okoskabet_delivery_exceptions:from_until[][label]',
-		'okoskabet_delivery_exceptions:from_until[][from]',
-		'okoskabet_delivery_exceptions:from_until[][until]',
-		'okoskabet_delivery_exceptions:from_until[][enabled]',
-		'okoskabet_delivery_exceptions:from_until[][categories][]',
-		'okoskabet_delivery_exceptions:from_until[][tags][]',
-		'_split_checkout_enabled',
-		'okoskabet_product_merchant',
-);
-
-it( 'says which version every newer setting arrived in', function () {
-	$undated = array();
-	foreach ( oko_guide_sections() as $id => $section ) {
-		if ( ! in_array( $id, OKO_GUIDE_SETTINGS_IN_1_4_2, true ) && ! preg_match( '/\*\*Fra version \d+\.\d+\.\d+\.?\*\*/u', $section ) ) {
-			$undated[] = $id;
-		}
-	}
-	if ( $undated !== array() ) {
-		fail( "the guide does not say which version these arrived in:\n         " . implode( "\n         ", $undated ) );
 	}
 } );
