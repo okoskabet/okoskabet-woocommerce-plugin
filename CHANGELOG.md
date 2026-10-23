@@ -38,11 +38,12 @@ den begge steder, og så afviser adresseregistret adressen.
 
 = Ændringer i Økoskabets backoffice kommer tilbage til butikken =
 
-Flytter pakkeriet en levering til et Økoskab eller tilbage til døren, ændrer
-datoen eller retter adressen eller modtagerens navn, skrives det nu på ordren i
-WooCommerce, med en note om, hvad der er ændret. Før blev butikkens næste
-rettelse af ordren sendt oven i pakkeriets. Intet om penge ændres: hverken
-fragtmetode, fragt eller varelinjer.
+Flytter pakkeriet en levering til et Økoskab, til butiksafhentning eller
+tilbage til døren, ændrer datoen eller retter adressen eller modtagerens navn,
+skrives det nu på ordren i WooCommerce, med en note om, hvad der er ændret. Før
+blev butikkens næste rettelse af ordren sendt oven i pakkeriets. Intet om penge
+ændres: hverken fragtmetode, fragt eller varelinjer. Det kommer med
+statusbeskederne, så Webhook Status skal være slået til.
 
 = En rettelse i butikken sender kun det, der er ændret =
 
@@ -52,7 +53,8 @@ sendt ved hver gemning, oven i det pakkeriet havde rettet.
 
 Åbne ordrer fra 1.5.2 sendes ikke igen, bare fordi pluginet er opdateret, og
 heller ikke, når de får et tillæg. De sendes først, når der faktisk ændres
-noget på dem.
+noget på dem. Ordrer sendt af en version før 1.5.2 sendes hele én gang, første
+gang de gemmes.
 
 Afviser Økoskabet en rettelse, står det nu på ordren, med Økoskabets egen
 begrundelse. Før stod det kun i en logfil.
@@ -73,30 +75,36 @@ forsendelser, hvor den kan få en dato, og ordren siger »uden leveringsdato«.
 
 = Varens oplysninger følger med ordren =
 
-Tags, billede og varens egenskaber — fx producent og oprindelsesland — sendes
-nu med hver ordrelinje, så pakkeriet har dem, selv når Økoskabet ikke kan nå
-ind til butikken. Kun egenskaber, der vises på varesiden, kommer med.
+Tags, billede, kategorier og varens egenskaber — fx producent og
+oprindelsesland — sendes nu med hver ordrelinje, så pakkeriet har dem, selv når
+Økoskabet ikke kan nå ind til butikken. Af egenskaberne kommer kun dem med, der
+vises på varesiden.
 Linjebeløb sendes kun, når Økoskabet beder om dem (butikker, der bruger tilbud
 i Track&Trace).
 
 = Kontakt fra Økoskabet =
 
-Indstillingerne viser, hvornår Økoskabet sidst nåede ind til butikken med en
-statusbesked og et vareopslag. Står der »aldrig«, står en firewall eller et
-sikkerhedsplugin sandsynligvis i vejen.
+Indstillingerne viser under **Kontakt fra Økoskabet**, hvornår Økoskabet
+sidst nåede ind til butikken med en statusbesked og et vareopslag. Det tælles
+fra opdateringen, så lige bagefter står der »aldrig«, indtil den første besked
+er kommet. Bliver det ved at stå der, står en firewall eller et
+sikkerhedsplugin oftest i vejen. Det står der også, hvis Webhook Status er
+slået fra, eller webhookens secret ikke passer.
 
 = Mindre rettelser =
 
-- Fluebenet for webhooks kan nu slås fra og bliver slået fra.
+- Fluebenet **Webhook Status** kan nu slås fra. Før viste siden det som slået
+  til, også når det var slået fra, og næste gemning slog det til igen.
 - Skiftet mellem Normal bestilling og Forudbestilling tømmer ikke længere de
-  felter, kunden har udfyldt.
-- En afslutning, der kom før betalingen var hævet, bruges, når pengene hæves.
-- En forhandler uden API-nøgle får ikke sine ordrer sendt under
-  standardforhandleren.
-- Omdøbes et forhandler-id, flyttes alle dets ordrer med, også i en butik med
-  mange ordrer.
+  felter, kunden har udfyldt, og knapperne lægger sig under hinanden, før
+  teksten løber ud over dem på en telefon.
+- Kommer Økoskabets besked om at afslutte en ordre, før betalingen er hævet,
+  afsluttes ordren nu, når pengene hæves. Før blev den stående i Behandler.
+- Ændres en merchants identifikator (slug), flyttes alle dens ordrer med. I en
+  butik med over 200 ordrer blev nogle før efterladt med den gamle, og deres
+  statusbeskeder blev afvist.
 - Svarer Økoskabet, at en ordre allerede er modtaget, markeres den ikke som
-  mislykket.
+  mislykket, og kunden ser ingen fejl i kassen.
 - Offentlige ruter i kassen er strammet op (postnummer og adresse kodes, kun
   udgivne varer navngives).
 
