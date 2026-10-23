@@ -6,17 +6,23 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 = Tillægsordrer: læg flere varer på en levering, der allerede er bestilt =
 
+Kassen har fået et nyt felt, »Tillæg til en tidligere ordre? Skriv
+ordrenummeret her«. Det vises i alle butikkers kasse, og der er ingen
+indstilling til det. Har butikken allerede sit eget felt til det tidligere
+ordrenummer med feltnavnet `billing_order_id`, bruges det i stedet, og
+pluginets felt vises ikke.
+
 En kunde, der vil have mere med på en levering, de allerede har bestilt,
-skriver den første ordres nummer i kassen — i butikkens eget felt, hvis den har
-et (fx »Tillægsordre«), ellers i pluginets felt »Tillæg til en tidligere
-ordre?«. Passer nummer og mailadresse, og kan leveringen stadig nå at tage mere,
-koster Økoskabets fragt 0 kr., og varerne lægges på den levering, der findes.
-Butikkens egne fragtmetoder (fx GLS) koster det, de plejer, og en kunde, der
-vælger dem, får ikke varerne lagt på Økoskabets levering.
+skriver den første ordres nummer i feltet. Passer nummer og mailadresse, og kan
+leveringen stadig nå at tage mere, koster Økoskabets fragt 0 kr., og varerne
+lægges på den levering, der findes. Butikkens egne fragtmetoder (fx GLS) koster
+det, de plejer, og en kunde, der vælger dem, får ikke varerne lagt på
+Økoskabets levering.
 
 Pakkeriet ser varerne nederst på listen som »TILLÆG — …«, og leveringens note
 fortæller, at der er kommet mere. Annulleres tillægget, tages varerne af igen.
-Når leveringen hæves eller afsluttes via Økoskabet, gælder det også tillæggene.
+Hæver eller afslutter Økoskabets statusbeskeder den første ordre, sker det
+samme med tillæggene.
 
 Er leveringen lukket, eller passer nummeret ikke, siger kassen det, og ordren
 fortsætter som en almindelig ordre med normal fragt. Et tillæg, der først
@@ -131,9 +137,9 @@ block checkout.
 = Et tillæg, der ikke når med, sættes på hold =
 
 Et tillæg, der bliver betalt, efter at leveringen er lukket — typisk en
-bankoverførsel, der markeres betalt dage senere — stod før i Behandler med en
-note. Det så ud som enhver anden ordre på vej, men varerne kom aldrig med. Nu
-sættes ordren på hold, og noten siger hvorfor. Butikken bestemmer selv: sæt den
+bankoverførsel, der markeres betalt dage senere — kan ikke komme med. Så sættes
+ordren på hold, så den ikke ligner enhver anden ordre på vej, og noten siger
+hvorfor. Butikken bestemmer selv: sæt den
 til Behandler for at prøve igen, eller send eller refundér varerne på anden
 vis. Det samme gælder, når Økoskabet afviser varerne, eller den første ordre
 ikke kan læses.
