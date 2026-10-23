@@ -26,6 +26,8 @@ jobs:
   standalone:
     name: Standalone tests (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
+    # The suite takes seconds. A hang should not hold a runner for six hours.
+    timeout-minutes: 10
 
     strategy:
       fail-fast: false

@@ -57,11 +57,16 @@ jobs:
 
       # The same standalone tests as tests.yml, on the plugin's floor, so a
       # tag on a commit that fails them publishes nothing.
+      #
+      # setup-php is handed this job's token unless told otherwise, and here
+      # that token can write releases. It needs none to install one PHP with
+      # no tools, so it gets none.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
           coverage: none
           tools: none
+          github-token: ''
 
       - name: Standalone tests
         run: php tests/standalone/run.php
