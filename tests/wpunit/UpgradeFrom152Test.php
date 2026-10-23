@@ -31,6 +31,17 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 				$this->puts[] = (string) ($args['body'] ?? '');
 			}
 
+			// The shipment is still with the merchant, and the account's day
+			// is open — what an addition needs before it may ride along.
+			if (($args['method'] ?? 'GET') === 'GET' && strpos($url, '/api/v1/shipments/') !== false) {
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('shipment_reference' => 'x', 'status' => 'registered', 'notes' => '')));
+			}
+			if (strpos($url, '/api/v1/configuration') !== false) {
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('order_cutoff' => array(
+					'time' => '23:59:00', 'days_before_delivery' => 1, 'time_zone' => 'Europe/Copenhagen',
+				))));
+			}
+
 			return array('response' => array('code' => 200), 'body' => '{}');
 		}, 1, 3);
 	}
@@ -67,6 +78,43 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		$this->assertCount(1, $this->puts);
 		$this->assertSame(array('customer' => array('phone' => '+4599887766')), json_decode($this->puts[0], true));
+	}
+
+	/**
+	 * An addition placed after the update does not send the 1.5.2 order whole.
+	 *
+	 * The addition's goods go onto the shipment in one write. The earlier
+	 * order is saved once they are on it, and its 1.5.2 fingerprint has to be
+	 * asked about its own goods only — counting the addition's made it look
+	 * changed, and the whole order was sent over the packing room's
+	 * corrections. Seen on staging on 23 October 2026, on a home delivery and
+	 * on a shed.
+	 */
+	public function test_an_addition_to_a_1_5_2_order_does_not_send_it_whole(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2();
+
+		$addition = wc_create_order();
+		$addition->add_product(wc_get_product($this->product_on($order)), 1);
+		$addition->save();
+
+		oko_send_addition_to_its_order($addition, $order->get_id(), array());
+
+		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment.');
+		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
+		$this->assertIsArray(
+			wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true),
+			'The order is upgraded to a record of what was sent, additions included.'
+		);
+	}
+
+	private function product_on(\WC_Order $order): int
+	{
+		foreach ($order->get_items() as $item) {
+			return (int) $item->get_product_id();
+		}
+
+		return 0;
 	}
 
 	/** An order that did move since 1.5.2 sent it is still sent, whole, as before. */
@@ -108,7 +156,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$order->set_shipping_city('Beder');
 		$order->set_shipping_postcode('8330');
 		$order->set_customer_note('Ring på');
-		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-10-27');
+		// A week ahead, so the day is still open for an addition whenever the
+		// suite runs.
+		$delivery_date = gmdate('Y-m-d', strtotime('+7 days'));
+		$order->update_meta_data('_billing_okoskabet_delivery_date', $delivery_date);
 		$order->update_meta_data('_billing_okoskabet_delivery_location', 'In front of the door');
 		$order->update_meta_data('_billing_okoskabet_delivery_note', 'Bag skuret');
 		$order->update_meta_data('billing_okoskabet_done', true);
@@ -131,7 +182,7 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 				'recipient_name' => 'Pernille Hansen',
 			),
 			'notes'                   => "In front of the door — Bag skuret\nRing på",
-			'delivery_date'           => '2026-10-27',
+			'delivery_date'           => $delivery_date,
 			'line_items'              => array(array(
 				'product_id'    => $product->get_id(),
 				'variant_id'    => null,
