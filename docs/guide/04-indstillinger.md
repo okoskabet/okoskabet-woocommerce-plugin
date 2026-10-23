@@ -112,7 +112,7 @@ Standard: slået fra.
 <!-- setting: _ask_for_floor -->
 ### Spørg om lejlighed, etage og dør
 
-**Ny i 1.5.3.**
+**Fra version 1.5.3.**
 
 Tilføjer feltet **Lejlighed, etage og dør** lige under gadeadressen i kassen, både i faktura- og leveringsadressen. Feltet kommer kun, hvis kassen ikke allerede har en anden adresselinje.
 
@@ -125,6 +125,8 @@ Standard: slået fra.
 <!-- setting: _separate_shipping_methods -->
 ### Fragt i egen række
 
+**Fra version 1.5.0.**
+
 En liste over alle fragtmetoder i alle dine forsendelseszoner, skrevet som "Zone — metode". De metoder, du sætter flueben ved, flyttes i kassen ned i deres egen række under fragtvalgene, med en overskrift for sig.
 
 Det er kun visning. Prisen og alt andet er det samme. Brug det til en fragtmetode, der ikke er en egentlig måde at sende på, for eksempel butikkens egen metode til tillæg til en tidligere ordre. Midt mellem de rigtige fragtvalg ligner den ellers en måde at sende hele ordren på.
@@ -134,6 +136,8 @@ Standard: ingen valgt.
 <!-- setting: _separate_shipping_label -->
 ### Overskrift på rækken
 
+**Fra version 1.5.0.**
+
 Overskriften over rækken fra **Fragt i egen række**. Lader du feltet være tomt, står der "Andre muligheder".
 
 Standard: tom, altså "Andre muligheder".
@@ -141,7 +145,7 @@ Standard: tom, altså "Andre muligheder".
 <!-- setting: _address_autocomplete -->
 ### Adresseforslag i kassen
 
-**Ny i 1.5.3.**
+**Fra version 1.5.3.**
 
 Mens kunden skriver sin adresse, foreslår kassen rigtige adresser fra det danske adresseregister. Vælger kunden et forslag, udfyldes gade og husnummer, etage og dør, postnummer og by. Er adressen en ejendom med lejligheder, får kunden en liste mere, **Vælg lejlighed**, hvor man også kan vælge ingen lejlighed. Skabe og leveringsdage opdateres med det samme.
 
@@ -170,7 +174,7 @@ Her bestemmer du, hvad der sker i butikken, når Økoskabet melder en ny status 
 
 ### Kontakt fra Økoskabet
 
-**Ny i 1.5.3.** Ikke et felt, men en status. Den viser, hvornår der sidst kom en statusbesked og et vareopslag fra Økoskabet igennem til butikken. Står der **aldrig**, når Økoskabets kald ikke frem. Oftest er det en firewall eller et sikkerhedsplugin foran hjemmesiden. Se delen Fejlfinding.
+**Fra version 1.5.3.** Ikke et felt, men en status. Den viser, hvornår der sidst kom en statusbesked og et vareopslag fra Økoskabet igennem til butikken. Står der **aldrig**, når Økoskabets kald ikke frem. Oftest er det en firewall eller et sikkerhedsplugin foran hjemmesiden. Se delen Fejlfinding.
 
 <!-- setting: _webhook_enabled -->
 ### Webhook Status
@@ -351,6 +355,8 @@ Alt gemmes med knappen **Gem leveringsundtagelser** nederst i boksen.
 <!-- setting: okoskabet_delivery_exceptions:display_mode -->
 ### Antal leveringsdage eller Antal kalenderdage frem
 
+**Fra version 1.4.3.**
+
 Hvordan tallet i **Værdi** lige ved siden af skal forstås:
 
 - **Antal leveringsdage**: kassen viser så mange leveringsdage, som tallet siger. Med 4 ser kunden de fire næste dage, Økoskabet kører.
@@ -360,6 +366,8 @@ Standard: Antal kalenderdage frem.
 
 <!-- setting: okoskabet_delivery_exceptions:display_value -->
 ### Værdi
+
+**Fra version 1.4.3.**
 
 Tallet til valget ovenfor. 0 betyder, at kassen bruger **Standard visningsvindue (dage)** fra standardindstillingerne, som den altid har gjort.
 
@@ -379,6 +387,8 @@ Standard: slået fra.
 <!-- setting: okoskabet_delivery_exceptions:weekdays_limit_mode -->
 ### Vis et særligt antal leveringsdage for produkter i denne sektion
 
+**Fra version 1.4.3.**
+
 Med flueben viser kassen et andet antal leveringsdage, når kurven har varer, som en ugedagsregel gælder for. Antallet skriver du i **Værdi** ved siden af.
 
 Tallet læses på samme måde som under Leveringsdage vist i checkout: leveringsdage eller kalenderdage. Har kurven varer med forskellige grænser, gælder den mindste.
@@ -387,6 +397,8 @@ Standard: slået fra.
 
 <!-- setting: okoskabet_delivery_exceptions:weekdays_limit_value -->
 ### Værdi (ugedage)
+
+**Fra version 1.4.3.**
 
 Antallet til fluebenet ovenfor. Standard: 0.
 
@@ -397,6 +409,8 @@ Et flueben ud for hver ugedag. Med flueben gælder ugedagens regel. Uden flueben
 
 <!-- setting: okoskabet_delivery_exceptions:weekdays[][flip] -->
 ### Gælder alle andre varer end de valgte (ugedage)
+
+**Fra version 1.5.0.**
 
 Vender ugedagens regel om, som beskrevet øverst under Leveringsundtagelser. Standard: slået fra.
 
@@ -420,10 +434,14 @@ Standard: slået fra.
 <!-- setting: okoskabet_delivery_exceptions:only_on_limit_mode -->
 ### Vis et særligt antal leveringsdage for produkter i denne sektion (bestemt dag)
 
+**Fra version 1.4.3.**
+
 Som for ugedagene, men for varer en bestemt-dag-regel gælder for. Standard: slået fra.
 
 <!-- setting: okoskabet_delivery_exceptions:only_on_limit_value -->
 ### Værdi (bestemt dag)
+
+**Fra version 1.4.3.**
 
 Antallet til fluebenet ovenfor. Standard: 0.
 
@@ -445,6 +463,8 @@ Slår den enkelte regel til og fra uden at slette den. En ny regel er aktiv.
 <!-- setting: okoskabet_delivery_exceptions:only_on[][flip] -->
 ### Gælder alle andre varer end de valgte (bestemt dag)
 
+**Fra version 1.5.0.**
+
 Vender reglen om. Standard: slået fra.
 
 <!-- setting: okoskabet_delivery_exceptions:only_on[][categories][] -->
@@ -465,10 +485,14 @@ Standard: slået fra.
 <!-- setting: okoskabet_delivery_exceptions:from_until_limit_mode -->
 ### Vis et særligt antal leveringsdage for produkter i denne sektion (periode)
 
+**Fra version 1.4.3.**
+
 Som for ugedagene, men for varer en periode gælder for. Standard: slået fra.
 
 <!-- setting: okoskabet_delivery_exceptions:from_until_limit_value -->
 ### Værdi (periode)
+
+**Fra version 1.4.3.**
 
 Antallet til fluebenet ovenfor. Standard: 0.
 
@@ -495,6 +519,8 @@ Slår den enkelte periode til og fra uden at slette den. En ny periode er aktiv.
 <!-- setting: okoskabet_delivery_exceptions:from_until[][pre_order_mode] -->
 ### Forudbestilling (periode)
 
+**Fra version 1.5.1.**
+
 Hvad perioden betyder for varerne. Tre valg:
 
 - **Nej — varerne kan kun leveres i perioden.** Perioden begrænser. Dage uden for perioden kan ikke vælges.
@@ -508,6 +534,8 @@ Standard for en ny periode: Nej.
 <!-- setting: okoskabet_delivery_exceptions:from_until[][all] -->
 ### Gælder alle varer
 
+**Fra version 1.5.0.**
+
 Perioden gælder hele sortimentet, og kategorier og tags bliver ikke brugt. Varer, der ikke kan vente, skriver du i stedet én gang under Forudbestilling længere nede.
 
 Pas på med de to første valg under Forudbestilling: så begrænser perioden hele sortimentet til perioden. Vil du gøre alt muligt at forudbestille uden at begrænse noget, skal du bruge **Oven på de normale dage — ingen begrænsning**.
@@ -516,6 +544,8 @@ Standard: slået fra.
 
 <!-- setting: okoskabet_delivery_exceptions:from_until[][flip] -->
 ### Gælder alle andre varer end de valgte (periode)
+
+**Fra version 1.5.0.**
 
 Vender perioden om. Standard: slået fra.
 
@@ -532,25 +562,35 @@ Indstillingerne her gælder alle forudbestillinger, uanset om dagen kommer fra e
 <!-- setting: okoskabet_delivery_exceptions:pre_order_label -->
 ### Knap til forudbestilling
 
+**Fra version 1.5.0.**
+
 Teksten på knappen, der skifter kassen over til forudbestilling. Tom betyder "Forudbestilling".
 
 <!-- setting: okoskabet_delivery_exceptions:normal_order_label -->
 ### Knap tilbage til normal bestilling
+
+**Fra version 1.5.0.**
 
 Teksten på knappen tilbage til en almindelig ordre. Tom betyder "Normal bestilling". Knappen skjules, hvis hele kurven kun kan forudbestilles.
 
 <!-- setting: okoskabet_delivery_exceptions:pre_order_notice_enabled -->
 ### Vis en tekst over knapperne, når forudbestilling er valgt
 
+**Fra version 1.5.0.**
+
 Med flueben viser kassen teksten nedenunder over knapperne, mens kunden er i gang med en forudbestilling. Standard: slået fra.
 
 <!-- setting: okoskabet_delivery_exceptions:pre_order_notice -->
 ### Teksten over knapperne
 
+**Fra version 1.5.0.**
+
 Teksten til fluebenet ovenfor, for eksempel "Friske grøntsager og mejerivarer kan ikke forudbestilles." Linjeskift bliver vist.
 
 <!-- setting: okoskabet_delivery_exceptions:no_pre_order_categories[] -->
 <!-- setting: okoskabet_delivery_exceptions:no_pre_order_tags[] -->
+
+**Fra version 1.5.0.**
 ### Kan ikke forudbestilles: kategorier og tags
 
 Varer, du ikke vil gemme til en senere dato, for eksempel friske grøntsager. De får aldrig tilbudt en forudbestillingsdag, uanset hvilken regel der åbner en. Har kunden dem i en kurv, der forudbestilles, tilbyder kassen i stedet at dele ordren: resten som forudbestilling og disse varer som almindelig levering.
@@ -559,6 +599,8 @@ Varer, du ikke vil gemme til en senere dato, for eksempel friske grøntsager. De
 
 <!-- setting: okoskabet_delivery_exceptions:cutoff_enabled -->
 ### Aktivér: Regler for tidligere cutoff
+
+**Fra version 1.4.3.**
 
 Hovedafbryderen for tidligere bestillingsfrister. Normalt lukker bestillingen til en leveringsdag på det tidspunkt, din konto hos Økoskabet siger. En regel her lukker tidligere for bestemte varer, så for eksempel friske grøntsager og mejerivarer kan have hver sin frist. Klik **Tilføj cutoff-regel** for hver regel.
 
@@ -569,31 +611,43 @@ Standard: slået fra.
 <!-- setting: okoskabet_delivery_exceptions:cutoff_rules[][label] -->
 ### Navn (cutoff)
 
+**Fra version 1.4.3.**
+
 Et navn til dig selv, for eksempel "Friske grøntsager".
 
 <!-- setting: okoskabet_delivery_exceptions:cutoff_rules[][days] -->
 ### Dage før levering
+
+**Fra version 1.4.3.**
 
 Hvor mange dage før leveringsdagen bestillingen lukker. Med 2 og en levering torsdag lukker den tirsdag. Standard for en ny regel: 1.
 
 <!-- setting: okoskabet_delivery_exceptions:cutoff_rules[][time] -->
 ### Cutoff-tidspunkt
 
+**Fra version 1.4.3.**
+
 Klokkeslættet den dag, bestillingen lukker. Standard for en ny regel: 09:00.
 
 <!-- setting: okoskabet_delivery_exceptions:cutoff_rules[][enabled] -->
 ### Aktiv (cutoff)
+
+**Fra version 1.4.3.**
 
 Slår den enkelte regel til og fra uden at slette den. En ny regel er aktiv.
 
 <!-- setting: okoskabet_delivery_exceptions:cutoff_rules[][flip] -->
 ### Gælder alle andre varer end de valgte (cutoff)
 
+**Fra version 1.5.0.**
+
 Vender reglen om. Standard: slået fra.
 
 <!-- setting: okoskabet_delivery_exceptions:cutoff_rules[][categories][] -->
 <!-- setting: okoskabet_delivery_exceptions:cutoff_rules[][tags][] -->
 ### Kategorier og Tags (cutoff)
+
+**Fra version 1.4.3.**
 
 De varer, den tidligere frist gælder for. En regel uden kategorier og tags gør ingenting og forsvinder fra listen.
 
@@ -617,40 +671,56 @@ Standard: slået fra.
 <!-- setting: _split_button_split_label -->
 ### Knap: opdel leveringen
 
+**Fra version 1.5.0.**
+
 Teksten på den første knap, når kurven skal bruge præcis to leveringsdage. Standard: "Opdel levering i to".
 
 <!-- setting: _split_button_split_label_many -->
 ### Knap: opdel i mere end to
+
+**Fra version 1.5.0.**
 
 Den samme knap, når kurven skal bruge tre eller flere leveringsdage. Skriv %d, hvor antallet skal stå. Standard: "Opdel levering i %d leveringer", som kunden ser som for eksempel "Opdel levering i 3 leveringer".
 
 <!-- setting: _split_button_keep_label -->
 ### Knap: behold kun denne levering
 
+**Fra version 1.5.0.**
+
 Den lille knap ud for hver levering. Den beholder den levering og tager de andre varer ud af kurven. Standard: "Behold kun denne".
 
 <!-- setting: _split_banner_heading -->
 ### Overskrift: kurven skal bruge mere end én dag
+
+**Fra version 1.5.0.**
 
 Overskriften over knapperne. Standard: "Varerne i din kurv kan ikke leveres på samme dag".
 
 <!-- setting: _split_banner_body -->
 ### Tekst under overskriften
 
+**Fra version 1.5.0.**
+
 Forklaringen under overskriften, med dine egne ord. Standard: en tekst om, at kunden kan dele ordren op eller tage et par varer ud.
 
 <!-- setting: _split_banner_heading_pre_order -->
 ### Overskrift: kun en del af kurven kan forudbestilles
+
+**Fra version 1.5.0.**
 
 Overskriften, når kunden vil forudbestille, men kun en del af kurven kan forudbestilles. Standard: "Kun en del af din kurv kan forudbestilles".
 
 <!-- setting: _split_banner_body_pre_order -->
 ### Tekst under overskriften (forudbestilling)
 
+**Fra version 1.5.0.**
+
 Forklaringen i samme situation. Standard: en tekst om, at kunden kan dele ordren i en forudbestilling og en almindelig levering, eller tage de varer ud, der ikke kan forudbestilles.
 
 <!-- setting: _split_button_reduce_label -->
 ### Knap: tag varer ud af kurven
+
+**Fra version 1.5.0.**
 
 Teksten på den anden knap. Den viser kunden, hvilke varer der skal ud, for at resten kan leveres samlet, og fjerner dem, hvis kunden vælger det. Standard: "Tøm fra kurven".
 
@@ -672,35 +742,49 @@ Ved opdelt levering betaler hver delordre sit eget gebyr. Alt gemmes med **Gem e
 <!-- setting: okoskabet_packaging_fee:enabled -->
 ### Tilføj emballagegebyr
 
+**Fra version 1.4.6.**
+
 Hovedafbryderen. Uden flueben opkræves intet gebyr, og reglerne bliver gemt. Standard: slået fra.
 
 <!-- setting: okoskabet_packaging_fee:ex_tax -->
 ### Beløb er ekskl. moms
+
+**Fra version 1.4.6.**
 
 Uden flueben er beløbene det, kunden betaler. Pluginet regner selv momsen ud, så totalen lander præcis på dit tal. Det er det normale. Med flueben er beløbene uden moms, og momsen lægges oveni. Gælder alle regler. Standard: slået fra.
 
 <!-- setting: okoskabet_packaging_fee:tax_class -->
 ### Momsklasse
 
+**Fra version 1.4.6.**
+
 Hvilken momssats gebyret har: **Ingen moms**, **Standardsats** eller en af butikkens egne momsklasser. Gælder alle regler. Standard: Standardsats.
 
 <!-- setting: okoskabet_packaging_fee:rules[][label] -->
 ### Navn (gebyr)
+
+**Fra version 1.4.6.**
 
 Navnet på gebyret, som kunden ser det på ordren. Tom betyder "Emballage". En regel uden navn, uden gebyrtrappe og med beløbet 0 bliver ikke gemt.
 
 <!-- setting: okoskabet_packaging_fee:rules[][amount] -->
 ### Beløb
 
+**Fra version 1.4.6.**
+
 Gebyret i kroner. Komma er tilladt som decimaltegn. Bruges, når **Gebyrtrappe (valgfri)** er tom.
 
 <!-- setting: okoskabet_packaging_fee:rules[][pre_order_only] -->
 ### Kun forudbestilling
 
+**Fra version 1.5.0.**
+
 Reglen gælder kun, når kunden er i gang med en forudbestilling. Har kurven ingen dag, den kan forudbestilles til, opkræves gebyret ikke. Standard: slået fra.
 
 <!-- setting: okoskabet_packaging_fee:rules[][enabled] -->
 ### Aktiv (gebyr)
+
+**Fra version 1.4.6.**
 
 Slår reglen til og fra uden at slette den. Pilene ved siden af flytter reglen op og ned. Rækkefølgen betyder noget, fordi den første regel, der passer, vinder. En ny regel er aktiv.
 
@@ -708,15 +792,21 @@ Slår reglen til og fra uden at slette den. Pilene ved siden af flytter reglen o
 <!-- setting: okoskabet_packaging_fee:rules[][tags][] -->
 ### Kategorier og Tags (gebyr)
 
+**Fra version 1.4.6.**
+
 Reglen passer, hvis bare én vare i kurven har en af de valgte kategorier eller tags. Underkategorier tæller med. Lad begge være tomme, så passer reglen til alle kurve.
 
 <!-- setting: okoskabet_packaging_fee:rules[][methods][] -->
 ### Leveringsmetoder
 
+**Fra version 1.4.6.**
+
 Reglen passer kun, når kunden har valgt en af disse fragtmetoder. "Hjemmelevering — overalt" betyder alle kopier af metoden i alle zoner. Du kan også vælge en enkelt kopi, for eksempel kun hjemmelevering i zonen Bornholm. Tom betyder alle fragtmetoder.
 
 <!-- setting: okoskabet_packaging_fee:rules[][tiers] -->
 ### Gebyrtrappe (valgfri)
+
+**Fra version 1.4.6.**
 
 En prisliste i samme form som fragttrappen på fragtmetoderne: ét trin pr. linje som "fra beløb = gebyr". Det højeste trin, kurven når op på, gælder, og 0 betyder intet gebyr. Om beløbene er med eller uden moms, følger **Beløb er ekskl. moms**. Tom betyder, at **Beløb** bruges.
 
@@ -730,6 +820,8 @@ Kan Økoskabet ikke nås, viser boksen de seneste priser, den så, og hvor gamle
 
 <!-- setting: okoskabet_free_packaging -->
 ### Gratis emballage (på en rabatkupon)
+
+**Fra version 1.4.6.**
 
 Under **Marketing → Rabatkuponer** har hver kupon fluebenet **Gratis emballage**, lige ved WooCommerces **Tillad gratis forsendelse**. En ordre med kuponen betaler intet emballagegebyr. De to er adskilt med vilje: du kan give gratis fragt uden at give emballagen væk. Standard: slået fra.
 

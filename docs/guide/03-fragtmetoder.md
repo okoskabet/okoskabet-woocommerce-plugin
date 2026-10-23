@@ -4,7 +4,7 @@ Kunden vælger levering med Økoskabet på samme måde som al anden fragt i WooC
 
 - **Økoskabet** — levering til et af Økoskabets køleskabe. Kunden vælger skab og leveringsdato.
 - **Hjemmelevering** — levering til kundens adresse. Kunden vælger leveringsdato.
-- **Butiksafhentning** — kunden henter selv varerne i din butik. Kunden vælger afhentningssted og afhentningsdato.
+- **Butiksafhentning** — kunden henter selv varerne i din butik. Kunden vælger afhentningssted og afhentningsdato. Fra version 1.4.3.
 
 Det er kun ordrer med en af de tre fragtmetoder, der bliver sendt til Økoskabet. Ordrer med butikkens andre fragtmetoder rører pluginet ikke.
 
@@ -60,6 +60,8 @@ Standard: tom.
 <!-- setting: shipping:tiers -->
 ### Fragttrappe
 
+**Fra version 1.4.3.**
+
 En prisliste, hvor fragten afhænger af, hvor meget kunden køber for. Skriv ét trin pr. linje som "fra beløb = pris":
 
 ```
@@ -84,6 +86,8 @@ Standard: tom. Så bruges felterne med (reserve).
 
 <!-- setting: shipping:amounts_include_tax -->
 ### Moms
+
+**Fra version 1.4.3.**
 
 Fluebenet "Trappens grænser og priser er inkl. moms (det, kunden ser og betaler)".
 
@@ -126,6 +130,8 @@ Bruges kun, når fragttrappen er tom, og kun på Økoskabet og Hjemmelevering. S
 <!-- setting: shipping:allow_without_date -->
 ### Postnumre uden leveringsdage
 
+**Fra version 1.5.0.**
+
 Findes kun på **Hjemmelevering**. Fluebenet "Kan stadig bestilles – uden dato, og lander blandt ubehandlede ordrer hos Økoskabet".
 
 Lavet til ø-levering. Normalt kan en kunde ikke bestille hjemmelevering til et postnummer, hvor Økoskabet ikke kører. Med flueben kan kunden alligevel bestille:
@@ -138,4 +144,4 @@ Sæt det kun på den kopi af Hjemmelevering, der ligger i zonen med øerne, så 
 
 ## Tillægsordrer koster ingen fragt
 
-**Ny i 1.5.3.** Når en kunde lægger varer til en tidligere ordre, sætter pluginet prisen på Økoskabets tre fragtmetoder til 0, fordi varerne kører med den levering, der allerede er betalt. Butikkens egne fragtmetoder beholder deres pris. Det er forklaret i delen Kassen og ordrer.
+**Fra version 1.5.3.** Når en kunde lægger varer til en tidligere ordre, sætter pluginet prisen på Økoskabets tre fragtmetoder til 0, fordi varerne kører med den levering, der allerede er betalt. Butikkens egne fragtmetoder beholder deres pris. Det er forklaret i delen Kassen og ordrer.

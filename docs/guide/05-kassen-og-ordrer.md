@@ -54,11 +54,11 @@ Indeholder kurven noget, der kan forudbestilles, står to knapper under fragtval
 
 ### Adresseforslag
 
-**Ny i 1.5.3.** Har du slået **Adresseforslag i kassen** til, foreslår kassen adresser, mens kunden skriver. Er adressen en ejendom med lejligheder, kommer listen **Vælg lejlighed** bagefter.
+**Fra version 1.5.3.** Har du slået **Adresseforslag i kassen** til, foreslår kassen adresser, mens kunden skriver. Er adressen en ejendom med lejligheder, kommer listen **Vælg lejlighed** bagefter.
 
 ### Tillæg til en tidligere ordre
 
-**Ny i 1.5.3.** Kassen har feltet **Tillæg til en tidligere ordre? Skriv ordrenummeret her**. Har din kasse allerede sit eget felt til det samme med navnet `billing_order_id`, bruger pluginet det i stedet og tilføjer ikke sit eget.
+**Fra version 1.5.3.** Kassen har feltet **Tillæg til en tidligere ordre? Skriv ordrenummeret her**. Har din kasse allerede sit eget felt til det samme med navnet `billing_order_id`, bruger pluginet det i stedet og tilføjer ikke sit eget.
 
 Skriver kunden nummeret på en tidligere ordre, tjekker kassen:
 
@@ -87,7 +87,7 @@ Har en ordre med Økoskabets fragt ingen leveringsdato, for eksempel fordi den e
 
 Retter du en ordre, efter den er sendt, for eksempel adressen, datoen eller en vare, eller laver du en refundering, sender pluginet ændringen til Økoskabet af sig selv. Afviser Økoskabet ændringen, står det som en note på ordren.
 
-**Ny i 1.5.3.** Flytter Økoskabet en levering i backoffice, for eksempel til et andet skab, en anden dato eller en rettet adresse, skriver pluginet ændringen tilbage på ordren i WooCommerce, når statusbeskeden kommer. Så sender butikken ikke den gamle udgave tilbage næste gang ordren gemmes.
+**Fra version 1.5.3.** Flytter Økoskabet en levering i backoffice, for eksempel til et andet skab, en anden dato eller en rettet adresse, skriver pluginet ændringen tilbage på ordren i WooCommerce, når statusbeskeden kommer. Så sender butikken ikke den gamle udgave tilbage næste gang ordren gemmes.
 
 ## Det skriver pluginet på ordren
 
@@ -118,7 +118,7 @@ Standard er at hæve ved **Etiket printet** og gennemføre ved **Udleveret**. De
 
 ## Tillægsordrer
 
-**Ny i 1.5.3.**
+**Fra version 1.5.3.**
 
 En tillægsordre er en ny ordre, hvor kunden lægger varer til en ordre, der allerede er bestilt. Den er sin egen ordre i WooCommerce med sin egen betaling, men den får ingen levering for sig. Varerne pakkes og leveres sammen med den første ordre.
 

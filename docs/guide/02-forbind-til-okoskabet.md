@@ -62,7 +62,7 @@ Pluginet bruger den hemmelige nøgle til at tjekke, at en statusbesked virkelig 
 
 ## 6. Tjek at Økoskabet kan nå butikken
 
-**Ny i 1.5.3.**
+**Fra version 1.5.3.**
 
 Under **Webhook & Betaling** står **Kontakt fra Økoskabet** med to linjer:
 
