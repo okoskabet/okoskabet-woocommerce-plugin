@@ -4,6 +4,96 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 ## Unreleased
 
+= Tillægsordrer: læg flere varer på en levering, der allerede er bestilt =
+
+En kunde, der vil have mere med på en levering, de allerede har bestilt,
+skriver den første ordres nummer i kassen — i butikkens eget felt, hvis den har
+et (fx »Tillægsordre«), ellers i pluginets felt »Tillæg til en tidligere
+ordre?«. Passer nummer og mailadresse, og kan leveringen stadig nå at tage mere,
+koster Økoskabets fragt 0 kr., og varerne lægges på den levering, der findes.
+Butikkens egne fragtmetoder (fx GLS) koster det, de plejer, og en kunde, der
+vælger dem, får ikke varerne lagt på Økoskabets levering.
+
+Pakkeriet ser varerne nederst på listen som »TILLÆG — …«, og leveringens note
+fortæller, at der er kommet mere. Annulleres tillægget, tages varerne af igen.
+Når leveringen hæves eller afsluttes via Økoskabet, gælder det også tillæggene.
+
+Er leveringen lukket, eller passer nummeret ikke, siger kassen det, og ordren
+fortsætter som en almindelig ordre med normal fragt. Et tillæg, der først
+betales, når leveringen er lukket, sættes på hold (se nedenfor).
+
+= Etage, lejlighed og dør i kassen =
+
+En ny indstilling, **Spørg om lejlighed, etage og dør**, sætter WooCommerces egen
+anden adresselinje tilbage i kassen for en butik, der har fjernet den. Den er
+slået fra: skriver dine kunder etagen på gadelinjen (»Byagervej 194, 1. tv«),
+læser Økoskabet den derfra, og to steder at skrive den ét sted betyder, at
+nogle skriver den to gange.
+
+= Ændringer i Økoskabets backoffice kommer tilbage til butikken =
+
+Flytter pakkeriet en levering til et Økoskab eller tilbage til døren, ændrer
+datoen eller retter adressen eller modtagerens navn, skrives det nu på ordren i
+WooCommerce, med en note om, hvad der er ændret. Før blev butikkens næste
+rettelse af ordren sendt oven i pakkeriets. Intet om penge ændres: hverken
+fragtmetode, fragt eller varelinjer.
+
+= En rettelse i butikken sender kun det, der er ændret =
+
+Retter du en ordre, der allerede er sendt, sendes kun det, du har ændret — en
+omdøbt vare sender varerne, en ny adresse sender adressen. Før blev hele ordren
+sendt ved hver gemning, oven i det pakkeriet havde rettet.
+
+Åbne ordrer fra 1.5.2 sendes ikke igen, bare fordi pluginet er opdateret, og
+heller ikke, når de får et tillæg. De sendes først, når der faktisk ændres
+noget på dem.
+
+Afviser Økoskabet en rettelse, står det nu på ordren, med Økoskabets egen
+begrundelse. Før stod det kun i en logfil.
+
+= Webhooken finder ordren på ordrenummeret =
+
+Statusbeskeder fra Økoskabet fandt ordren på dens interne id. I en butik med
+et plugin til ordrenumre er nummer og id forskellige, og beskeden fandt ingen
+ordre — eller en forkert. Nu bruges den reference, ordren blev sendt under.
+Kun ordrer, som pluginet selv har sendt, kan findes på den måde, og passer
+referencen på to ordrer, røres ingen af dem.
+
+= En ordre uden leveringsdato forsvinder ikke længere =
+
+En ordre med en af Økoskabets fragtmetoder, men uden leveringsdato, blev før
+droppet uden et ord. Nu sendes den og lander blandt Økoskabets ubehandlede
+forsendelser, hvor den kan få en dato, og ordren siger »uden leveringsdato«.
+
+= Varens oplysninger følger med ordren =
+
+Tags, billede og varens egenskaber — fx producent og oprindelsesland — sendes
+nu med hver ordrelinje, så pakkeriet har dem, selv når Økoskabet ikke kan nå
+ind til butikken. Kun egenskaber, der vises på varesiden, kommer med.
+Linjebeløb sendes kun, når Økoskabet beder om dem (butikker, der bruger tilbud
+i Track&Trace).
+
+= Kontakt fra Økoskabet =
+
+Indstillingerne viser, hvornår Økoskabet sidst nåede ind til butikken med en
+statusbesked og et vareopslag. Står der »aldrig«, står en firewall eller et
+sikkerhedsplugin sandsynligvis i vejen.
+
+= Mindre rettelser =
+
+- Fluebenet for webhooks kan nu slås fra og bliver slået fra.
+- Skiftet mellem Normal bestilling og Forudbestilling tømmer ikke længere de
+  felter, kunden har udfyldt.
+- En afslutning, der kom før betalingen var hævet, bruges, når pengene hæves.
+- En forhandler uden API-nøgle får ikke sine ordrer sendt under
+  standardforhandleren.
+- Omdøbes et forhandler-id, flyttes alle dets ordrer med, også i en butik med
+  mange ordrer.
+- Svarer Økoskabet, at en ordre allerede er modtaget, markeres den ikke som
+  mislykket.
+- Offentlige ruter i kassen er strammet op (postnummer og adresse kodes, kun
+  udgivne varer navngives).
+
 = Kun ordrer med vores fragt sendes til Økoskabet =
 
 En ordre, hvor kunden først valgte Økoskabet og så skiftede til butikkens egen
