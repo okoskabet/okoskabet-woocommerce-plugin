@@ -76,21 +76,22 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	/**
 	 * A place name between the street and the postcode goes on the first line.
 	 *
-	 * "Ærtebjerggårdvej 122, Kirkendrup, 5270 Odense N" is one of Gaardmester's.
-	 * On the second line it would sit where the flat goes, and an order with
-	 * both would read as a flat called Kirkendrup.
+	 * "Eksempelgårdvej 122, Prøveby, 2200 København N" is made up, but
+	 * Gaardmester delivers to addresses of that shape. On the second line the
+	 * place name would sit where the flat goes, and an order with both would
+	 * read as a flat called Prøveby.
 	 */
 	public function test_a_supplementary_town_goes_with_the_street(): void
 	{
 		$lines = oko_delivery_address_lines(array(
-			'street_name'        => 'Ærtebjerggårdvej',
+			'street_name'        => 'Eksempelgårdvej',
 			'house_number'       => '122',
-			'supplementary_town' => 'Kirkendrup',
-			'city'               => 'Odense N',
-			'postal_code'        => '5270',
+			'supplementary_town' => 'Prøveby',
+			'city'               => 'København N',
+			'postal_code'        => '2200',
 		));
 
-		$this->assertSame('Ærtebjerggårdvej 122, Kirkendrup', $lines['shipping_address_1']);
+		$this->assertSame('Eksempelgårdvej 122, Prøveby', $lines['shipping_address_1']);
 		$this->assertSame('', $lines['shipping_address_2']);
 	}
 

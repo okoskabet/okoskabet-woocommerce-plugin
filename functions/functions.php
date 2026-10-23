@@ -4704,8 +4704,8 @@ function oko_address_on_one_line(\WC_Order $order): string
  * is parsed at the other end, so writing this back and sending it again is a
  * round trip and not a slow drift.
  *
- * `supplementary_town` — "Kirkendrup" in "Ærtebjerggårdvej 122, Kirkendrup,
- * 5270 Odense N" — is a place name between the street and the postcode. It
+ * `supplementary_town` — "Prøveby" in "Eksempelgårdvej 122, Prøveby,
+ * 2200 København N" — is a place name between the street and the postcode. It
  * goes on the first line after the house number, which is where the register
  * reads it from, and never on the second, which is the flat's.
  *
