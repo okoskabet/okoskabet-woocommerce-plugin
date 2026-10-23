@@ -347,3 +347,108 @@ it( 'marks every setting exactly once', function () {
 		fail( "marked more than once:\n         " . implode( "\n         ", $twice ) );
 	}
 } );
+
+/**
+ * The guide's "Fra version x" for one marker: the text from the marker to the
+ * next one, shared by markers that stand together over one heading.
+ *
+ * @return array<string,string> Marker => its section.
+ */
+function oko_guide_sections(): array {
+	$sections = array();
+	foreach ( glob( oko_guide_root() . '/docs/guide/*.md' ) ?: array() as $path ) {
+		$parts   = preg_split( '/(<!--\s*setting:\s*\S+\s*-->)/', (string) file_get_contents( $path ), -1, PREG_SPLIT_DELIM_CAPTURE );
+		$pending = array();
+		foreach ( $parts as $part ) {
+			if ( preg_match( '/<!--\s*setting:\s*(\S+)\s*-->/', $part, $m ) ) {
+				$pending[] = $m[1];
+				continue;
+			}
+			if ( $pending === array() || trim( $part ) === '' ) {
+				continue;
+			}
+			foreach ( $pending as $id ) {
+				$sections[ $id ] = $part;
+			}
+			$pending = array();
+		}
+	}
+
+	return $sections;
+}
+
+/**
+ * Settings that were already there in 1.4.2. Everything else has to say which
+ * version it arrived in, so a shop that has not updated knows why it cannot
+ * find it. A new setting is not added here: it gets "**Fra version x.**".
+ */
+const OKO_GUIDE_SETTINGS_IN_1_4_2 = array(
+		'shipping:title',
+		'shipping:description',
+		'shipping:cost',
+		'shipping:costDiscountLimit',
+		'shipping:costDiscount',
+		'shipping:costFreeLimit',
+		'_api_key',
+		'_display_option',
+		'_maximum_days_in_future',
+		'_staging_api',
+		'_description_shipping_okoskabet',
+		'_description_shipping_private',
+		'_delivery_location_dropdown',
+		'_delivery_location_dropdown_label',
+		'_delivery_location_note_label',
+		'_hide_wc_order_comments',
+		'_webhook_enabled',
+		'_payment_gateway',
+		'_capture_events',
+		'_webhook_events',
+		'_webhook_url_display',
+		'okoskabet_merchants_config:default_merchant_id',
+		'okoskabet_merchants_config:merchant[label]',
+		'okoskabet_merchants_config:merchant[id]',
+		'okoskabet_merchants_config:merchant[api_key]',
+		'okoskabet_merchants_config:merchant[webhook_secret]',
+		'okoskabet_merchants_config:merchant[staging]',
+		'okoskabet_merchants_config:merchant[maximum_days_in_future]',
+		'okoskabet_merchants_config:merchant[description_shipping_okoskabet]',
+		'okoskabet_merchants_config:merchant[description_shipping_private]',
+		'okoskabet_merchants_config:merchant[payment_gateway]',
+		'okoskabet_merchants_config:merchant[capture_events][]',
+		'okoskabet_merchants_config:merchant[webhook_events][]',
+		'okoskabet_merchants_config:merchant[product_categories][]',
+		'okoskabet_merchants_config:merchant[product_tags][]',
+		'okoskabet_merchants_config:merchant[shipping_zones][]',
+		'okoskabet_merchants_config:merchant[priority]',
+		'okoskabet_delivery_exceptions:weekdays_enabled',
+		'okoskabet_delivery_exceptions:weekdays[][enabled]',
+		'okoskabet_delivery_exceptions:weekdays[][categories][]',
+		'okoskabet_delivery_exceptions:weekdays[][tags][]',
+		'okoskabet_delivery_exceptions:only_on_enabled',
+		'okoskabet_delivery_exceptions:only_on[][label]',
+		'okoskabet_delivery_exceptions:only_on[][date]',
+		'okoskabet_delivery_exceptions:only_on[][enabled]',
+		'okoskabet_delivery_exceptions:only_on[][categories][]',
+		'okoskabet_delivery_exceptions:only_on[][tags][]',
+		'okoskabet_delivery_exceptions:from_until_enabled',
+		'okoskabet_delivery_exceptions:from_until[][label]',
+		'okoskabet_delivery_exceptions:from_until[][from]',
+		'okoskabet_delivery_exceptions:from_until[][until]',
+		'okoskabet_delivery_exceptions:from_until[][enabled]',
+		'okoskabet_delivery_exceptions:from_until[][categories][]',
+		'okoskabet_delivery_exceptions:from_until[][tags][]',
+		'_split_checkout_enabled',
+		'okoskabet_product_merchant',
+);
+
+it( 'says which version every newer setting arrived in', function () {
+	$undated = array();
+	foreach ( oko_guide_sections() as $id => $section ) {
+		if ( ! in_array( $id, OKO_GUIDE_SETTINGS_IN_1_4_2, true ) && ! preg_match( '/\*\*Fra version \d+\.\d+\.\d+\.?\*\*/u', $section ) ) {
+			$undated[] = $id;
+		}
+	}
+	if ( $undated !== array() ) {
+		fail( "the guide does not say which version these arrived in:\n         " . implode( "\n         ", $undated ) );
+	}
+} );
