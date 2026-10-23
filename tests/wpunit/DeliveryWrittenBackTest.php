@@ -146,8 +146,8 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	 * The note names an address, not our column names.
 	 *
 	 * Measured on Gaardmester's staging, where the first version wrote
-	 * "shipping_address_1: Eksempelvej 12, shipping_address_2: 1 tv,
-	 * shipping_city: Beder" into a note the shop's own people read.
+	 * "shipping_address_1: <gade nr>, shipping_address_2: 1 tv,
+	 * shipping_city: <by>" into a note the shop's own people read.
 	 */
 	public function test_the_note_reads_as_an_address(): void
 	{

@@ -4634,7 +4634,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 
 	$address = (array) ($home['address'] ?? array());
 	// Named once, as an address, rather than field by field. The note is read
-	// by whoever runs the shop, and "shipping_address_1: Eksempelvej 12,
+	// by whoever runs the shop, and "shipping_address_1: <gade nr>,
 	// shipping_address_2: 1 tv" is our own column names read out loud.
 	//
 	// Written through the named setters rather than `$order->{'set_' . $key}`:
