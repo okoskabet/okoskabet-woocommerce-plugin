@@ -26,9 +26,9 @@ betales, når leveringen er lukket, sættes på hold (se nedenfor).
 
 En ny indstilling, **Spørg om lejlighed, etage og dør**, sætter WooCommerces egen
 anden adresselinje tilbage i kassen for en butik, der har fjernet den. Den er
-slået fra: skriver dine kunder etagen på gadelinjen (»Byagervej 194, 1. tv«),
-læser Økoskabet den derfra, og to steder at skrive den ét sted betyder, at
-nogle skriver den to gange.
+slået fra: skriver dine kunder etagen på gadelinjen (»Eksempelvej 12, 1. tv«),
+læser Økoskabet den derfra. Får kunden to steder at skrive den, skriver nogle
+den begge steder, og så afviser adresseregistret adressen.
 
 = Ændringer i Økoskabets backoffice kommer tilbage til butikken =
 
