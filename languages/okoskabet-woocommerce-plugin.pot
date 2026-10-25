@@ -222,6 +222,19 @@ msgid ""
 "add-on to an earlier order."
 msgstr ""
 
+#: backend/views/settings.php:215
+msgid "Shipping methods for an add-on to an earlier order"
+msgstr ""
+
+#: backend/views/settings.php:216
+msgid ""
+"Your own shipping methods that mean \"add this to an order I have already "
+"placed\". A customer who picks one and writes the earlier order's number at "
+"checkout has the goods put on that order's delivery with Økoskabet. "
+"Økoskabet's own shipping methods always work this way and need not be "
+"ticked."
+msgstr ""
+
 #: backend/views/settings.php:202
 msgid "Heading of that row"
 msgstr ""

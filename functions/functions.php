@@ -2227,11 +2227,12 @@ function oko_addon_inherits_the_delivery($order, $data): void
 		return;
 	}
 
-	// Only when Økoskabet is carrying it. A customer who types the earlier
-	// order's number and then picks the shop's own courier pays that
+	// Only when Økoskabet is carrying it, or the customer chose a shipping
+	// method the shop has said means exactly this. A customer who types the
+	// earlier order's number and then picks the shop's own courier pays that
 	// courier's freight; putting the goods on our delivery as well would send
 	// them twice, or send them with the wrong one.
-	if (! oko_order_is_ours($order)) {
+	if (! oko_order_is_ours($order) && ! oko_order_chose_addon_shipping($order)) {
 		return;
 	}
 
@@ -4024,6 +4025,35 @@ function oko_order_is_ours(\WC_Order $order): bool
 {
 	foreach ($order->get_shipping_methods() as $shipping_method) {
 		if (isset(OKO_SHIPPING_METHOD_KINDS[$shipping_method->get_method_id()])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Whether the customer chose a shipping method the shop uses for add-ons.
+ *
+ * Gaardmester asks customers who add to an earlier order to pick a shipping
+ * method of its own — "Tillæg til en igangværende ordre" — and write the
+ * order's number in the checkout. That method is not ours, so without this
+ * the goods were never put on the delivery and the shop did it by hand. The
+ * shop names such methods in the settings; a method it has not named is a
+ * courier of its own, and is left alone.
+ *
+ * @param \WC_Order $order
+ */
+function oko_order_chose_addon_shipping(\WC_Order $order): bool
+{
+	$addon_methods = (array) (o_get_settings()['_addon_shipping_methods'] ?? array());
+	if ($addon_methods === array()) {
+		return false;
+	}
+
+	foreach ($order->get_shipping_methods() as $shipping_method) {
+		$key = $shipping_method->get_method_id() . ':' . (int) $shipping_method->get_instance_id();
+		if (in_array($key, $addon_methods, true)) {
 			return true;
 		}
 	}

@@ -207,6 +207,19 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
+	// For a shop that has its own shipping method for add-ons, as Gaardmester
+	// does. The customer who picks it and writes the earlier order's number
+	// has the goods put on that delivery, as if they had picked one of ours.
+	$cmb->add_field(
+		array(
+			'name'       => __('Shipping methods for an add-on to an earlier order', O_TEXTDOMAIN),
+			'desc'       => __('Your own shipping methods that mean "add this to an order I have already placed". A customer who picks one and writes the earlier order\'s number at checkout has the goods put on that order\'s delivery with Økoskabet. Økoskabet\'s own shipping methods always work this way and need not be ticked.', O_TEXTDOMAIN),
+			'id'         => '_addon_shipping_methods',
+			'type'       => 'multicheck',
+			'options_cb' => 'oko_all_shipping_method_choices',
+		)
+	);
+
 	// Off until the shop turns it on, like everything new. The checkout script
 	// and its REST routes both check this, see Address_Autocomplete.
 	$cmb->add_field(
