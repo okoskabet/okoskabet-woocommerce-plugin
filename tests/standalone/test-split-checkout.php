@@ -558,16 +558,25 @@ const OKO_SPLIT_PAK_CHOI   = 213;
  * day, so nothing is wrong. Press Forudbestilling and only the ice has a day —
  * which is the case the checkout used to answer with an empty page and a fee.
  *
+ * The pre-order day is a Thursday, as 10 December 2026 is. It must not be a
+ * Wednesday: Pak Choi travels on Wednesdays and is on no "cannot be
+ * pre-ordered" list, so on a Wednesday it may go with the ice, the basket
+ * shares a day, and there is nothing to split. "Today plus 80" was that
+ * Wednesday whenever the suite ran on a Sunday, and fourteen tests went red
+ * every Sunday from 11 October. Pass a weekday to build that basket on purpose.
+ *
+ * @param int   $pre_order_weekday 0=Sun..6=Sat.
+ * @param array $exceptions        Merged over the shop's exception settings.
  * @return array{pre_order_day:string, normal_days:string[]}
  */
-function oko_split_pre_order_shop(): array {
-	$december = oko_test_date( 80 );
+function oko_split_pre_order_shop( int $pre_order_weekday = 4, array $exceptions = array() ): array {
+	$december = oko_test_date_on_weekday( 80, $pre_order_weekday );
 
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_add_product( OKO_SPLIT_PAK_CHOI, 'Pak Choi', array( OKO_SPLIT_CAT_WED ) );
 
-	oko_test_set_exceptions( array(
+	oko_test_set_exceptions( array_merge( array(
 		// The ice is the only thing that can be pre-ordered, for one day — and
 		// it still sells on the normal days, which is what a from/until rule
 		// marked as a pre-order says. ("Delivery only on a specific day" would
@@ -581,7 +590,7 @@ function oko_split_pre_order_shop(): array {
 		'weekdays'         => array(
 			3 => array( 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_WED ), 'tags' => array() ),
 		),
-	) );
+	), $exceptions ) );
 
 	$normal_days = array(
 		oko_test_weekday_next_week( 2 ),
