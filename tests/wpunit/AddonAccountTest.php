@@ -55,6 +55,7 @@ class AddonAccountTest extends \Codeception\TestCase\WPTestCase
 		delete_option(Merchants::OPTION_KEY);
 		Merchants::purge_config_cache();
 		unset($_POST['billing_okoskabet_addon_order'], $_POST['billing_email']);
+		remove_all_filters('o_get_settings');
 		parent::tearDown();
 	}
 
@@ -113,6 +114,11 @@ class AddonAccountTest extends \Codeception\TestCase\WPTestCase
 		oko_keep_booked_reference($parent, (string) $parent->get_order_number());
 		$parent->save();
 
+		// A shop that takes additions, or the courier would not be what
+		// keeps it off our delivery: with the setting off nothing is linked.
+		add_filter('o_get_settings', static function ($settings) {
+			return array_merge((array) $settings, array('_ask_for_addition_order' => 'on'));
+		});
 		$_POST['billing_okoskabet_addon_order'] = (string) $parent->get_order_number();
 		$_POST['billing_email']                 = 'kunde@example.com';
 

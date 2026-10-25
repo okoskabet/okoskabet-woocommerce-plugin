@@ -187,6 +187,19 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
+	// Off until the shop turns it on. Off means neither field is read — ours
+	// is not drawn, and a shop's own billing_order_id is left to the shop —
+	// see oko_shop_takes_additions().
+	$cmb->add_field(
+		array(
+			'name'    => __('Ask about additions to an earlier order', O_TEXTDOMAIN),
+			'desc'    => __('Adds the field "Adding to an earlier order? Write its order number here" at checkout. If the number and the email match an order whose delivery can still take more, the goods go on that delivery and Økoskabet\'s shipping costs 0 kr. If your checkout already has a field of its own named billing_order_id, that one is used instead of ours. Off: no field is shown, and neither field is read.', O_TEXTDOMAIN),
+			'id'      => '_ask_for_addition_order',
+			'type'    => 'checkbox',
+			'default' => '',
+		)
+	);
+
 	$cmb->add_field(
 		array(
 			'name'       => __('Shipping in a row of its own', O_TEXTDOMAIN),
