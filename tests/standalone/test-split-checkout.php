@@ -553,6 +553,25 @@ const OKO_SPLIT_ICE        = 212;
 const OKO_SPLIT_PAK_CHOI   = 213;
 
 /**
+ * A far-off pre-order day: the first Thursday at least this many days out.
+ *
+ * A plain "80 days from today" lands on whatever weekday today happens to make
+ * it, and on a Sunday that is a Wednesday — Pak Choi's only day. The whole
+ * basket can then travel together on the pre-order day, the split rightly
+ * offers nothing, and every test built on that basket fails one day a week.
+ * No test product is limited to Thursdays, so the outcome no longer depends
+ * on the day the suite runs.
+ */
+function oko_split_far_day( int $at_least ): string {
+	$day = new DateTimeImmutable( oko_test_date( $at_least ), wp_timezone() );
+	while ( (int) $day->format( 'w' ) !== 4 ) {
+		$day = $day->modify( '+1 day' );
+	}
+
+	return $day->format( 'Y-m-d' );
+}
+
+/**
  * Gaardmester's basket. Cornflakes and Pak Choi are ordinary goods; the nougat
  * ispinde can be held until December. In an ordinary order all three share a
  * day, so nothing is wrong. Press Forudbestilling and only the ice has a day —
@@ -561,7 +580,7 @@ const OKO_SPLIT_PAK_CHOI   = 213;
  * @return array{pre_order_day:string, normal_days:string[]}
  */
 function oko_split_pre_order_shop(): array {
-	$december = oko_test_date( 80 );
+	$december = oko_split_far_day( 80 );
 
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
@@ -902,7 +921,7 @@ it( 'never puts up "take items out" over a panel with nothing in it', function (
 	// so it appeared over an empty panel: the customer pressed it, had nothing
 	// to choose, pressed "remove the items and continue", and was told to pick
 	// one of the options first. Forever.
-	$december = oko_test_date( 40 );
+	$december = oko_split_far_day( 40 );
 
 	oko_test_add_product( OKO_SPLIT_ICE, 'Juleand', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_add_product( OKO_SPLIT_PAK_CHOI, 'Guleroedder', array( OKO_SPLIT_CAT_WED ) );
@@ -953,7 +972,7 @@ it( 'offers to give up either side, not only the one the customer stands in', fu
 	// list kept to the kind of order they were already in. Someone who came
 	// for the duck had to work out for themselves that dropping the other two
 	// was allowed.
-	$december = oko_test_date( 40 );
+	$december = oko_split_far_day( 40 );
 
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Tamari mandler', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Juleand', array( OKO_SPLIT_CAT_ICE ) );
@@ -1315,7 +1334,7 @@ it( 'offers the same split to an ordinary checkout as to a pre-order', function 
 	// travel now, the ice in December. Before, the customer standing in the
 	// ordinary checkout was told to take the ice out of the basket, and only
 	// found the split by pressing a button they had no reason to press.
-	$december = oko_test_date( 80 );
+	$december = oko_split_far_day( 80 );
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_set_merchant_days( 14 );
@@ -1387,7 +1406,7 @@ it( 'keeps the line breaks in an explanation the shop wrote', function () {
 it( 'offers a way out of either delivery, so the customer is not cornered', function () {
 	// Carrots now, ice in December. The list used to offer only "remove the
 	// ice" — which is no help at all to the customer who came for the ice.
-	$december = oko_test_date( 80 );
+	$december = oko_split_far_day( 80 );
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_set_merchant_days( 14 );
@@ -1411,7 +1430,7 @@ it( 'offers a way out of either delivery, so the customer is not cornered', func
 } );
 
 it( 'puts the way to keep a delivery beside the delivery itself', function () {
-	$december = oko_test_date( 80 );
+	$december = oko_split_far_day( 80 );
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_set_merchant_days( 14 );
@@ -1452,7 +1471,7 @@ describe( 'Split checkout: moving an item between the two deliveries' );
 
 /** Carrots that cannot wait, oats that can, and a box tied to one December day. */
 function oko_move_shop(): array {
-	$december = oko_test_date( 80 );
+	$december = oko_split_far_day( 80 );
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_set_merchant_days( 14 );
@@ -1532,7 +1551,7 @@ it( 'lets a move settle what kind of order the checkout is', function () {
 it( 'calls a basket that only shares a pre-order day what it is', function () {
 	// Sausages that can travel now and can also wait; ice tied to one December
 	// day. No ordinary day carries both — but December carries all of it.
-	$december = oko_test_date( 80 );
+	$december = oko_split_far_day( 80 );
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Grillpølser', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_set_merchant_days( 14 );
