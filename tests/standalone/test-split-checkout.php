@@ -911,7 +911,11 @@ it( 'never puts up "take items out" over a panel with nothing in it', function (
 	// so it appeared over an empty panel: the customer pressed it, had nothing
 	// to choose, pressed "remove the items and continue", and was told to pick
 	// one of the options first. Forever.
-	$december = oko_test_date( 40 );
+	//
+	// A Thursday, never a Wednesday: on a Wednesday the vegetables would have
+	// a day after all ("today plus 40" was one whenever the suite ran on a
+	// Friday), and the test would describe a basket it was not building.
+	$december = oko_test_date_on_weekday( 40, 4 );
 
 	oko_test_add_product( OKO_SPLIT_ICE, 'Juleand', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_add_product( OKO_SPLIT_PAK_CHOI, 'Guleroedder', array( OKO_SPLIT_CAT_WED ) );
@@ -932,6 +936,17 @@ it( 'never puts up "take items out" over a panel with nothing in it', function (
 	oko_test_set_delivery_days( array( oko_test_weekday_next_week( 2 ), $december ) );
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_ICE, 'b' => OKO_SPLIT_PAK_CHOI ) );
 	oko_test_set_pre_order( false );
+
+	// The basket this test is about, checked rather than assumed: the
+	// assertions below hold for other baskets too, so they cannot notice.
+	$exceptions = new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions();
+	foreach ( array( false, true ) as $pre_order ) {
+		assert_same(
+			array(),
+			$exceptions->filter_dates_for_cart( oko_test_delivery_days(), array( OKO_SPLIT_PAK_CHOI ), $pre_order ),
+			'the vegetables have no day at all'
+		);
+	}
 
 	ob_start();
 	oko_split()->maybe_render_banner();
