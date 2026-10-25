@@ -193,7 +193,7 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 	$cmb->add_field(
 		array(
 			'name'    => __('Ask about additions to an earlier order', O_TEXTDOMAIN),
-			'desc'    => __('Adds the field "Adding to an earlier order? Write its order number here" at checkout. If the number and the email match an order whose delivery can still take more, the goods go on that delivery and Økoskabet\'s shipping costs 0 kr. If your checkout already has a field of its own named billing_order_id, that one is used instead of ours. Off: no field is shown, and neither field is read.', O_TEXTDOMAIN),
+			'desc'    => __('Adds the field "Adding to an earlier order? Write its order number here" at checkout. If the number and the email match an order whose delivery can still take more, the goods go on that delivery and Økoskabet\'s shipping costs 0 kr. If your checkout already has a field of its own named billing_order_id, that one is used instead of ours. Off: the plugin\'s field is not shown, and a field of your own named billing_order_id is not read.', O_TEXTDOMAIN),
 			'id'      => '_ask_for_addition_order',
 			'type'    => 'checkbox',
 			'default' => '',
