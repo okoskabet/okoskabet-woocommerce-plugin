@@ -4,6 +4,117 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 ## Unreleased
 
+= Tillægsordrer: læg flere varer på en levering, der allerede er bestilt =
+
+Kassen har fået et nyt felt, »Tillæg til en tidligere ordre? Skriv
+ordrenummeret her«. Det vises i alle butikkers kasse, og der er ingen
+indstilling til det. Har butikken allerede sit eget felt til det tidligere
+ordrenummer med feltnavnet `billing_order_id`, bruges det i stedet, og
+pluginets felt vises ikke.
+
+En kunde, der vil have mere med på en levering, de allerede har bestilt,
+skriver den første ordres nummer i feltet. Passer nummer og mailadresse, og kan
+leveringen stadig nå at tage mere, koster Økoskabets fragt 0 kr., og varerne
+lægges på den levering, der findes. Butikkens egne fragtmetoder (fx GLS) koster
+det, de plejer, og en kunde, der vælger dem, får ikke varerne lagt på
+Økoskabets levering.
+
+Pakkeriet ser varerne nederst på listen som »TILLÆG — …«, og leveringens note
+fortæller, at der er kommet mere. Annulleres tillægget, tages varerne af igen.
+Hæver eller afslutter Økoskabets statusbeskeder den første ordre, sker det
+samme med tillæggene.
+
+Er leveringen lukket, eller passer nummeret ikke, siger kassen det, og ordren
+fortsætter som en almindelig ordre med normal fragt. Et tillæg, der først
+betales, når leveringen er lukket, sættes på hold (se nedenfor).
+
+= Etage, lejlighed og dør i kassen =
+
+En ny indstilling, **Spørg om lejlighed, etage og dør**, sætter WooCommerces egen
+anden adresselinje tilbage i kassen for en butik, der har fjernet den. Den er
+slået fra: skriver dine kunder etagen på gadelinjen (»Eksempelvej 12, 1. tv«),
+læser Økoskabet den derfra. Får kunden to steder at skrive den, skriver nogle
+den begge steder, og så afviser adresseregistret adressen.
+
+= Ændringer i Økoskabets backoffice kommer tilbage til butikken =
+
+Flytter pakkeriet en levering til et Økoskab, til butiksafhentning eller
+tilbage til døren, ændrer datoen eller retter adressen eller modtagerens navn,
+skrives det nu på ordren i WooCommerce, med en note om, hvad der er ændret. Før
+blev butikkens næste rettelse af ordren sendt oven i pakkeriets. Intet om penge
+ændres: hverken fragtmetode, fragt eller varelinjer. Det kommer med
+statusbeskederne, så Webhook Status skal være slået til.
+
+= En rettelse i butikken sender kun det, der er ændret =
+
+Retter du en ordre, der allerede er sendt, sendes kun det, du har ændret — en
+omdøbt vare sender varerne, en ny adresse sender adressen. Før blev hele ordren
+sendt ved hver gemning, oven i det pakkeriet havde rettet.
+
+Åbne ordrer fra 1.5.2 sendes ikke igen, bare fordi pluginet er opdateret, og
+heller ikke, når de får et tillæg. De sendes først, når der faktisk ændres
+noget på dem. Ordrer sendt af en version før 1.5.2 sendes hele én gang, første
+gang de gemmes.
+
+Afviser Økoskabet en rettelse, står det nu på ordren, med Økoskabets egen
+begrundelse. Før stod det kun i en logfil.
+
+= Webhooken finder ordren på ordrenummeret =
+
+Statusbeskeder fra Økoskabet fandt ordren på dens interne id. I en butik med
+et plugin til ordrenumre er nummer og id forskellige, og beskeden fandt ingen
+ordre — eller en forkert. Nu bruges den reference, ordren blev sendt under.
+Kun ordrer, som pluginet selv har sendt, kan findes på den måde, og passer
+referencen på to ordrer, røres ingen af dem.
+
+= En ordre uden leveringsdato forsvinder ikke længere =
+
+En ordre med en af Økoskabets fragtmetoder, men uden leveringsdato, blev før
+droppet uden et ord. Nu sendes den og lander blandt Økoskabets ubehandlede
+forsendelser, hvor den kan få en dato, og ordren siger »uden leveringsdato«.
+
+= Chaufføren får altid et leveringssted =
+
+Har kunden hverken valgt et leveringssted eller skrevet en besked til
+chaufføren, sendes en hjemmelevering nu med leveringsstedet »In front of the
+front door« (foran hoveddøren). Før kom den uden, fx når kassens vælger ikke
+blev vist.
+
+= Varens oplysninger følger med ordren =
+
+Tags, billede, kategorier og varens egenskaber — fx producent og
+oprindelsesland — sendes nu med hver ordrelinje, så pakkeriet har dem, selv når
+Økoskabet ikke kan nå ind til butikken. Af egenskaberne kommer kun dem med, der
+vises på varesiden.
+Linjebeløb sendes kun, når Økoskabet beder om dem (butikker, der bruger tilbud
+i Track&Trace).
+
+= Kontakt fra Økoskabet =
+
+Indstillingerne viser under **Kontakt fra Økoskabet**, hvornår Økoskabet
+sidst nåede ind til butikken med en statusbesked og et vareopslag. Det tælles
+fra opdateringen, så lige bagefter står der »aldrig«, indtil den første besked
+er kommet. Bliver det ved at stå der, står en firewall eller et
+sikkerhedsplugin oftest i vejen. Det står der også, hvis Webhook Status er
+slået fra, eller webhookens secret ikke passer.
+
+= Mindre rettelser =
+
+- Fluebenet **Webhook Status** kan nu slås fra. Før viste siden det som slået
+  til, også når det var slået fra, og næste gemning slog det til igen.
+- Skiftet mellem Normal bestilling og Forudbestilling tømmer ikke længere de
+  felter, kunden har udfyldt, og knapperne lægger sig under hinanden, før
+  teksten løber ud over dem på en telefon.
+- Kommer Økoskabets besked om at afslutte en ordre, før betalingen er hævet,
+  afsluttes ordren nu, når pengene hæves. Før blev den stående i Behandler.
+- Ændres en merchants identifikator (slug), flyttes alle dens ordrer med. I en
+  butik med over 200 ordrer blev nogle før efterladt med den gamle, og deres
+  statusbeskeder blev afvist.
+- Svarer Økoskabet, at en ordre allerede er modtaget, markeres den ikke som
+  mislykket, og kunden ser ingen fejl i kassen.
+- Offentlige ruter i kassen er strammet op (postnummer og adresse kodes, kun
+  udgivne varer navngives).
+
 = Kun ordrer med vores fragt sendes til Økoskabet =
 
 En ordre, hvor kunden først valgte Økoskabet og så skiftede til butikkens egen
@@ -18,32 +129,35 @@ I en kasse, der først viser fragtmetoderne, når kunden har skrevet en adresse,
 stod felterne Afhentningssted, Leveringssted, Besked til chaufføren og
 Forudbestilling synlige, indtil adressen var skrevet. De skjules nu altid.
 
-= Address suggestions at checkout =
+= Adresseforslag i kassen =
 
-While a customer types their street address at checkout, the plugin can now
-suggest addresses from the Danish address register. Choosing one fills in the
-street and house number, floor and door, postcode and city, so fewer parcels
-end up at an address Økoskabet cannot find.
+Mens kunden skriver sin adresse i kassen, kan pluginet nu foreslå adresser fra
+det danske adresseregister. Vælger kunden en, udfyldes vej og husnummer, etage
+og dør, postnummer og by, så færre pakker ender på en adresse, Økoskabet ikke
+kan finde.
 
-When the chosen address is a building with flats, the customer is offered a
-second list — "Vælg lejlighed" — with an option for no flat at all. The floor
-and door go in the second address line, or after a comma on the first line when
-the checkout has no second line. Delivery dates and Økoskabe are updated
-straight away, since they depend on the postcode.
+Er den valgte adresse en ejendom med lejligheder, får kunden en liste mere,
+»Vælg lejlighed«, med valget »Ingen lejlighed / hele huset«. Etage og dør
+skrives i anden adresselinje, eller efter et komma på første linje, når kassen
+ikke har nogen anden linje. Leveringsdatoer og Økoskabe opdateres med det samme,
+fordi de afhænger af postnummeret.
 
-It is off until you turn it on: **Address suggestions at checkout** in the
-plugin settings. The suggestions are fetched through your own shop with your
-API key, which never reaches the customer's browser. A customer who ignores
-them checks out exactly as before, and if the address lookup is unavailable the
-checkout simply shows no suggestions. Works in the classic checkout, not the
-block checkout.
+Mens der ventes på forslagene, står der »Søger…«. Sender Økoskabet gader med,
+før husnummeret er skrevet, står de i listen med »…« efter. Vælger kunden en
+gade, udfyldes vejnavn, postnummer og by, og kunden skriver selv husnummeret.
+
+Det er slået fra, indtil du slår det til: **Adresseforslag i kassen** i
+pluginets indstillinger. Forslagene hentes gennem din egen butik med din
+API-nøgle, som aldrig når ud til kundens browser. En kunde, der ser bort fra
+dem, handler præcis som før, og kan adresseopslaget ikke svare, viser kassen
+bare ingen forslag. Virker i den klassiske kasse, ikke i blokkassen.
 
 = Et tillæg, der ikke når med, sættes på hold =
 
 Et tillæg, der bliver betalt, efter at leveringen er lukket — typisk en
-bankoverførsel, der markeres betalt dage senere — stod før i Behandler med en
-note. Det så ud som enhver anden ordre på vej, men varerne kom aldrig med. Nu
-sættes ordren på hold, og noten siger hvorfor. Butikken bestemmer selv: sæt den
+bankoverførsel, der markeres betalt dage senere — kan ikke komme med. Så sættes
+ordren på hold, så den ikke ligner enhver anden ordre på vej, og noten siger
+hvorfor. Butikken bestemmer selv: sæt den
 til Behandler for at prøve igen, eller send eller refundér varerne på anden
 vis. Det samme gælder, når Økoskabet afviser varerne, eller den første ordre
 ikke kan læses.
