@@ -240,7 +240,7 @@ msgid ""
 "placed\". A customer who picks one and writes the earlier order's number at "
 "checkout has the goods put on that order's delivery with Økoskabet. "
 "Økoskabet's own shipping methods always work this way and need not be "
-"ticked."
+"ticked. Only when \"Ask about additions to an earlier order\" is on."
 msgstr ""
 
 #: backend/views/settings.php:202

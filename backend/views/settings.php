@@ -226,7 +226,7 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 	$cmb->add_field(
 		array(
 			'name'       => __('Shipping methods for an add-on to an earlier order', O_TEXTDOMAIN),
-			'desc'       => __('Your own shipping methods that mean "add this to an order I have already placed". A customer who picks one and writes the earlier order\'s number at checkout has the goods put on that order\'s delivery with Økoskabet. Økoskabet\'s own shipping methods always work this way and need not be ticked.', O_TEXTDOMAIN),
+			'desc'       => __('Your own shipping methods that mean "add this to an order I have already placed". A customer who picks one and writes the earlier order\'s number at checkout has the goods put on that order\'s delivery with Økoskabet. Økoskabet\'s own shipping methods always work this way and need not be ticked. Only when "Ask about additions to an earlier order" is on.', O_TEXTDOMAIN),
 			'id'         => '_addon_shipping_methods',
 			'type'       => 'multicheck',
 			'options_cb' => 'oko_all_shipping_method_choices',

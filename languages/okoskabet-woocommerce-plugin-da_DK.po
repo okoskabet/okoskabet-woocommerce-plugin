@@ -1239,8 +1239,8 @@ msgstr "Fragtmetoder der vises i deres egen række under Forsendelse i kassen, f
 msgid "Shipping methods for an add-on to an earlier order"
 msgstr "Fragtmetoder til tillæg til en tidligere ordre"
 
-msgid "Your own shipping methods that mean \"add this to an order I have already placed\". A customer who picks one and writes the earlier order's number at checkout has the goods put on that order's delivery with Økoskabet. Økoskabet's own shipping methods always work this way and need not be ticked."
-msgstr "Dine egne fragtmetoder, der betyder »læg dette til en ordre, jeg allerede har bestilt«. En kunde, der vælger en af dem og skriver den tidligere ordres nummer i kassen, får varerne lagt på den ordres levering hos Økoskabet. Økoskabets egne fragtmetoder virker altid sådan og skal ikke krydses af."
+msgid "Your own shipping methods that mean \"add this to an order I have already placed\". A customer who picks one and writes the earlier order's number at checkout has the goods put on that order's delivery with Økoskabet. Økoskabet's own shipping methods always work this way and need not be ticked. Only when \"Ask about additions to an earlier order\" is on."
+msgstr "Jeres egne fragtmetoder, der betyder »læg dette til en ordre, jeg allerede har bestilt«. En kunde, der vælger en af dem og skriver den tidligere ordres nummer i kassen, får varerne lagt på den ordres levering hos Økoskabet. Økoskabets egne fragtmetoder virker altid sådan og skal ikke krydses af. Gælder kun, når »Spørg om tillæg til en tidligere ordre« er slået til."
 
 msgid "Heading of that row"
 msgstr "Overskrift på rækken"
