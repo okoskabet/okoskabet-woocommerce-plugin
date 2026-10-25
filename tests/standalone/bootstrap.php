@@ -668,3 +668,21 @@ function oko_test_next_weekday( int $weekday ): string {
 	}
 	return $dt->format( 'Y-m-d' );
 }
+
+/**
+ * The first date at least this many days from today that falls on the given
+ * weekday (0=Sun).
+ *
+ * For a far-off day in a shop that also has weekday rules. "Today plus 80" is
+ * a different weekday every day the suite runs, so once a week it lands on the
+ * day a weekday rule allows, and the test quietly runs a different basket from
+ * the one it describes. Pinning the weekday makes the fixture say the same
+ * thing on every day of the week.
+ */
+function oko_test_date_on_weekday( int $days_from_today, int $weekday ): string {
+	$dt = new DateTimeImmutable( oko_test_date( $days_from_today ), wp_timezone() );
+	while ( (int) $dt->format( 'w' ) !== $weekday ) {
+		$dt = $dt->modify( '+1 day' );
+	}
+	return $dt->format( 'Y-m-d' );
+}
