@@ -558,16 +558,25 @@ const OKO_SPLIT_PAK_CHOI   = 213;
  * day, so nothing is wrong. Press Forudbestilling and only the ice has a day —
  * which is the case the checkout used to answer with an empty page and a fee.
  *
+ * The pre-order day is a Thursday, as 10 December 2026 is. It must not be a
+ * Wednesday: Pak Choi travels on Wednesdays and is on no "cannot be
+ * pre-ordered" list, so on a Wednesday it may go with the ice, the basket
+ * shares a day, and there is nothing to split. "Today plus 80" was that
+ * Wednesday whenever the suite ran on a Sunday, and fourteen tests went red
+ * every Sunday from 11 October. Pass a weekday to build that basket on purpose.
+ *
+ * @param int   $pre_order_weekday 0=Sun..6=Sat.
+ * @param array $exceptions        Merged over the shop's exception settings.
  * @return array{pre_order_day:string, normal_days:string[]}
  */
-function oko_split_pre_order_shop(): array {
-	$december = oko_test_date( 80 );
+function oko_split_pre_order_shop( int $pre_order_weekday = 4, array $exceptions = array() ): array {
+	$december = oko_test_date_on_weekday( 80, $pre_order_weekday );
 
 	oko_test_add_product( OKO_SPLIT_CORNFLAKES, 'Cornflakes', array() );
 	oko_test_add_product( OKO_SPLIT_ICE, 'Nougat ispinde', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_add_product( OKO_SPLIT_PAK_CHOI, 'Pak Choi', array( OKO_SPLIT_CAT_WED ) );
 
-	oko_test_set_exceptions( array(
+	oko_test_set_exceptions( array_merge( array(
 		// The ice is the only thing that can be pre-ordered, for one day — and
 		// it still sells on the normal days, which is what a from/until rule
 		// marked as a pre-order says. ("Delivery only on a specific day" would
@@ -581,7 +590,7 @@ function oko_split_pre_order_shop(): array {
 		'weekdays'         => array(
 			3 => array( 'enabled' => true, 'flip' => false, 'categories' => array( OKO_SPLIT_CAT_WED ), 'tags' => array() ),
 		),
-	) );
+	), $exceptions ) );
 
 	$normal_days = array(
 		oko_test_weekday_next_week( 2 ),
@@ -902,7 +911,11 @@ it( 'never puts up "take items out" over a panel with nothing in it', function (
 	// so it appeared over an empty panel: the customer pressed it, had nothing
 	// to choose, pressed "remove the items and continue", and was told to pick
 	// one of the options first. Forever.
-	$december = oko_test_date( 40 );
+	//
+	// A Thursday, never a Wednesday: on a Wednesday the vegetables would have
+	// a day after all ("today plus 40" was one whenever the suite ran on a
+	// Friday), and the test would describe a basket it was not building.
+	$december = oko_test_date_on_weekday( 40, 4 );
 
 	oko_test_add_product( OKO_SPLIT_ICE, 'Juleand', array( OKO_SPLIT_CAT_ICE ) );
 	oko_test_add_product( OKO_SPLIT_PAK_CHOI, 'Guleroedder', array( OKO_SPLIT_CAT_WED ) );
@@ -923,6 +936,17 @@ it( 'never puts up "take items out" over a panel with nothing in it', function (
 	oko_test_set_delivery_days( array( oko_test_weekday_next_week( 2 ), $december ) );
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_ICE, 'b' => OKO_SPLIT_PAK_CHOI ) );
 	oko_test_set_pre_order( false );
+
+	// The basket this test is about, checked rather than assumed: the
+	// assertions below hold for other baskets too, so they cannot notice.
+	$exceptions = new \okoskabet_woocommerce_plugin\Integrations\Delivery_Exceptions();
+	foreach ( array( false, true ) as $pre_order ) {
+		assert_same(
+			array(),
+			$exceptions->filter_dates_for_cart( oko_test_delivery_days(), array( OKO_SPLIT_PAK_CHOI ), $pre_order ),
+			'the vegetables have no day at all'
+		);
+	}
 
 	ob_start();
 	oko_split()->maybe_render_banner();
@@ -1107,11 +1131,35 @@ it( 'still splits a basket holding something that must never be held', function 
 	// empties the basket's answer, and then the lines are asked one by one as
 	// before. The rule that fresh produce is never saved for later is what the
 	// splitting is for, and it has to survive the change above.
-	oko_split_pre_order_shop();
+	//
+	// The pre-order day is a Wednesday, Pak Choi's own day, so the list is the
+	// only thing that can keep it out. On any other day its weekday rule does
+	// that by itself — which is how this test used to pass without the list
+	// being set at all.
+	oko_split_pre_order_shop( 3, array( 'no_pre_order_categories' => array( OKO_SPLIT_CAT_WED ) ) );
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_ICE, 'b' => OKO_SPLIT_PAK_CHOI ) );
 	oko_test_set_pre_order( true );
 
 	assert_same( 2, count( oko_split()->compute_split_groups() ), 'two deliveries' );
+} );
+
+it( 'lets a line with a weekday of its own travel with a pre-order that falls on it', function () {
+	// The basket fourteen tests built by accident every Sunday, when "today
+	// plus 80" was a Wednesday. Pak Choi travels on Wednesdays and is on no
+	// "cannot be pre-ordered" list. A weekday rule says which day goods can
+	// come, not whether they can be held — that is the list's job — so on a
+	// Wednesday pre-order day the whole basket goes together, and the date
+	// picker, asking about the same basket, offers that day too.
+	$shop = oko_split_pre_order_shop( 3 );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	assert_same( array(), oko_split()->compute_split_groups(), 'one delivery, not two' );
+
+	$groups = oko_split()->compute_delivery_groups();
+	assert_same( 1, count( $groups ), 'a single group' );
+	assert_same( $shop['pre_order_day'], $groups[0]['suggested_date'], 'held for the pre-order day' );
+	assert_same( array( 'Cornflakes', 'Nougat ispinde', 'Pak Choi' ), oko_split_names( $groups[0] ), 'all three travel together' );
 } );
 
 it( 'ignores a pre-order for a basket that has nothing to pre-order', function () {
