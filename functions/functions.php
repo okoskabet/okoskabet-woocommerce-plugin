@@ -2009,9 +2009,40 @@ function oko_posted_checkout_field(string ...$names): string
 	return '';
 }
 
-/** The earlier order's number as the checkout has it, in either shop's field. */
+/**
+ * Whether this shop takes additions to an earlier order at checkout.
+ *
+ * Off unless the shop turns it on: a field in every checkout that nobody asked
+ * for is a question the customer has to work out how to ignore. Off is off for
+ * both fields — ours is not drawn, and a shop's own `billing_order_id` is not
+ * read either, so a number typed there is the shop's business, exactly as it
+ * was before 1.5.3.
+ *
+ * Only the checkout asks this. An addition that was linked while it was on —
+ * the earlier order's id is written on it — keeps riding along, being taken
+ * off when cancelled and following its delivery, whatever the setting says
+ * later: its goods are already on that shipment.
+ *
+ * @return bool
+ */
+function oko_shop_takes_additions(): bool
+{
+	return ! empty(o_get_settings()['_ask_for_addition_order']);
+}
+
+/**
+ * The earlier order's number as the checkout has it, in either shop's field.
+ *
+ * Nothing when the shop does not take additions, which is what keeps every
+ * part of the checkout that follows from it — the free freight, the notice,
+ * the inherited delivery — switched off with it.
+ */
 function oko_addon_number_in_checkout(): string
 {
+	if (! oko_shop_takes_additions()) {
+		return '';
+	}
+
 	return oko_posted_checkout_field(...OKO_ADDON_FIELDS);
 }
 
@@ -3218,14 +3249,19 @@ function oko_checkout_starts_without_last_orders_choice($value, $input)
 		'billing_okoskabet_shed_id',
 		'billing_okoskabet_pickup_location_id',
 		'billing_okoskabet_pre_order',
-		// Which order an addition belongs to, in either shop's field. Left to
-		// come back, the next ordinary order opens with the last one's number
-		// still in it — and rides along with a delivery the customer never
-		// meant to add to, for no freight. Seen on Gaardmester's staging: a
-		// fresh checkout opened with 87893 already there.
-		'billing_order_id',
-		'billing_okoskabet_addon_order',
 	);
+	// Which order an addition belongs to, in either shop's field. Left to
+	// come back, the next ordinary order opens with the last one's number
+	// still in it — and rides along with a delivery the customer never
+	// meant to add to, for no freight. Seen on Gaardmester's staging: a
+	// fresh checkout opened with 87893 already there.
+	//
+	// Only while the shop takes additions. Otherwise a number in its own
+	// field rides along with nothing, and what WooCommerce remembers there
+	// is the shop's own affair, as it was before 1.5.3.
+	if (oko_shop_takes_additions()) {
+		$fresh_every_time = array_merge($fresh_every_time, OKO_ADDON_FIELDS);
+	}
 	// A pre-order the customer asked for on this page is not a leftover. The
 	// field has to say so, or the banner would render as a pre-order while the
 	// date picker beside it asked for ordinary days.
@@ -3315,8 +3351,10 @@ function custom_override_checkout_fields(array $fields): array
 
 	// Which order this one is an addition to. Gaardmester asks for it already,
 	// in a field of their own; this is for the shops that do not, so the
-	// question is asked the same way everywhere.
-	if (!isset($fields['billing']['billing_order_id'])) {
+	// question is asked the same way everywhere — in the shops that have
+	// turned additions on. Everywhere else neither field is touched.
+	$takes_additions = oko_shop_takes_additions();
+	if ($takes_additions && !isset($fields['billing']['billing_order_id'])) {
 		$fields['billing']['billing_okoskabet_addon_order'] = array(
 			'label'       => __('Adding to an earlier order? Write its order number here', O_TEXTDOMAIN),
 			'placeholder' => '',
@@ -3387,8 +3425,9 @@ function custom_override_checkout_fields(array $fields): array
 	// WooCommerce listens on `.update_totals_on_change input.input-text`, so
 	// the class belongs on the row around the field — measured in its own
 	// checkout.min.js. Without it a customer typed the order number, saw the
-	// full freight, and was charged the free one at submit.
-	foreach (OKO_ADDON_FIELDS as $field) {
+	// full freight, and was charged the free one at submit. Nothing to
+	// recalculate for in a shop that does not take additions.
+	foreach ($takes_additions ? OKO_ADDON_FIELDS : array() as $field) {
 		if (! isset($fields['billing'][$field])) {
 			continue;
 		}
@@ -4337,13 +4376,17 @@ add_action('woocommerce_checkout_order_processed', 'oko_link_addon_to_earlier_or
  * nothing — a typo, or an order from another shop — still leaves the note on
  * this order, because what the customer told us is worth keeping either way.
  *
+ * Not in a shop that does not take additions: a number in its own
+ * `billing_order_id` is then the shop's, and the notes would call an ordinary
+ * order an addition.
+ *
  * @param int       $order_id    The new order's id.
  * @param array     $posted_data Posted checkout data (unused).
  * @param \WC_Order $order       The new order.
  */
 function oko_link_addon_to_earlier_order(int $order_id, array $posted_data, $order): void
 {
-	if (! $order instanceof \WC_Order) {
+	if (! $order instanceof \WC_Order || ! oko_shop_takes_additions()) {
 		return;
 	}
 

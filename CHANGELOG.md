@@ -6,11 +6,13 @@ All notable changes to the Økoskabet WooCommerce Plugin will be documented in t
 
 = Tillægsordrer: læg flere varer på en levering, der allerede er bestilt =
 
-Kassen har fået et nyt felt, »Tillæg til en tidligere ordre? Skriv
-ordrenummeret her«. Det vises i alle butikkers kasse, og der er ingen
-indstilling til det. Har butikken allerede sit eget felt til det tidligere
-ordrenummer med feltnavnet `billing_order_id`, bruges det i stedet, og
-pluginets felt vises ikke.
+Kassen kan få et nyt felt, »Tillæg til en tidligere ordre? Skriv
+ordrenummeret her«. Det vises kun, når butikken slår den nye indstilling
+**Spørg om tillæg til en tidligere ordre** til i pluginets indstillinger. Den
+er slået fra. Har butikken allerede sit eget felt til det tidligere ordrenummer
+med feltnavnet `billing_order_id`, bruges det i stedet, og pluginets felt vises
+ikke — men også kun, når indstillingen er slået til. Slået fra læses ingen af
+de to felter, og butikkens eget felt virker, som det gjorde i 1.5.2.
 
 En kunde, der vil have mere med på en levering, de allerede har bestilt,
 skriver den første ordres nummer i feltet. Passer nummer og mailadresse, og kan
@@ -32,6 +34,10 @@ den, præcis som med Økoskabets egne metoder.
 Er leveringen lukket, eller passer nummeret ikke, siger kassen det, og ordren
 fortsætter som en almindelig ordre med normal fragt. Et tillæg, der først
 betales, når leveringen er lukket, sættes på hold (se nedenfor).
+
+Slås indstillingen fra igen, gælder det kun nye ordrer. Tillæg, der allerede
+er knyttet til en levering, sendes, tages af ved annullering og følger den første
+ordre som før.
 
 = Etage, lejlighed og dør i kassen =
 
