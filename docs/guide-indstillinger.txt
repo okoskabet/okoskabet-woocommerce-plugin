@@ -24,6 +24,7 @@ _hide_wc_order_comments
 _ask_for_floor
 _separate_shipping_methods
 _separate_shipping_label
+_addon_shipping_methods
 _address_autocomplete
 _webhook_secret
 _webhook_enabled

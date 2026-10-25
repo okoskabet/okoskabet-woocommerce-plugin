@@ -24,6 +24,11 @@ fortæller, at der er kommet mere. Annulleres tillægget, tages varerne af igen.
 Hæver eller afslutter Økoskabets statusbeskeder den første ordre, sker det
 samme med tillæggene.
 
+Har butikken sin egen fragtmetode til tillæg — fx en gratis »Tillæg til
+igangværende ordre« — kan den krydses af under **Fragtmetoder til tillæg til en
+tidligere ordre** i indstillingerne. Så kører tillægget med, når kunden vælger
+den, præcis som med Økoskabets egne metoder.
+
 Er leveringen lukket, eller passer nummeret ikke, siger kassen det, og ordren
 fortsætter som en almindelig ordre med normal fragt. Et tillæg, der først
 betales, når leveringen er lukket, sættes på hold (se nedenfor).
