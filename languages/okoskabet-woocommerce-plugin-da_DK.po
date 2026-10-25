@@ -1755,7 +1755,7 @@ msgid "Ask about additions to an earlier order"
 msgstr "Spørg om tillæg til en tidligere ordre"
 
 msgid "Adds the field \"Adding to an earlier order? Write its order number here\" at checkout. If the number and the email match an order whose delivery can still take more, the goods go on that delivery and Økoskabet's shipping costs 0 kr. If your checkout already has a field of its own named billing_order_id, that one is used instead of ours. Off: the plugin's field is not shown, and a field of your own named billing_order_id is not read."
-msgstr "Lægger feltet »Tillæg til en tidligere ordre? Skriv ordrenummeret her« i kassen. Passer nummer og mailadresse på en ordre, hvis levering stadig kan tage mere, lægges varerne på den levering, og Økoskabets fragt koster 0 kr. Har jeres kasse allerede sit eget felt med feltnavnet billing_order_id, bruges det i stedet for pluginets. Slået fra: pluginets felt vises ikke, og et felt i din kasse med navnet billing_order_id læses ikke."
+msgstr "Lægger feltet »Tillæg til en tidligere ordre? Skriv ordrenummeret her« i kassen. Passer nummer og mailadresse på en ordre, hvis levering stadig kan tage mere, lægges varerne på den levering, og Økoskabets fragt koster 0 kr. Har jeres kasse allerede sit eget felt med feltnavnet billing_order_id, bruges det i stedet for pluginets. Slået fra: pluginets felt vises ikke, og et felt i jeres kasse med navnet billing_order_id læses ikke."
 
 msgid "Flat, floor and door"
 msgstr "Lejlighed, etage og dør"
