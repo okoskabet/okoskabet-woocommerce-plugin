@@ -230,6 +230,19 @@ msgid ""
 "add-on to an earlier order."
 msgstr ""
 
+#: backend/views/settings.php:215
+msgid "Shipping methods for an add-on to an earlier order"
+msgstr ""
+
+#: backend/views/settings.php:216
+msgid ""
+"Your own shipping methods that mean \"add this to an order I have already "
+"placed\". A customer who picks one and writes the earlier order's number at "
+"checkout has the goods put on that order's delivery with Økoskabet. "
+"Økoskabet's own shipping methods always work this way and need not be "
+"ticked. Only when \"Ask about additions to an earlier order\" is on."
+msgstr ""
+
 #: backend/views/settings.php:202
 msgid "Heading of that row"
 msgstr ""
@@ -788,6 +801,14 @@ msgstr ""
 msgid ""
 "We cannot find that order number on your email address. This is ordered on "
 "its own, with its own delivery."
+msgstr ""
+
+msgid "That order can no longer take anything more, so this is not added to it."
+msgstr ""
+
+msgid ""
+"We cannot find that order number on your email address, so this is not added"
+" to an earlier order."
 msgstr ""
 
 #. translators: %s: the product's name.

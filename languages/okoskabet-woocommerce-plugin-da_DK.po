@@ -1236,6 +1236,12 @@ msgstr "Fragt i egen række"
 msgid "Shipping methods shown in their own row under Shipping at checkout, e.g. an add-on to an earlier order."
 msgstr "Fragtmetoder der vises i deres egen række under Forsendelse i kassen, fx tillæg til en tidligere ordre."
 
+msgid "Shipping methods for an add-on to an earlier order"
+msgstr "Fragtmetoder til tillæg til en tidligere ordre"
+
+msgid "Your own shipping methods that mean \"add this to an order I have already placed\". A customer who picks one and writes the earlier order's number at checkout has the goods put on that order's delivery with Økoskabet. Økoskabet's own shipping methods always work this way and need not be ticked. Only when \"Ask about additions to an earlier order\" is on."
+msgstr "Jeres egne fragtmetoder, der betyder »læg dette til en ordre, jeg allerede har bestilt«. En kunde, der vælger en af dem og skriver den tidligere ordres nummer i kassen, får varerne lagt på den ordres levering hos Økoskabet. Økoskabets egne fragtmetoder virker altid sådan og skal ikke krydses af. Gælder kun, når »Spørg om tillæg til en tidligere ordre« er slået til."
+
 msgid "Heading of that row"
 msgstr "Overskrift på rækken"
 
@@ -1798,6 +1804,12 @@ msgstr "TILLÆG: ordre %s er annulleret. Dens varer er taget af listen."
 
 msgid "That order can no longer take anything more. This is ordered on its own, with its own delivery."
 msgstr "Den ordre kan ikke tage imod mere. Dette bestilles for sig, med sin egen levering."
+
+msgid "That order can no longer take anything more, so this is not added to it."
+msgstr "Den ordre kan ikke tage imod mere, så dette lægges ikke til den."
+
+msgid "We cannot find that order number on your email address, so this is not added to an earlier order."
+msgstr "Vi kan ikke finde det ordrenummer på din mailadresse, så dette lægges ikke til en tidligere ordre."
 
 msgid "Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order."
 msgstr "Ordre %s kunne ikke læses, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
