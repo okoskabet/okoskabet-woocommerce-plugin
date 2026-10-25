@@ -1131,11 +1131,35 @@ it( 'still splits a basket holding something that must never be held', function 
 	// empties the basket's answer, and then the lines are asked one by one as
 	// before. The rule that fresh produce is never saved for later is what the
 	// splitting is for, and it has to survive the change above.
-	oko_split_pre_order_shop();
+	//
+	// The pre-order day is a Wednesday, Pak Choi's own day, so the list is the
+	// only thing that can keep it out. On any other day its weekday rule does
+	// that by itself — which is how this test used to pass without the list
+	// being set at all.
+	oko_split_pre_order_shop( 3, array( 'no_pre_order_categories' => array( OKO_SPLIT_CAT_WED ) ) );
 	oko_test_set_cart( array( 'a' => OKO_SPLIT_ICE, 'b' => OKO_SPLIT_PAK_CHOI ) );
 	oko_test_set_pre_order( true );
 
 	assert_same( 2, count( oko_split()->compute_split_groups() ), 'two deliveries' );
+} );
+
+it( 'lets a line with a weekday of its own travel with a pre-order that falls on it', function () {
+	// The basket fourteen tests built by accident every Sunday, when "today
+	// plus 80" was a Wednesday. Pak Choi travels on Wednesdays and is on no
+	// "cannot be pre-ordered" list. A weekday rule says which day goods can
+	// come, not whether they can be held — that is the list's job — so on a
+	// Wednesday pre-order day the whole basket goes together, and the date
+	// picker, asking about the same basket, offers that day too.
+	$shop = oko_split_pre_order_shop( 3 );
+	oko_test_set_cart( array( 'a' => OKO_SPLIT_CORNFLAKES, 'b' => OKO_SPLIT_ICE, 'c' => OKO_SPLIT_PAK_CHOI ) );
+	oko_test_set_pre_order( true );
+
+	assert_same( array(), oko_split()->compute_split_groups(), 'one delivery, not two' );
+
+	$groups = oko_split()->compute_delivery_groups();
+	assert_same( 1, count( $groups ), 'a single group' );
+	assert_same( $shop['pre_order_day'], $groups[0]['suggested_date'], 'held for the pre-order day' );
+	assert_same( array( 'Cornflakes', 'Nougat ispinde', 'Pak Choi' ), oko_split_names( $groups[0] ), 'all three travel together' );
 } );
 
 it( 'ignores a pre-order for a basket that has nothing to pre-order', function () {
