@@ -1805,6 +1805,12 @@ msgstr "TILLÆG: ordre %s er annulleret. Dens varer er taget af listen."
 msgid "That order can no longer take anything more. This is ordered on its own, with its own delivery."
 msgstr "Den ordre kan ikke tage imod mere. Dette bestilles for sig, med sin egen levering."
 
+msgid "That order can no longer take anything more, so this is not added to it."
+msgstr "Den ordre kan ikke tage imod mere, så dette lægges ikke til den."
+
+msgid "We cannot find that order number on your email address, so this is not added to an earlier order."
+msgstr "Vi kan ikke finde det ordrenummer på din mailadresse, så dette lægges ikke til en tidligere ordre."
+
 msgid "Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order."
 msgstr "Ordre %s kunne ikke læses, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
 

@@ -2232,9 +2232,20 @@ function oko_addon_say_if_it_is_too_late(): void
 	// "Already sent" is not always true — the order may be cancelled, or past
 	// the day's cutoff — and a shop should not tell a customer something that
 	// is not so. What they need is the same either way: it cannot take more.
-	$message = $answer['reason'] === 'too_late'
-		? __('That order can no longer take anything more. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN)
-		: __('We cannot find that order number on your email address. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN);
+	//
+	// On the shop's own add-on method there is no delivery of its own to
+	// promise: the order goes to the shop on that method, at the shop's price
+	// for it, and nobody sends it anywhere. Only say what is so — it is not
+	// added — and leave what happens next to the shop.
+	if (oko_checkout_chose_addon_shipping()) {
+		$message = $answer['reason'] === 'too_late'
+			? __('That order can no longer take anything more, so this is not added to it.', O_TEXTDOMAIN)
+			: __('We cannot find that order number on your email address, so this is not added to an earlier order.', O_TEXTDOMAIN);
+	} else {
+		$message = $answer['reason'] === 'too_late'
+			? __('That order can no longer take anything more. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN)
+			: __('We cannot find that order number on your email address. This is ordered on its own, with its own delivery.', O_TEXTDOMAIN);
+	}
 
 	echo '<tr class="okoskabet-addon-notice"><td colspan="2">' . esc_html($message) . '</td></tr>';
 }
@@ -4085,19 +4096,50 @@ function oko_order_is_ours(\WC_Order $order): bool
  */
 function oko_order_chose_addon_shipping(\WC_Order $order): bool
 {
-	$addon_methods = (array) (o_get_settings()['_addon_shipping_methods'] ?? array());
-	if ($addon_methods === array()) {
-		return false;
-	}
-
 	foreach ($order->get_shipping_methods() as $shipping_method) {
-		$key = $shipping_method->get_method_id() . ':' . (int) $shipping_method->get_instance_id();
-		if (in_array($key, $addon_methods, true)) {
+		if (oko_is_addon_shipping_method($shipping_method->get_method_id(), (int) $shipping_method->get_instance_id())) {
 			return true;
 		}
 	}
 
 	return false;
+}
+
+/**
+ * Whether the rate chosen in the checkout is one of the shop's add-on methods.
+ *
+ * The same question as `oko_order_chose_addon_shipping()`, asked of the cart
+ * before there is an order, so the checkout can say the right thing.
+ */
+function oko_checkout_chose_addon_shipping(): bool
+{
+	if (! function_exists('WC') || ! WC()->session || ! WC()->shipping()) {
+		return false;
+	}
+
+	$packages = WC()->shipping()->get_packages();
+	foreach ((array) WC()->session->get('chosen_shipping_methods', array()) as $package_key => $rate_id) {
+		$rate = $packages[$package_key]['rates'][(string) $rate_id] ?? null;
+		if ($rate instanceof \WC_Shipping_Rate && oko_is_addon_shipping_method($rate->get_method_id(), (int) $rate->get_instance_id())) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Whether the shop has ticked this shipping method for add-ons.
+ *
+ * Keyed "method_id:instance_id", as `oko_all_shipping_method_choices()`
+ * offers it on the settings page. Nothing ticked — never saved, or saved
+ * with no ticks — matches nothing.
+ */
+function oko_is_addon_shipping_method(string $method_id, int $instance_id): bool
+{
+	$addon_methods = (array) (o_get_settings()['_addon_shipping_methods'] ?? array());
+
+	return in_array($method_id . ':' . $instance_id, $addon_methods, true);
 }
 
 /**

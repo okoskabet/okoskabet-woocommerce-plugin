@@ -222,7 +222,76 @@ class AddonOwnShippingMethodCheckoutTest extends \Codeception\TestCase\WPTestCas
 		);
 	}
 
+	// --- What the checkout says -------------------------------------------
+
+	/**
+	 * On the ticked method a refused number does not promise a delivery of
+	 * its own: there is none, the order goes to the shop on its 0 kr. method.
+	 * The checkout says only that it is not added.
+	 *
+	 * @dataProvider refusals
+	 */
+	public function test_on_the_ticked_method_the_checkout_promises_no_delivery(string $case, string $said, string $not_said): void
+	{
+		$notice = $this->notice_for($this->addon_pickup, $case);
+
+		$this->assertStringContainsString('okoskabet-addon-notice', $notice);
+		$this->assertStringContainsString(esc_html(__($said, O_TEXTDOMAIN)), $notice);
+		$this->assertStringNotContainsString(esc_html(__($not_said, O_TEXTDOMAIN)), $notice);
+	}
+
+	/**
+	 * On a method that is not ticked the order does go on its own, so the
+	 * checkout says so as before — and the case above is not passing because
+	 * the notice changed for everyone.
+	 *
+	 * @dataProvider refusals
+	 */
+	public function test_on_another_method_the_checkout_still_says_it_goes_on_its_own(string $case, string $not_said, string $said): void
+	{
+		$notice = $this->notice_for($this->other_pickup, $case);
+
+		$this->assertStringContainsString(esc_html(__($said, O_TEXTDOMAIN)), $notice);
+		$this->assertStringNotContainsString(esc_html(__($not_said, O_TEXTDOMAIN)), $notice);
+	}
+
+	/** @return array<string,array{string,string,string}> Case, on the ticked method, otherwise. */
+	public function refusals(): array
+	{
+		return array(
+			'unknown number' => array(
+				'unknown number',
+				'We cannot find that order number on your email address, so this is not added to an earlier order.',
+				'We cannot find that order number on your email address. This is ordered on its own, with its own delivery.',
+			),
+			'too late'       => array(
+				'too late',
+				'That order can no longer take anything more, so this is not added to it.',
+				'That order can no longer take anything more. This is ordered on its own, with its own delivery.',
+			),
+		);
+	}
+
 	// --- Helpers ------------------------------------------------------------
+
+	/** The checkout's notice, with one of the pickups chosen and a refused number. */
+	private function notice_for(int $instance_id, string $case): string
+	{
+		$number = $case === 'too late'
+			? (string) $this->a_booked_order('-1 day')->get_order_number()
+			: '70000001';
+
+		$this->a_basket();
+		WC()->session->set('chosen_shipping_methods', array('local_pickup:' . $instance_id));
+		$_POST['billing_order_id'] = $number;
+		$_POST['billing_email']    = 'kunde@example.com';
+		WC()->cart->calculate_totals();
+
+		ob_start();
+		oko_addon_say_if_it_is_too_late();
+
+		return (string) ob_get_clean();
+	}
 
 	private function assert_the_shops_own(\WC_Order $order, \WC_Order $parent): void
 	{

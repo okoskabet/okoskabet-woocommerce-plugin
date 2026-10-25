@@ -803,6 +803,14 @@ msgid ""
 "its own, with its own delivery."
 msgstr ""
 
+msgid "That order can no longer take anything more, so this is not added to it."
+msgstr ""
+
+msgid ""
+"We cannot find that order number on your email address, so this is not added"
+" to an earlier order."
+msgstr ""
+
 #. translators: %s: the product's name.
 #: functions/functions.php:2316
 #, php-format
