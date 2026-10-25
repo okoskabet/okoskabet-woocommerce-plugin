@@ -212,6 +212,14 @@ msgid ""
 "twice."
 msgstr ""
 
+#: backend/views/settings.php:195
+msgid "Ask about additions to an earlier order"
+msgstr ""
+
+#: backend/views/settings.php:196
+msgid "Adds the field \"Adding to an earlier order? Write its order number here\" at checkout. If the number and the email match an order whose delivery can still take more, the goods go on that delivery and Økoskabet's shipping costs 0 kr. If your checkout already has a field of its own named billing_order_id, that one is used instead of ours. Off: no field is shown, and neither field is read."
+msgstr ""
+
 #: backend/views/settings.php:192
 msgid "Shipping in a row of its own"
 msgstr ""

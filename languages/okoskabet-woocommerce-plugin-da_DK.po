@@ -1751,6 +1751,12 @@ msgstr "Spørg om lejlighed, etage og dør"
 msgid "Adds a second address line at checkout, for a shop whose checkout has none. Leave it off if your customers write the floor on the street line itself (\"Eksempelvej 12, 1. tv\") — the address register is given it there and reads it, and two places to write one thing means some customers write it twice."
 msgstr "Lægger en anden adresselinje i kassen, til en butik hvis kasse ingen har. Lad den være slukket, hvis jeres kunder skriver etagen på selve gadelinjen (\"Eksempelvej 12, 1. tv\") — adresseregistret får den dér og læser den, og to steder at skrive én ting betyder, at nogle kunder skriver den to gange."
 
+msgid "Ask about additions to an earlier order"
+msgstr "Spørg om tillæg til en tidligere ordre"
+
+msgid "Adds the field \"Adding to an earlier order? Write its order number here\" at checkout. If the number and the email match an order whose delivery can still take more, the goods go on that delivery and Økoskabet's shipping costs 0 kr. If your checkout already has a field of its own named billing_order_id, that one is used instead of ours. Off: no field is shown, and neither field is read."
+msgstr "Lægger feltet »Tillæg til en tidligere ordre? Skriv ordrenummeret her« i kassen. Passer nummer og mailadresse på en ordre, hvis levering stadig kan tage mere, lægges varerne på den levering, og Økoskabets fragt koster 0 kr. Har jeres kasse allerede sit eget felt med feltnavnet billing_order_id, bruges det i stedet for pluginets. Slået fra: intet felt vises, og ingen af de to felter læses."
+
 msgid "Flat, floor and door"
 msgstr "Lejlighed, etage og dør"
 
