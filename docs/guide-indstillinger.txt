@@ -22,6 +22,7 @@ _delivery_location_dropdown_label
 _delivery_location_note_label
 _hide_wc_order_comments
 _ask_for_floor
+_ask_for_addition_order
 _separate_shipping_methods
 _separate_shipping_label
 _address_autocomplete

@@ -11,6 +11,24 @@
  */
 class AddonOrderTest extends \Codeception\TestCase\WPTestCase
 {
+	/**
+	 * A shop that has turned additions on. Every test below is about how they
+	 * work once on; a shop that has not is AdditionSettingTest's.
+	 */
+	public function setUp(): void
+	{
+		parent::setUp();
+		add_filter('o_get_settings', static function ($settings) {
+			return array_merge((array) $settings, array('_ask_for_addition_order' => 'on'));
+		});
+	}
+
+	public function tearDown(): void
+	{
+		remove_all_filters('o_get_settings');
+		parent::tearDown();
+	}
+
 	/** The shop asks already: it keeps its own field. */
 	public function test_a_checkout_that_already_asks_is_left_alone(): void
 	{
