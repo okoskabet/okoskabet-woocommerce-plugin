@@ -74,6 +74,30 @@ class AdditionSettingTest extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
+	 * As the settings page stores it: CMB2 writes "on" for a ticked box, and
+	 * nothing — or an empty value, from an older save — for one that is not.
+	 * Read from the option itself, not through the filter the other tests use.
+	 */
+	public function test_off_unless_the_stored_setting_is_ticked(): void
+	{
+		$key    = O_TEXTDOMAIN . '-settings';
+		$stored = get_option($key, false);
+
+		try {
+			update_option($key, array('_api_key' => 'x'));
+			$this->assertFalse(oko_shop_takes_additions(), 'Never saved: off.');
+
+			update_option($key, array('_ask_for_addition_order' => ''));
+			$this->assertFalse(oko_shop_takes_additions(), 'Saved unticked: off.');
+
+			update_option($key, array('_ask_for_addition_order' => 'on'));
+			$this->assertTrue(oko_shop_takes_additions(), 'Ticked: on.');
+		} finally {
+			$stored === false ? delete_option($key) : update_option($key, $stored);
+		}
+	}
+
+	/**
 	 * A shop's own field is the shop's: not made to recalculate the freight,
 	 * and not emptied on the next visit — as it was before 1.5.3.
 	 */
