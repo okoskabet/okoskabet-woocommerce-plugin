@@ -32,7 +32,11 @@ class AddonOwnShippingMethodTest extends \Codeception\TestCase\WPTestCase
 			'time' => '23:59:00', 'days_before_delivery' => 1, 'time_zone' => 'Europe/Copenhagen',
 		)), 60);
 
+		// A shop that takes additions (#75) and has named its own method for
+		// them. Without the first, nothing in the checkout is read at all, and
+		// the two tests below that expect nothing would pass for that reason.
 		$settings = (array) get_option(O_TEXTDOMAIN . '-settings', array());
+		$settings['_ask_for_addition_order'] = 'on';
 		$settings['_addon_shipping_methods'] = array('local_pickup:45');
 		update_option(O_TEXTDOMAIN . '-settings', $settings);
 
@@ -101,6 +105,29 @@ class AddonOwnShippingMethodTest extends \Codeception\TestCase\WPTestCase
 		$addition = $this->an_addition_to($parent, 'local_pickup', 45);
 
 		$this->assertSame('', (string) $addition->get_meta(OKO_ADDON_PARENT_ID_META, true));
+	}
+
+	/**
+	 * A shop that does not take additions: its ticked method is not read
+	 * either, any more than its own billing_order_id is (#75).
+	 */
+	public function test_with_additions_off_the_ticked_method_does_nothing(): void
+	{
+		$settings = (array) get_option(O_TEXTDOMAIN . '-settings', array());
+		$settings['_ask_for_addition_order'] = '';
+		update_option(O_TEXTDOMAIN . '-settings', $settings);
+
+		$parent   = $this->a_booked_order();
+		$addition = $this->an_addition_to($parent, 'local_pickup', 45);
+
+		$this->assertSame('', (string) $addition->get_meta(OKO_ADDON_PARENT_ID_META, true));
+		$this->assertSame('', (string) $addition->get_meta('_billing_okoskabet_delivery_date', true));
+
+		$addition->set_status('processing');
+		$addition->save();
+
+		$this->assertSame(array(), $this->puts, 'Nothing written onto the earlier order\'s shipment.');
+		$this->assertSame(array(), oko_addition_ids(wc_get_order($parent->get_id())));
 	}
 
 	private function a_booked_order(): \WC_Order
