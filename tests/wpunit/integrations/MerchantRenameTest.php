@@ -57,6 +57,59 @@ class MerchantRenameTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertSame( array( $stuck ), $this->still_carrying( 'gammel' ), 'Only the stuck order keeps the old id.' );
 	}
 
+	/**
+	 * The renamed account is saved before its orders are.
+	 *
+	 * Sean's review of 1.5.3 (#77): every order the rename rewrites is saved,
+	 * and a save may resend the order. Rewritten before the config knew the
+	 * new id, the resend found no such account and fell back to the default
+	 * one — an open order booked again under the wrong account.
+	 */
+	public function test_the_new_id_is_known_when_the_orders_are_saved(): void {
+		Merchants::save_config( array(
+			'default_merchant_id' => 'standard',
+			'merchants'           => array(
+				'standard' => array( 'id' => 'standard', 'label' => 'Standard', 'api_key' => 'key-a' ),
+				'gammel'   => array( 'id' => 'gammel', 'label' => 'Gammel', 'api_key' => 'key-b' ),
+			),
+		) );
+		$this->orders_of( 'gammel', 1 );
+
+		$known_when_saved = array();
+		$record = static function ( $order ) use ( &$known_when_saved ) {
+			if ( $order->get_meta( Merchant_Router::ORDER_META_KEY, true ) === 'ny' ) {
+				$known_when_saved[] = isset( Merchants::get_config()['merchants']['ny'] );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $record );
+		add_filter( 'wp_redirect', array( $this, 'stop_at_the_redirect' ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$_POST['merchant'] = array( 'original_id' => 'gammel', 'id' => 'ny', 'label' => 'Ny', 'api_key' => 'key-b' );
+		$_POST['_wpnonce'] = wp_create_nonce( Merchants::ACTION_SAVE_MERCHANT );
+		$_REQUEST          = $_POST;
+
+		try {
+			( new \ReflectionClass( Merchants::class ) )->newInstanceWithoutConstructor()->handle_save_merchant();
+			$this->fail( 'The handler ends in a redirect.' );
+		} catch ( \RuntimeException $redirected ) {
+			$this->assertSame( 'redirect', $redirected->getMessage() );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $record );
+			remove_filter( 'wp_redirect', array( $this, 'stop_at_the_redirect' ) );
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+
+		$this->assertNotSame( array(), $known_when_saved, 'The order was rewritten.' );
+		$this->assertNotContains( false, $known_when_saved, 'An order was saved under an id the config did not know yet.' );
+	}
+
+	/** `redirect_back()` exits; a test cannot. */
+	public function stop_at_the_redirect(): void {
+		throw new \RuntimeException( 'redirect' );
+	}
+
 	/** @return int[] */
 	private function orders_of( string $merchant_id, int $count ): array {
 		$ids = array();

@@ -2956,6 +2956,13 @@ function oko_order_can_still_take_more($order, string $delivery_date): bool
 }
 
 /**
+ * Økoskabet's logistics cutoff, the evening before delivery: `config
+ * :okoskabet, :logistics, cutoff_at:` in delivery_backend. It is not published
+ * to the plugin, so it is repeated here — change both together.
+ */
+const OKO_LOGISTICS_CUTOFF = '21:30:00';
+
+/**
  * Whether the shop is still taking orders for a delivery day.
  *
  * `order_cutoff` is a time of day and a number of days before delivery. The
@@ -2963,31 +2970,45 @@ function oko_order_can_still_take_more($order, string $delivery_date): bool
  * Økoskabet's own time zone — which is the one that moves with daylight
  * saving, so the hour is read there rather than converted.
  *
- * A configuration we could not fetch, or one with no cutoff set, answers no:
- * this decides whether to promise free delivery, and a guess in the customer's
- * favour is a guess the packing room pays for.
+ * A configuration we could not fetch answers no: this decides whether to
+ * promise free delivery, and a guess in the customer's favour is a guess the
+ * packing room pays for. No number of days is none, as Økoskabet reads it.
  *
- * @param string               $delivery_date `Y-m-d`.
- * @param array<string,mixed>  $merchant      The merchant record.
+ * A shop with no cutoff time has no cutoff of its own, and is then held to the
+ * one Økoskabet holds every booking to: the logistics cutoff, at
+ * `OKO_LOGISTICS_CUTOFF` the day before delivery
+ * (`Okoskabet.DeliveryDate.after_cutoff?/3`). Later than that, a new order for
+ * the day is refused, and goods added to one already booked would reach a
+ * parcel packed and handed over the evening before.
+ *
+ * @param string                  $delivery_date `Y-m-d`.
+ * @param array<string,mixed>     $merchant      The merchant record.
+ * @param \DateTimeImmutable|null $now           The moment asked about; now.
  * @return bool
  */
-function oko_before_cutoff_for(string $delivery_date, array $merchant): bool
+function oko_before_cutoff_for(string $delivery_date, array $merchant, ?\DateTimeImmutable $now = null): bool
 {
 	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
 	$cutoff        = (array) ($configuration['order_cutoff'] ?? array());
 
-	$time = (string) ($cutoff['time'] ?? '');
-	$days = $cutoff['days_before_delivery'] ?? null;
-	if ($time === '' || $days === null) {
+	// No `order_cutoff` at all is a configuration we could not fetch.
+	if (! array_key_exists('order_cutoff', $configuration)) {
 		return false;
+	}
+
+	$time = (string) ($cutoff['time'] ?? '');
+	$days = (int) ($cutoff['days_before_delivery'] ?? 0);
+	if ($time === '') {
+		$time = OKO_LOGISTICS_CUTOFF;
+		$days = 1;
 	}
 
 	try {
 		$zone = new \DateTimeZone((string) ($cutoff['time_zone'] ?? 'Europe/Copenhagen'));
 		$last = new \DateTimeImmutable($delivery_date . ' ' . $time, $zone);
-		$last = $last->modify('-' . (int) $days . ' days');
+		$last = $last->modify('-' . $days . ' days');
 
-		return new \DateTimeImmutable('now', $zone) < $last;
+		return ($now ?? new \DateTimeImmutable('now', $zone)) < $last;
 	} catch (\Exception $e) {
 		return false;
 	}
@@ -4765,7 +4786,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			'shipping_postcode'  => $order->get_shipping_postcode(),
 		);
 
-		$address_moved = $lines !== $held;
+		$address_moved = oko_address_as_compared($lines) !== oko_address_as_compared($held);
 
 		if ($address_moved) {
 			$order->set_shipping_address_1($lines['shipping_address_1']);
@@ -4812,6 +4833,33 @@ function oko_address_on_one_line(\WC_Order $order): string
 }
 
 /**
+ * An address the way two of them are compared: the four fields read as one
+ * line, without case, full stops or commas.
+ *
+ * A customer writes "Eksempelvej 12, 1. tv" on the first line and leaves the
+ * second empty; Økoskabet gives back the street and the flat apart. Both are
+ * the same address, and a field-by-field comparison would rewrite the order
+ * and leave a note saying Økoskabet moved it, on every webhook about the
+ * delivery — a date moved by a day included.
+ *
+ * @param array<string,string> $lines The order's field name => value.
+ * @return string
+ */
+function oko_address_as_compared(array $lines): string
+{
+	$line = implode(' ', array(
+		$lines['shipping_address_1'] ?? '',
+		$lines['shipping_address_2'] ?? '',
+		$lines['shipping_postcode'] ?? '',
+		$lines['shipping_city'] ?? '',
+	));
+
+	$line = str_replace(array('.', ','), ' ', mb_strtolower($line));
+
+	return trim((string) preg_replace('/\s+/u', ' ', $line));
+}
+
+/**
  * Økoskabet's address, as the two lines WooCommerce keeps it in.
  *
  * The register holds a street, a house number and a unit apart; WooCommerce
@@ -4848,8 +4896,16 @@ function oko_delivery_address_lines(array $address): array
 		$street = trim($street . ', ' . $town);
 	}
 
+	// Økoskabet holds the floor as the register does, "1" or "st", and puts
+	// the full stop on only when it writes the address out ("1. tv"). So does
+	// this, or every customer's "1. tv" would read as moved to "1 tv".
+	$floor = $field('floor');
+	if ($floor !== '' && substr($floor, -1) !== '.') {
+		$floor .= '.';
+	}
+
 	$unit = trim(implode(' ', array_filter(array(
-		$field('floor'),
+		$floor,
 		$field('door'),
 	), static function (string $part): bool {
 		return $part !== '';

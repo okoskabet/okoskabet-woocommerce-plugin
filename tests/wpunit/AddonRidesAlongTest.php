@@ -11,6 +11,9 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 {
 	private const MERCHANT = 'default';
 
+	/** @var string[] The accounts a test gave a configuration of their own. */
+	private $configured = array();
+
 	public function setUp(): void
 	{
 		parent::setUp();
@@ -29,6 +32,9 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		remove_all_filters('pre_http_request');
 		remove_all_filters('o_get_settings');
 		delete_transient(o_configuration_transient_key(self::MERCHANT));
+		foreach ($this->configured as $id) {
+			delete_transient(o_configuration_transient_key($id));
+		}
 		parent::tearDown();
 	}
 
@@ -67,20 +73,73 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
-	 * A shop with no cutoff published is a no for the same reason.
+	 * A configuration that came back without a cutoff at all is a no for the
+	 * same reason: that is what a failed fetch leaves behind.
 	 *
-	 * Asked of an account of its own: the answer for one account is memoised
-	 * for the rest of the request, so a second cutoff written over the first
-	 * would never be read.
+	 * Each case asks of an account of its own: the answer for one account is
+	 * memoised for the rest of the request, so a second cutoff written over
+	 * the first would never be read.
 	 */
-	public function test_no_published_cutoff_is_a_no(): void
+	public function test_a_configuration_without_a_cutoff_is_a_no(): void
 	{
-		$merchant = array('id' => 'konto-uden-cutoff', 'api_key' => 'test-key');
-		set_transient(o_configuration_transient_key($merchant['id']), array('order_cutoff' => array()), 60);
+		$this->assertFalse(oko_before_cutoff_for($this->days_ahead(5), $this->merchant_configured('konto-uden-svar', array())));
+	}
 
-		$this->assertFalse(oko_before_cutoff_for($this->days_ahead(5), $merchant));
+	/**
+	 * A shop with no cutoff time is held to Økoskabet's logistics cutoff.
+	 *
+	 * Sean's review of 1.5.3 (#77): Økoskabet publishes such a shop's
+	 * `order_cutoff.time` as null, and the plugin read the null as "never" —
+	 * additions were silently off for the shop. Økoskabet itself still refuses
+	 * a booking after the logistics cutoff the evening before, so that is
+	 * where the shop's additions stop too.
+	 */
+	public function test_no_cutoff_time_stops_at_the_logistics_cutoff(): void
+	{
+		$merchant = $this->merchant_configured('konto-uden-cutoff', array(
+			'order_cutoff' => array('time' => null, 'days_before_delivery' => null, 'time_zone' => 'Europe/Copenhagen'),
+		));
+		$today = new \DateTimeImmutable('today', new \DateTimeZone('Europe/Copenhagen'));
 
-		delete_transient(o_configuration_transient_key($merchant['id']));
+		$this->assertTrue(oko_before_cutoff_for($this->days_ahead(5), $merchant));
+		$this->assertFalse(oko_before_cutoff_for($today->format('Y-m-d'), $merchant), 'Not on the day itself.');
+	}
+
+	/** The logistics cutoff falls at its hour the evening before. */
+	public function test_the_logistics_cutoff_is_the_evening_before(): void
+	{
+		$zone     = new \DateTimeZone('Europe/Copenhagen');
+		$merchant = $this->merchant_configured('konto-uden-cutoff-aften', array(
+			'order_cutoff' => array('time' => null, 'days_before_delivery' => null, 'time_zone' => 'Europe/Copenhagen'),
+		));
+		$evening = new \DateTimeImmutable('2026-11-04 ' . OKO_LOGISTICS_CUTOFF, $zone);
+
+		$this->assertTrue(oko_before_cutoff_for('2026-11-05', $merchant, $evening->modify('-1 minute')));
+		$this->assertFalse(oko_before_cutoff_for('2026-11-05', $merchant, $evening->modify('+1 minute')));
+	}
+
+	/** A cutoff time with no number of days falls on the delivery day. */
+	public function test_no_days_before_delivery_is_the_day_itself(): void
+	{
+		$merchant = $this->merchant_configured('konto-uden-dage', array(
+			'order_cutoff' => array('time' => '00:00:00', 'days_before_delivery' => null, 'time_zone' => 'Europe/Copenhagen'),
+		));
+		$today = (new \DateTimeImmutable('today', new \DateTimeZone('Europe/Copenhagen')));
+
+		$this->assertTrue(oko_before_cutoff_for($today->modify('+1 day')->format('Y-m-d'), $merchant));
+		$this->assertFalse(oko_before_cutoff_for($today->format('Y-m-d'), $merchant), 'Midnight today has passed.');
+	}
+
+	/**
+	 * @param array<string,mixed> $configuration
+	 * @return array<string,string>
+	 */
+	private function merchant_configured(string $id, array $configuration): array
+	{
+		set_transient(o_configuration_transient_key($id), $configuration, 60);
+		$this->configured[] = $id;
+
+		return array('id' => $id, 'api_key' => 'test-key');
 	}
 
 	/**

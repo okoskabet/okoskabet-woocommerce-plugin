@@ -1274,11 +1274,22 @@ class Merchants extends Base {
 		}
 
 		// Editing existing merchant whose ID changed? Move the record.
-		if ( $original_id !== '' && $original_id !== $normalised['id'] ) {
+		$renamed = $original_id !== '' && $original_id !== $normalised['id'];
+		if ( $renamed ) {
 			unset( $config['merchants'][ $original_id ] );
 			if ( $config['default_merchant_id'] === $original_id ) {
 				$config['default_merchant_id'] = $normalised['id'];
 			}
+		}
+
+		$config['merchants'][ $normalised['id'] ] = $normalised;
+		self::save_config( $config );
+
+		// Saved first. Every order rewritten below is saved, and every save
+		// may resend the order: under an id the config does not know yet, the
+		// resend falls back to the default merchant and books the order on the
+		// wrong account.
+		if ( $renamed ) {
 			// Also rewrite any product meta that pointed at the old ID
 			// so per-product routing doesn't silently fall back to default.
 			$this->rewrite_product_meta_merchant( $original_id, $normalised['id'] );
@@ -1287,9 +1298,6 @@ class Merchants extends Base {
 			// check (HTTP 403) in OkoRest::handle_webhook.
 			$this->rewrite_order_meta_merchant( $original_id, $normalised['id'] );
 		}
-
-		$config['merchants'][ $normalised['id'] ] = $normalised;
-		self::save_config( $config );
 
 		$this->redirect_back( array( 'oko_merchants_saved' => '1' ) );
 	}
