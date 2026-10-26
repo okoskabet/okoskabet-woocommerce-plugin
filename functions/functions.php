@@ -2963,9 +2963,11 @@ function oko_order_can_still_take_more($order, string $delivery_date): bool
  * Økoskabet's own time zone — which is the one that moves with daylight
  * saving, so the hour is read there rather than converted.
  *
- * A configuration we could not fetch, or one with no cutoff set, answers no:
- * this decides whether to promise free delivery, and a guess in the customer's
- * favour is a guess the packing room pays for.
+ * A configuration we could not fetch answers no: this decides whether to
+ * promise free delivery, and a guess in the customer's favour is a guess the
+ * packing room pays for. A shop with no cutoff set is read the way Økoskabet
+ * reads it (`Okoskabet.Merchants.DeliveryDates`): no time is no cutoff, up to
+ * the delivery day itself, and no number of days is none.
  *
  * @param string               $delivery_date `Y-m-d`.
  * @param array<string,mixed>  $merchant      The merchant record.
@@ -2976,14 +2978,23 @@ function oko_before_cutoff_for(string $delivery_date, array $merchant): bool
 	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
 	$cutoff        = (array) ($configuration['order_cutoff'] ?? array());
 
-	$time = (string) ($cutoff['time'] ?? '');
-	$days = $cutoff['days_before_delivery'] ?? null;
-	if ($time === '' || $days === null) {
+	// No `order_cutoff` at all is a configuration we could not fetch.
+	if (! array_key_exists('order_cutoff', $configuration)) {
 		return false;
 	}
 
+	$time = (string) ($cutoff['time'] ?? '');
+	$days = (int) ($cutoff['days_before_delivery'] ?? 0);
+
 	try {
 		$zone = new \DateTimeZone((string) ($cutoff['time_zone'] ?? 'Europe/Copenhagen'));
+
+		// A published cutoff of `null` is no cutoff, as Økoskabet reads it: the
+		// delivery stays orderable up to the day itself.
+		if ($time === '') {
+			return new \DateTimeImmutable('today', $zone) <= new \DateTimeImmutable($delivery_date, $zone);
+		}
+
 		$last = new \DateTimeImmutable($delivery_date . ' ' . $time, $zone);
 		$last = $last->modify('-' . (int) $days . ' days');
 
@@ -4765,7 +4776,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			'shipping_postcode'  => $order->get_shipping_postcode(),
 		);
 
-		$address_moved = $lines !== $held;
+		$address_moved = oko_address_as_compared($lines) !== oko_address_as_compared($held);
 
 		if ($address_moved) {
 			$order->set_shipping_address_1($lines['shipping_address_1']);
@@ -4812,6 +4823,33 @@ function oko_address_on_one_line(\WC_Order $order): string
 }
 
 /**
+ * An address the way two of them are compared: the four fields read as one
+ * line, without case, full stops or commas.
+ *
+ * A customer writes "Eksempelvej 12, 1. tv" on the first line and leaves the
+ * second empty; Økoskabet gives back the street and the flat apart. Both are
+ * the same address, and a field-by-field comparison would rewrite the order
+ * and leave a note saying Økoskabet moved it, on every webhook about the
+ * delivery — a date moved by a day included.
+ *
+ * @param array<string,string> $lines The order's field name => value.
+ * @return string
+ */
+function oko_address_as_compared(array $lines): string
+{
+	$line = implode(' ', array(
+		$lines['shipping_address_1'] ?? '',
+		$lines['shipping_address_2'] ?? '',
+		$lines['shipping_postcode'] ?? '',
+		$lines['shipping_city'] ?? '',
+	));
+
+	$line = str_replace(array('.', ','), ' ', function_exists('mb_strtolower') ? mb_strtolower($line) : strtolower($line));
+
+	return trim((string) preg_replace('/\s+/u', ' ', $line));
+}
+
+/**
  * Økoskabet's address, as the two lines WooCommerce keeps it in.
  *
  * The register holds a street, a house number and a unit apart; WooCommerce
@@ -4848,8 +4886,16 @@ function oko_delivery_address_lines(array $address): array
 		$street = trim($street . ', ' . $town);
 	}
 
+	// Økoskabet holds the floor as the register does, "1" or "st", and puts
+	// the full stop on only when it writes the address out ("1. tv"). So does
+	// this, or every customer's "1. tv" would read as moved to "1 tv".
+	$floor = $field('floor');
+	if ($floor !== '' && substr($floor, -1) !== '.') {
+		$floor .= '.';
+	}
+
 	$unit = trim(implode(' ', array_filter(array(
-		$field('floor'),
+		$floor,
 		$field('door'),
 	), static function (string $part): bool {
 		return $part !== '';

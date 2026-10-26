@@ -58,10 +58,11 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	 */
 	public function test_the_address_is_composed_the_way_it_is_sent(): void
 	{
+		// The floor as the API sends it: the register's "1", no full stop.
 		$lines = oko_delivery_address_lines(array(
 			'street_name'  => 'Eksempelvej',
 			'house_number' => '12',
-			'floor'        => '1.',
+			'floor'        => '1',
 			'door'         => 'tv',
 			'city'         => 'Beder',
 			'postal_code'  => '8330',
@@ -71,6 +72,92 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame('1. tv', $lines['shipping_address_2']);
 		$this->assertSame('Beder', $lines['shipping_city']);
 		$this->assertSame('8330', $lines['shipping_postcode']);
+	}
+
+	/** A ground floor gets its full stop too, and one already there is kept. */
+	public function test_the_floor_is_written_with_one_full_stop(): void
+	{
+		$ground = oko_delivery_address_lines(array('floor' => 'st', 'door' => 'th'));
+		$dotted = oko_delivery_address_lines(array('floor' => '2.', 'door' => 'mf'));
+
+		$this->assertSame('st. th', $ground['shipping_address_2']);
+		$this->assertSame('2. mf', $dotted['shipping_address_2']);
+	}
+
+	/**
+	 * The customer's own way of writing the same flat is left alone.
+	 *
+	 * Sean's review of 1.5.3 (#77): the API sends the floor as "1", the order
+	 * holds "1. tv", and every webhook about the delivery — a date moved by a
+	 * day included — rewrote the address to "1 tv" and noted that Økoskabet
+	 * had moved it. The flat on the first line was split over two.
+	 *
+	 * @dataProvider the_same_flat_as_customers_write_it
+	 */
+	public function test_the_same_flat_written_differently_is_left_alone(string $line_1, string $line_2): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_shipping_address_1($line_1);
+		$order->set_shipping_address_2($line_2);
+		$order->set_shipping_city('Beder');
+		$order->set_shipping_postcode('8330');
+		$order->save();
+
+		$changed = oko_write_delivery_back($order, array(
+			'shipment_type' => 'home_delivery',
+			'delivery_date' => '2026-10-21',
+			'home_delivery' => array('address' => array(
+				'street_name'  => 'Eksempelvej',
+				'house_number' => '12',
+				'floor'        => '1',
+				'door'         => 'tv',
+				'city'         => 'Beder',
+				'postal_code'  => '8330',
+			)),
+		));
+
+		$this->assertSame(array('delivery date 2026-10-21'), $changed);
+		$this->assertSame($line_1, $order->get_shipping_address_1());
+		$this->assertSame($line_2, $order->get_shipping_address_2());
+	}
+
+	/** @return array<string,array{0:string,1:string}> */
+	public function the_same_flat_as_customers_write_it(): array
+	{
+		return array(
+			'on two lines'      => array('Eksempelvej 12', '1. tv'),
+			'on the first line' => array('Eksempelvej 12, 1. tv', ''),
+			'without the stop'  => array('Eksempelvej 12', '1 tv'),
+			'another case'      => array('eksempelvej 12', '1. TV'),
+		);
+	}
+
+	/** A different flat in the same building is still a move. */
+	public function test_another_flat_is_still_written_back(): void
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_shipping_address_1('Eksempelvej 12, 1. tv');
+		$order->set_shipping_address_2('');
+		$order->set_shipping_city('Beder');
+		$order->set_shipping_postcode('8330');
+		$order->save();
+
+		$changed = oko_write_delivery_back($order, array(
+			'shipment_type' => 'home_delivery',
+			'delivery_date' => '2026-10-20',
+			'home_delivery' => array('address' => array(
+				'street_name'  => 'Eksempelvej',
+				'house_number' => '12',
+				'floor'        => '2',
+				'door'         => 'tv',
+				'city'         => 'Beder',
+				'postal_code'  => '8330',
+			)),
+		));
+
+		$this->assertContains('delivery address Eksempelvej 12 2. tv, 8330 Beder', $changed);
+		$this->assertSame('Eksempelvej 12', $order->get_shipping_address_1());
+		$this->assertSame('2. tv', $order->get_shipping_address_2());
 	}
 
 	/**
@@ -159,7 +246,7 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 			'home_delivery' => array('address' => array(
 				'street_name'  => 'Eksempelvej',
 				'house_number' => '12',
-				'floor'        => '1.',
+				'floor'        => '1',
 				'door'         => 'tv',
 				'city'         => 'Beder',
 				'postal_code'  => '8330',

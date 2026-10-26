@@ -205,6 +205,26 @@ class PaymentCaptureTest extends \Codeception\TestCase\WPTestCase {
 		$this->assertStringContainsString( 'offline payment method', $notes[0]->content );
 	}
 
+	/**
+	 * Another plugin firing the cancelled action with the order id alone.
+	 *
+	 * Sean's review of 1.5.3 (#77): the handler required the order as well,
+	 * and `do_action( 'woocommerce_order_status_cancelled', $id )` ended in an
+	 * ArgumentCountError in the middle of that plugin's own work.
+	 *
+	 * @test
+	 */
+	public function a_cancellation_named_by_id_alone_still_forgets_the_waiting_delivery() {
+		$order = $this->order( 'quickpay', 'processing' );
+		$order->update_meta_data( Payment_Capture::COMPLETION_WAITING_META, 'delivered' );
+		$order->save();
+
+		$capture = ( new \ReflectionClass( Payment_Capture::class ) )->newInstanceWithoutConstructor();
+		$capture->forget_waiting_completion( $order->get_id() );
+
+		$this->assertSame( '', (string) wc_get_order( $order->get_id() )->get_meta( Payment_Capture::COMPLETION_WAITING_META, true ) );
+	}
+
 	private function order( string $method, string $status, string $transaction_id = '' ): \WC_Order {
 		$product = new \WC_Product_Simple();
 		$product->set_name( 'Kasse' );
