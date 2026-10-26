@@ -2956,6 +2956,13 @@ function oko_order_can_still_take_more($order, string $delivery_date): bool
 }
 
 /**
+ * Økoskabet's logistics cutoff, the evening before delivery: `config
+ * :okoskabet, :logistics, cutoff_at:` in delivery_backend. It is not published
+ * to the plugin, so it is repeated here — change both together.
+ */
+const OKO_LOGISTICS_CUTOFF = '21:30:00';
+
+/**
  * Whether the shop is still taking orders for a delivery day.
  *
  * `order_cutoff` is a time of day and a number of days before delivery. The
@@ -2965,15 +2972,21 @@ function oko_order_can_still_take_more($order, string $delivery_date): bool
  *
  * A configuration we could not fetch answers no: this decides whether to
  * promise free delivery, and a guess in the customer's favour is a guess the
- * packing room pays for. A shop with no cutoff set is read the way Økoskabet
- * reads it (`Okoskabet.Merchants.DeliveryDates`): no time is no cutoff, up to
- * the delivery day itself, and no number of days is none.
+ * packing room pays for. No number of days is none, as Økoskabet reads it.
  *
- * @param string               $delivery_date `Y-m-d`.
- * @param array<string,mixed>  $merchant      The merchant record.
+ * A shop with no cutoff time has no cutoff of its own, and is then held to the
+ * one Økoskabet holds every booking to: the logistics cutoff, at
+ * `OKO_LOGISTICS_CUTOFF` the day before delivery
+ * (`Okoskabet.DeliveryDate.after_cutoff?/3`). Later than that, a new order for
+ * the day is refused, and goods added to one already booked would reach a
+ * parcel packed and handed over the evening before.
+ *
+ * @param string                  $delivery_date `Y-m-d`.
+ * @param array<string,mixed>     $merchant      The merchant record.
+ * @param \DateTimeImmutable|null $now           The moment asked about; now.
  * @return bool
  */
-function oko_before_cutoff_for(string $delivery_date, array $merchant): bool
+function oko_before_cutoff_for(string $delivery_date, array $merchant, ?\DateTimeImmutable $now = null): bool
 {
 	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
 	$cutoff        = (array) ($configuration['order_cutoff'] ?? array());
@@ -2985,20 +2998,17 @@ function oko_before_cutoff_for(string $delivery_date, array $merchant): bool
 
 	$time = (string) ($cutoff['time'] ?? '');
 	$days = (int) ($cutoff['days_before_delivery'] ?? 0);
+	if ($time === '') {
+		$time = OKO_LOGISTICS_CUTOFF;
+		$days = 1;
+	}
 
 	try {
 		$zone = new \DateTimeZone((string) ($cutoff['time_zone'] ?? 'Europe/Copenhagen'));
-
-		// A published cutoff of `null` is no cutoff, as Økoskabet reads it: the
-		// delivery stays orderable up to the day itself.
-		if ($time === '') {
-			return new \DateTimeImmutable('today', $zone) <= new \DateTimeImmutable($delivery_date, $zone);
-		}
-
 		$last = new \DateTimeImmutable($delivery_date . ' ' . $time, $zone);
-		$last = $last->modify('-' . (int) $days . ' days');
+		$last = $last->modify('-' . $days . ' days');
 
-		return new \DateTimeImmutable('now', $zone) < $last;
+		return ($now ?? new \DateTimeImmutable('now', $zone)) < $last;
 	} catch (\Exception $e) {
 		return false;
 	}
@@ -4844,7 +4854,7 @@ function oko_address_as_compared(array $lines): string
 		$lines['shipping_city'] ?? '',
 	));
 
-	$line = str_replace(array('.', ','), ' ', function_exists('mb_strtolower') ? mb_strtolower($line) : strtolower($line));
+	$line = str_replace(array('.', ','), ' ', mb_strtolower($line));
 
 	return trim((string) preg_replace('/\s+/u', ' ', $line));
 }

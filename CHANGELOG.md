@@ -19,8 +19,9 @@ skriver den første ordres nummer i feltet. Passer nummer og mailadresse, og kan
 leveringen stadig nå at tage mere, koster Økoskabets fragt 0 kr., og varerne
 lægges på den levering, der findes. Butikkens egne fragtmetoder (fx GLS) koster
 det, de plejer, og en kunde, der vælger dem, får ikke varerne lagt på
-Økoskabets levering. Leveringen kan tage mere indtil butikkens bestillingsfrist;
-har butikken ingen frist i Økoskabets backoffice, til og med leveringsdagen.
+Økoskabets levering. Leveringen kan tage mere indtil butikkens bestillingsfrist.
+Har butikken ingen frist i Økoskabets backoffice, gælder Økoskabets egen frist,
+kl. 21.30 dagen før levering.
 
 Pakkeriet ser varerne nederst på listen som »TILLÆG — …«, og leveringens note
 fortæller, at der er kommet mere. Annulleres tillægget, tages varerne af igen.

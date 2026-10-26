@@ -11,6 +11,9 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 {
 	private const MERCHANT = 'default';
 
+	/** @var string[] The accounts a test gave a configuration of their own. */
+	private $configured = array();
+
 	public function setUp(): void
 	{
 		parent::setUp();
@@ -29,6 +32,9 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		remove_all_filters('pre_http_request');
 		remove_all_filters('o_get_settings');
 		delete_transient(o_configuration_transient_key(self::MERCHANT));
+		foreach ($this->configured as $id) {
+			delete_transient(o_configuration_transient_key($id));
+		}
 		parent::tearDown();
 	}
 
@@ -80,23 +86,36 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
-	 * A shop with no cutoff time has no cutoff, as Økoskabet reads it.
+	 * A shop with no cutoff time is held to Økoskabet's logistics cutoff.
 	 *
 	 * Sean's review of 1.5.3 (#77): Økoskabet publishes such a shop's
-	 * `order_cutoff.time` as null and keeps its days orderable up to the day
-	 * itself; the plugin read the same null as "never", and additions were
-	 * silently off for the shop.
+	 * `order_cutoff.time` as null, and the plugin read the null as "never" —
+	 * additions were silently off for the shop. Økoskabet itself still refuses
+	 * a booking after the logistics cutoff the evening before, so that is
+	 * where the shop's additions stop too.
 	 */
-	public function test_no_cutoff_time_is_no_cutoff(): void
+	public function test_no_cutoff_time_stops_at_the_logistics_cutoff(): void
 	{
 		$merchant = $this->merchant_configured('konto-uden-cutoff', array(
 			'order_cutoff' => array('time' => null, 'days_before_delivery' => null, 'time_zone' => 'Europe/Copenhagen'),
 		));
-		$today = (new \DateTimeImmutable('today', new \DateTimeZone('Europe/Copenhagen')));
+		$today = new \DateTimeImmutable('today', new \DateTimeZone('Europe/Copenhagen'));
 
 		$this->assertTrue(oko_before_cutoff_for($this->days_ahead(5), $merchant));
-		$this->assertTrue(oko_before_cutoff_for($today->format('Y-m-d'), $merchant), 'Up to the day itself.');
-		$this->assertFalse(oko_before_cutoff_for($today->modify('-1 day')->format('Y-m-d'), $merchant), 'Not after it.');
+		$this->assertFalse(oko_before_cutoff_for($today->format('Y-m-d'), $merchant), 'Not on the day itself.');
+	}
+
+	/** The logistics cutoff falls at its hour the evening before. */
+	public function test_the_logistics_cutoff_is_the_evening_before(): void
+	{
+		$zone     = new \DateTimeZone('Europe/Copenhagen');
+		$merchant = $this->merchant_configured('konto-uden-cutoff-aften', array(
+			'order_cutoff' => array('time' => null, 'days_before_delivery' => null, 'time_zone' => 'Europe/Copenhagen'),
+		));
+		$evening = new \DateTimeImmutable('2026-11-04 ' . OKO_LOGISTICS_CUTOFF, $zone);
+
+		$this->assertTrue(oko_before_cutoff_for('2026-11-05', $merchant, $evening->modify('-1 minute')));
+		$this->assertFalse(oko_before_cutoff_for('2026-11-05', $merchant, $evening->modify('+1 minute')));
 	}
 
 	/** A cutoff time with no number of days falls on the delivery day. */
@@ -111,10 +130,14 @@ class AddonRidesAlongTest extends \Codeception\TestCase\WPTestCase
 		$this->assertFalse(oko_before_cutoff_for($today->format('Y-m-d'), $merchant), 'Midnight today has passed.');
 	}
 
-	/** @return array<string,string> */
+	/**
+	 * @param array<string,mixed> $configuration
+	 * @return array<string,string>
+	 */
 	private function merchant_configured(string $id, array $configuration): array
 	{
 		set_transient(o_configuration_transient_key($id), $configuration, 60);
+		$this->configured[] = $id;
 
 		return array('id' => $id, 'api_key' => 'test-key');
 	}
