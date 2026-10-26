@@ -19,7 +19,8 @@ skriver den første ordres nummer i feltet. Passer nummer og mailadresse, og kan
 leveringen stadig nå at tage mere, koster Økoskabets fragt 0 kr., og varerne
 lægges på den levering, der findes. Butikkens egne fragtmetoder (fx GLS) koster
 det, de plejer, og en kunde, der vælger dem, får ikke varerne lagt på
-Økoskabets levering.
+Økoskabets levering. Leveringen kan tage mere indtil butikkens bestillingsfrist;
+har butikken ingen frist i Økoskabets backoffice, til og med leveringsdagen.
 
 Pakkeriet ser varerne nederst på listen som »TILLÆG — …«, og leveringens note
 fortæller, at der er kommet mere. Annulleres tillægget, tages varerne af igen.
@@ -58,7 +59,9 @@ tilbage til døren, ændrer datoen eller retter adressen eller modtagerens navn,
 skrives det nu på ordren i WooCommerce, med en note om, hvad der er ændret. Før
 blev butikkens næste rettelse af ordren sendt oven i pakkeriets. Intet om penge
 ændres: hverken fragtmetode, fragt eller varelinjer. Det kommer med
-statusbeskederne, så Webhook Status skal være slået til.
+statusbeskederne, så Webhook Status skal være slået til. Den samme adresse
+skrevet på en anden måde, fx »Eksempelvej 12, 1. tv« på første linje eller
+uden punktum efter etagen, regnes ikke som ændret og røres ikke.
 
 = En rettelse i butikken sender kun det, der er ændret =
 
@@ -124,7 +127,10 @@ slået fra, eller webhookens secret ikke passer.
   afsluttes ordren nu, når pengene hæves. Før blev den stående i Behandler.
 - Ændres en merchants identifikator (slug), flyttes alle dens ordrer med. I en
   butik med over 200 ordrer blev nogle før efterladt med den gamle, og deres
-  statusbeskeder blev afvist.
+  statusbeskeder blev afvist. Kontoen gemmes nu, før ordrerne flyttes, så en
+  ordre ikke sendes igen under standardkontoen undervejs.
+- Et andet plugin, der annullerer eller refunderer en ordre med ordre-id'et
+  alene, giver ikke længere en PHP-fejl.
 - Svarer Økoskabet, at en ordre allerede er modtaget, markeres den ikke som
   mislykket, og kunden ser ingen fejl i kassen.
 - Offentlige ruter i kassen er strammet op (postnummer og adresse kodes, kun
