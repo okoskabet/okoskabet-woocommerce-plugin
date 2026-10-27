@@ -4991,10 +4991,10 @@ function oko_delivery_address_lines(array $address): array
  * and written whole; the order gets a note naming what moved, so the shop can
  * see that somebody at Økoskabet changed it and what to.
  *
- * It does not send anything back. Writing the order is itself an edit, and the
- * resend would push Økoskabet's own change at Økoskabet — so the resend is
- * held off for this save, and the fingerprint is moved forward to what the
- * shipment now is. The next genuine edit in the shop is then a difference
+ * It does not send Økoskabet's change back. Writing the order is itself an
+ * edit, and the resend would push that change at Økoskabet — so the record of
+ * what Økoskabet holds is moved forward by what Økoskabet changed, and by
+ * nothing else. The next genuine edit in the shop is then a difference
  * against the corrected delivery rather than against the one it replaced,
  * which is the whole point: it is what stops a product rename from undoing
  * the packing room's work.
@@ -5035,6 +5035,28 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 		return array();
 	}
 
+	// The order as it stands and what Økoskabet held of it, read before the
+	// write-back changes the one they are both read from.
+	//
+	// An order with no record but a fingerprint that still matches gets the
+	// record the resend would have written for it. One whose fingerprint does
+	// not match has moved since it was sent, from something nobody knows; it
+	// gets none, and the save below sends it whole, as any save of it would —
+	// Økoskabet's change included, which is by then the order's own. An order
+	// with no fingerprint at all was never compared with anything, so nothing
+	// of the shop's is waiting to go, and the order as it stood is where its
+	// record starts.
+	$before = oko_shipment_payload($order, $merchant);
+	$held   = null;
+	if ($before !== null) {
+		$held = $order->get_meta(OKO_SENT_META, true);
+		if (! is_array($held)) {
+			$held = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true) === ''
+				? oko_comparable_payload($before)
+				: oko_sent_according_to_the_fingerprint($order, $before, $merchant);
+		}
+	}
+
 	$changed = oko_write_delivery_back($order, $shipment);
 	if ($changed === array()) {
 		// Nothing of the shop's own moved, so there is no note to write and
@@ -5043,11 +5065,14 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 		return array();
 	}
 
-	// What Økoskabet holds is now what we would send, written in the same
-	// breath as the change itself. The resend hook fires on this save, builds
-	// the payload, finds the fingerprint already matching, and stops — so
-	// Økoskabet's own correction is not pushed back at Økoskabet, and nothing
-	// has to be marked, filtered or saved a second time to arrange it.
+	// Økoskabet's change goes into the record of what it holds, written in
+	// the same breath as the change itself, and only that change. The resend
+	// hook fires on this save and compares the order with the record: what
+	// Økoskabet just changed is the same on both sides, so it is not pushed
+	// back at Økoskabet — while an edit of the shop's own that has not got
+	// through, a 5xx or a refused key left to retry, or a refusal held back,
+	// is still a difference. This used to write the whole order down, and
+	// those were marked as sent and never sent again.
 	//
 	// It replaces a "do not send" meta and a filter that read it. That worked,
 	// but only as long as the meta came off again: an order that could not
@@ -5055,9 +5080,9 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	// for good, with no note and no line in the log. Saying what was sent is
 	// the thing the resend already asks about; saying "not now" was a second
 	// mechanism for the same question.
-	$payload = oko_shipment_payload($order, $merchant);
-	if ($payload !== null) {
-		oko_remember_what_was_sent($order, $payload);
+	$after = oko_shipment_payload($order, $merchant);
+	if (is_array($held) && $after !== null) {
+		oko_remember_what_was_sent($order, oko_with_okoskabets_changes($held, $before, $after));
 	}
 
 	$order->save();
@@ -5069,6 +5094,49 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	));
 
 	return $changed;
+}
+
+/**
+ * The record of what Økoskabet holds, moved by what the write-back changed.
+ *
+ * What the write-back changed is told by the order's payload before and after
+ * it, and nothing else touches the order in between. A key that moved takes
+ * its new value, or goes, in the record; a key that did not keeps the
+ * record's, whatever the order says — that difference is the shop's, still
+ * on its way. The customer is followed field by field, as the resend sends
+ * it: a renamed recipient is Økoskabet's, and a new phone beside it is not.
+ *
+ * @param array<string,mixed> $held   What Økoskabet held before.
+ * @param array<string,mixed> $before The order's payload before the write-back.
+ * @param array<string,mixed> $after  And after it.
+ * @return array<string,mixed>
+ */
+function oko_with_okoskabets_changes(array $held, array $before, array $after): array
+{
+	$held   = oko_comparable_payload($held);
+	$before = oko_comparable_payload($before);
+	$after  = oko_comparable_payload($after);
+
+	foreach (array_keys($before + $after) as $key) {
+		if (array_key_exists($key, $before) && array_key_exists($key, $after) && $before[$key] === $after[$key]) {
+			continue;
+		}
+
+		if (! array_key_exists($key, $after)) {
+			unset($held[$key]);
+			continue;
+		}
+
+		if (in_array($key, OKO_NESTED_PAYLOAD_KEYS, true)
+			&& is_array($after[$key]) && is_array($before[$key] ?? null) && is_array($held[$key] ?? null)) {
+			$held[$key] = oko_with_okoskabets_changes($held[$key], $before[$key], $after[$key]);
+			continue;
+		}
+
+		$held[$key] = $after[$key];
+	}
+
+	return $held;
 }
 
 /**

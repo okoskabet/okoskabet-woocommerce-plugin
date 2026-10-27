@@ -23,12 +23,16 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	/** The status Økoskabet answers a PUT with. */
 	private $put_answer = 200;
 
+	/** @var array<string,mixed>|null The shipment a GET answers with, when a test says. */
+	private $shipment = null;
+
 	public function setUp(): void
 	{
 		parent::setUp();
 		$this->a_merchant_with_an_account();
 		$this->puts       = array();
 		$this->put_answer = 200;
+		$this->shipment   = null;
 
 		add_filter('pre_http_request', function ($preempt, $args, $url) {
 			if (($args['method'] ?? '') === 'PUT') {
@@ -40,7 +44,9 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 			// The shipment is still with the merchant, and the account's day
 			// is open — what an addition needs before it may ride along.
 			if (($args['method'] ?? 'GET') === 'GET' && strpos($url, '/api/v1/shipments/') !== false) {
-				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('shipment_reference' => 'x', 'status' => 'registered', 'notes' => '')));
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(
+					$this->shipment ?? array('shipment_reference' => 'x', 'status' => 'registered', 'notes' => '')
+				));
 			}
 			if (strpos($url, '/api/v1/configuration') !== false) {
 				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('order_cutoff' => array(
@@ -284,6 +290,65 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$order->save();
 
 		$this->assertSame(array('{"customer":{"phone":"+4599887766"}}'), $this->puts);
+	}
+
+	/**
+	 * Økoskabet moving the date of an untouched 1.5.2 order is not sent back,
+	 * and the order gets the record it would have had on its first save.
+	 */
+	public function test_okoskabets_move_of_an_untouched_1_5_2_order_is_not_sent_back(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2();
+
+		$this->okoskabet_moves_the_date_of($order);
+
+		$this->assertSame(array(), $this->puts);
+		$record = wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true);
+		$this->assertIsArray($record);
+		$this->assertSame('2026-12-24', $record['delivery_date'] ?? null);
+	}
+
+	/**
+	 * A 1.5.2 order that moved since it was sent is still sent whole when
+	 * Økoskabet moves its date. Nothing says what Økoskabet holds of it, so
+	 * the write-back cannot record that, and writing the order down instead
+	 * would mark the shop's move as sent: the address here never went.
+	 */
+	public function test_a_1_5_2_order_that_moved_is_still_sent_after_okoskabet_moves_its_date(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('sent_address_1' => 'Eksempelvej 10'));
+
+		$this->okoskabet_moves_the_date_of($order);
+
+		$this->assertCount(1, $this->puts);
+		$whole = json_decode($this->puts[0], true);
+		$this->assertSame('Eksempelvej 12', $whole['home_delivery']['address_1'] ?? null);
+		$this->assertSame('2026-12-24', $whole['delivery_date'] ?? null, "Økoskabet's own date, which is the order's now.");
+	}
+
+	/** Økoskabet's backoffice moves the delivery to Christmas Eve, and says so. */
+	private function okoskabet_moves_the_date_of(\WC_Order $order): void
+	{
+		$this->shipment = array(
+			'shipment_reference' => (string) $order->get_order_number(),
+			'shipment_type'      => 'home_delivery',
+			'delivery_date'      => '2026-12-24',
+			'home_delivery'      => array(
+				'recipient_name' => 'Pernille Hansen',
+				'address'        => array(
+					'street_name'  => 'Eksempelvej',
+					'house_number' => '12',
+					'city'         => 'Beder',
+					'postal_code'  => '8330',
+				),
+			),
+		);
+
+		$changed = oko_take_delivery_from_okoskabet(
+			(string) $order->get_order_number(),
+			array('id' => 'default', 'api_key' => 'test-key', 'staging' => true)
+		);
+		$this->assertSame(array('delivery date 2026-12-24'), $changed);
 	}
 
 	/** An order that did move since 1.5.2 sent it is still sent, whole, as before. */
