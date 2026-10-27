@@ -1793,6 +1793,9 @@ msgstr "Varerne er taget af ordre %s."
 msgid "The goods could not be taken off order %1$s (%2$s). They may still be on that delivery."
 msgstr "Varerne kunne ikke tages af ordre %1$s (%2$s). De kan stadig stå på den levering."
 
+msgid "The goods could not be taken off order %s: another addition to it was being written at the same moment. They may still be on that delivery."
+msgstr "Varerne kunne ikke tages af ordre %s: et andet tillæg til den blev skrevet i samme øjeblik. De kan stadig stå på den levering."
+
 msgid "ADDITION — %s"
 msgstr "TILLÆG — %s"
 
@@ -1801,6 +1804,9 @@ msgstr "TILLÆG: ordre %1$s er lagt til %2$s. Dens varer står nederst på liste
 
 msgid "ADDITION: order %s was cancelled. Its goods have been taken off the list."
 msgstr "TILLÆG: ordre %s er annulleret. Dens varer er taget af listen."
+
+msgid "ADDITION: order %s was refunded. Its goods have been taken off the list."
+msgstr "TILLÆG: ordre %s er refunderet. Dens varer er taget af listen."
 
 msgid "That order can no longer take anything more. This is ordered on its own, with its own delivery."
 msgstr "Den ordre kan ikke tage imod mere. Dette bestilles for sig, med sin egen levering."
@@ -1816,6 +1822,9 @@ msgstr "Ordre %s kunne ikke læses, så der blev ikke lagt noget til den. Økosk
 
 msgid "Order %s can no longer take anything more, so nothing was added to it. Økoskabet has not been told about this order."
 msgstr "Ordre %s kan ikke tage imod mere, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
+
+msgid "Another addition to order %s was being written at the same moment, so nothing was added to it. Økoskabet has not been told about this order."
+msgstr "Et andet tillæg til ordre %s blev skrevet i samme øjeblik, så der blev ikke lagt noget til den. Økoskabet har ikke fået besked om denne ordre."
 
 msgid "The order is on hold for the shop to decide: set it to processing to try again, or send or refund the goods some other way."
 msgstr "Ordren er sat på hold, så butikken kan bestemme: sæt den til Behandler for at prøve igen, eller send eller refundér varerne på anden vis."

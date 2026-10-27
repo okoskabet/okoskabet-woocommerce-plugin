@@ -23,12 +23,20 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	/** The status Økoskabet answers a PUT with. */
 	private $put_answer = 200;
 
+	/** @var array<string,mixed>|null The shipment a GET answers with, when a test says. */
+	private $shipment = null;
+
+	/** Whether Økoskabet asks this shop for the line totals. */
+	private $line_totals = false;
+
 	public function setUp(): void
 	{
 		parent::setUp();
 		$this->a_merchant_with_an_account();
 		$this->puts       = array();
-		$this->put_answer = 200;
+		$this->put_answer  = 200;
+		$this->shipment    = null;
+		$this->line_totals = false;
 
 		add_filter('pre_http_request', function ($preempt, $args, $url) {
 			if (($args['method'] ?? '') === 'PUT') {
@@ -40,12 +48,15 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 			// The shipment is still with the merchant, and the account's day
 			// is open — what an addition needs before it may ride along.
 			if (($args['method'] ?? 'GET') === 'GET' && strpos($url, '/api/v1/shipments/') !== false) {
-				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('shipment_reference' => 'x', 'status' => 'registered', 'notes' => '')));
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(
+					$this->shipment ?? array('shipment_reference' => 'x', 'status' => 'registered', 'notes' => '')
+				));
 			}
 			if (strpos($url, '/api/v1/configuration') !== false) {
-				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('order_cutoff' => array(
-					'time' => '23:59:00', 'days_before_delivery' => 1, 'time_zone' => 'Europe/Copenhagen',
-				))));
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(array(
+					'order_cutoff'     => array('time' => '23:59:00', 'days_before_delivery' => 1, 'time_zone' => 'Europe/Copenhagen'),
+					'send_line_totals' => $this->line_totals,
+				)));
 			}
 
 			return array('response' => array('code' => 200), 'body' => '{}');
@@ -55,6 +66,7 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	public function tearDown(): void
 	{
 		$this->forget_the_merchant();
+		delete_option(OKO_LINE_TOTALS_SAID_OPTION);
 		parent::tearDown();
 	}
 
@@ -110,8 +122,15 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
 		$sent = wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true);
 		$this->assertIsArray($sent, 'The order is upgraded to a record of what was sent.');
+		// Less what the catalogue says about the goods, which the record never
+		// keeps: a new picture on a product is not an edit of the order.
+		$written = array_map(static function (array $line): array {
+			unset($line['tags'], $line['properties'], $line['image']);
+
+			return $line;
+		}, json_decode($this->puts[0], true)['line_items']);
 		$this->assertSame(
-			json_decode($this->puts[0], true)['line_items'],
+			$written,
 			$sent['line_items'],
 			'The record holds what the addition just wrote, its goods included.'
 		);
@@ -235,6 +254,136 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		return 0;
 	}
 
+	/**
+	 * A flat 1.5.2 never sent reaches Økoskabet with the next edit.
+	 *
+	 * A checkout with no second shipping line keeps the flat in billing.
+	 * 1.5.2 sent the shipping line as typed, so the flat never went; today's
+	 * payload sends it from billing. The 1.5.2 fingerprint still matches such
+	 * an order, and writing today's payload down then recorded the flat as
+	 * sent — so no edit ever sent it.
+	 */
+	public function test_a_flat_1_5_2_never_sent_goes_with_the_next_edit(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('billing_address_2' => '2. tv'));
+		$this->assertSame('2. tv', oko_second_address_line($order), 'Today the flat is sent from billing.');
+
+		$order->update_status('completed');
+		$this->assertSame(array(), $this->puts, 'Nothing has moved since 1.5.2 sent it.');
+
+		$order = wc_get_order($order->get_id());
+		$order->set_billing_phone('+4599887766');
+		$order->save();
+
+		$this->assertCount(1, $this->puts);
+		$sent = json_decode($this->puts[0], true);
+		$this->assertSame(array('phone' => '+4599887766'), $sent['customer'] ?? null);
+		$this->assertSame('2. tv', $sent['home_delivery']['address_2'] ?? null, 'The flat goes now, with the rest of the address.');
+	}
+
+	/**
+	 * At a shop Økoskabet asks for line totals, an open 1.5.2 order is not
+	 * sent for them on its own.
+	 *
+	 * 1.5.2 never sent a total. Written down as missing, the second save of
+	 * every such order — even one that changed nothing — sent all its goods to
+	 * add them, and one Økoskabet had locked by then got a note about an edit
+	 * nobody made. The totals go with the goods the next time those change.
+	 */
+	public function test_a_1_5_2_order_at_a_shop_that_sends_line_totals_is_not_sent_for_them(): void
+	{
+		$this->line_totals = true;
+		$order             = $this->an_order_sent_by_1_5_2(array('dkk' => true));
+		$this->assertArrayHasKey(
+			'total',
+			oko_shipment_payload($order, oko_merchant_for_order($order))['line_items'][0],
+			'Today the line goes with its total.'
+		);
+
+		$order->update_status('completed');
+		$order = wc_get_order($order->get_id());
+		$order->update_meta_data('_another_plugins_meta', 'x');
+		$order->save();
+
+		$this->assertSame(array(), $this->puts);
+	}
+
+	/**
+	 * But a recipient with no last name is not sent again for the space 1.5.2
+	 * left after it. Økoskabet has the same name either way, and the address
+	 * would go with it, over whatever was corrected while the shop ran 1.5.2.
+	 */
+	public function test_a_recipient_with_no_last_name_is_not_sent_again_for_a_space(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('no_last_name' => true));
+		$order->update_status('completed');
+
+		$order = wc_get_order($order->get_id());
+		$order->set_billing_phone('+4599887766');
+		$order->save();
+
+		$this->assertSame(array('{"customer":{"phone":"+4599887766"}}'), $this->puts);
+	}
+
+	/**
+	 * Økoskabet moving the date of an untouched 1.5.2 order is not sent back,
+	 * and the order gets the record it would have had on its first save.
+	 */
+	public function test_okoskabets_move_of_an_untouched_1_5_2_order_is_not_sent_back(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2();
+
+		$this->okoskabet_moves_the_date_of($order);
+
+		$this->assertSame(array(), $this->puts);
+		$record = wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true);
+		$this->assertIsArray($record);
+		$this->assertSame('2026-12-24', $record['delivery_date'] ?? null);
+	}
+
+	/**
+	 * A 1.5.2 order that moved since it was sent is still sent whole when
+	 * Økoskabet moves its date. Nothing says what Økoskabet holds of it, so
+	 * the write-back cannot record that, and writing the order down instead
+	 * would mark the shop's move as sent: the address here never went.
+	 */
+	public function test_a_1_5_2_order_that_moved_is_still_sent_after_okoskabet_moves_its_date(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('sent_address_1' => 'Eksempelvej 10'));
+
+		$this->okoskabet_moves_the_date_of($order);
+
+		$this->assertCount(1, $this->puts);
+		$whole = json_decode($this->puts[0], true);
+		$this->assertSame('Eksempelvej 12', $whole['home_delivery']['address_1'] ?? null);
+		$this->assertSame('2026-12-24', $whole['delivery_date'] ?? null, "Økoskabet's own date, which is the order's now.");
+	}
+
+	/** Økoskabet's backoffice moves the delivery to Christmas Eve, and says so. */
+	private function okoskabet_moves_the_date_of(\WC_Order $order): void
+	{
+		$this->shipment = array(
+			'shipment_reference' => (string) $order->get_order_number(),
+			'shipment_type'      => 'home_delivery',
+			'delivery_date'      => '2026-12-24',
+			'home_delivery'      => array(
+				'recipient_name' => 'Pernille Hansen',
+				'address'        => array(
+					'street_name'  => 'Eksempelvej',
+					'house_number' => '12',
+					'city'         => 'Beder',
+					'postal_code'  => '8330',
+				),
+			),
+		);
+
+		$changed = oko_take_delivery_from_okoskabet(
+			(string) $order->get_order_number(),
+			array('id' => 'default', 'api_key' => 'test-key', 'staging' => true)
+		);
+		$this->assertSame(array('delivery date 2026-12-24'), $changed);
+	}
+
 	/** An order that did move since 1.5.2 sent it is still sent, whole, as before. */
 	public function test_an_order_that_moved_since_is_still_sent(): void
 	{
@@ -253,6 +402,11 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	 * shape says otherwise:
 	 *   - `shed`           a shed reservation instead;
 	 *   - `address_2`      a second address line;
+	 *   - `dkk`            sold in kroner, the only money line totals go in;
+	 *   - `billing_address_2` a flat on the billing address only, the same
+	 *                      street — which 1.5.2 did not send;
+	 *   - `no_last_name`   a recipient of one word, which 1.5.2 sent with a
+	 *                      space after it;
 	 *   - `more_goods`     a variation, a packaging fee and a refunded unit
 	 *                      beside the simple product;
 	 *   - `sent_address_1` / `sent_date`  what 1.5.2 sent, where the order has
@@ -271,6 +425,9 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		$order = wc_create_order();
 		$order->add_product($product, 1);
+		if (! empty($shape['dkk'])) {
+			$order->set_currency('DKK');
+		}
 
 		$lines = array(array(
 			'product_id'    => $product->get_id(),
@@ -323,12 +480,20 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$shipping->set_method_title($shed !== '' ? 'Økoskab' : 'Hjemmelevering');
 		$order->add_item($shipping);
 
+		$last = empty($shape['no_last_name']) ? 'Hansen' : '';
+
 		$order->set_billing_first_name('Pernille');
 		$order->set_billing_last_name('Hansen');
 		$order->set_billing_phone('+4512345678');
 		$order->set_billing_email('pernille@example.org');
+		if (isset($shape['billing_address_2'])) {
+			$order->set_billing_address_1('Eksempelvej 12');
+			$order->set_billing_postcode('8330');
+			$order->set_billing_city('Beder');
+			$order->set_billing_address_2((string) $shape['billing_address_2']);
+		}
 		$order->set_shipping_first_name('Pernille');
-		$order->set_shipping_last_name('Hansen');
+		$order->set_shipping_last_name($last);
 		$order->set_shipping_address_1('Eksempelvej 12');
 		if (isset($shape['address_2'])) {
 			$order->set_shipping_address_2((string) $shape['address_2']);
@@ -369,14 +534,16 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		// What 1.5.2's oko_shipment_payload() built for it, less the two keys
 		// its fingerprint left out (`locale` and `webshop_products_url`).
-		$customer = array(
+		// 1.5.2 did not trim the recipient.
+		$recipient = 'Pernille ' . $last;
+		$customer  = array(
 			'first_name' => 'Pernille',
 			'last_name'  => 'Hansen',
 			'phone'      => '+4512345678',
 			'email'      => 'pernille@example.org',
 		);
 		if ($shed === '') {
-			$customer['recipient_name'] = 'Pernille Hansen';
+			$customer['recipient_name'] = $recipient;
 		}
 
 		$sent_by_1_5_2 = array(
@@ -396,8 +563,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 				'max_duration_days' => 1,
 			);
 		} else {
+			// The second line is the shipping line as typed: 1.5.2 never read
+			// the billing address.
 			$sent_by_1_5_2['home_delivery'] = array_filter(array(
-				'recipient_name' => 'Pernille Hansen',
+				'recipient_name' => $recipient,
 				'address_1'      => (string) ($shape['sent_address_1'] ?? 'Eksempelvej 12'),
 				'address_2'      => (string) ($shape['address_2'] ?? ''),
 				'city'           => 'Beder',

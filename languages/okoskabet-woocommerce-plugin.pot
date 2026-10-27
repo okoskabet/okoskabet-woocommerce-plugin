@@ -824,12 +824,27 @@ msgid ""
 "ADDITION: order %s was cancelled. Its goods have been taken off the list."
 msgstr ""
 
+#. translators: %s: the refunded addition's order number.
+#: functions/functions.php:2595
+#, php-format
+msgid ""
+"ADDITION: order %s was refunded. Its goods have been taken off the list."
+msgstr ""
+
 #. translators: 1: the order the addition rode along with, 2: the HTTP status or 0 when unreachable.
 #: functions/functions.php:2416
 #, php-format
 msgid ""
 "The goods could not be taken off order %1$s (%2$s). They may still be on "
 "that delivery."
+msgstr ""
+
+#. translators: %s: the order the addition rode along with.
+#: functions/functions.php:2666
+#, php-format
+msgid ""
+"The goods could not be taken off order %s: another addition to it was "
+"being written at the same moment. They may still be on that delivery."
 msgstr ""
 
 #. translators: %s: the order the addition rode along with.
@@ -852,6 +867,14 @@ msgstr ""
 msgid ""
 "Order %s can no longer take anything more, so nothing was added to it. "
 "Økoskabet has not been told about this order."
+msgstr ""
+
+#. translators: %s: the earlier order's number.
+#: functions/functions.php:2772
+#, php-format
+msgid ""
+"Another addition to order %s was being written at the same moment, so "
+"nothing was added to it. Økoskabet has not been told about this order."
 msgstr ""
 
 msgid ""
