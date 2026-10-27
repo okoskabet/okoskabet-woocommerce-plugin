@@ -8,3 +8,6 @@ modules:
         # see https://github.com/lucatume/wp-browser#modules
         - WPLoader        # loads and configures a blank WordPress installation
         - \Helper\Wpunit
+# tests/wpunit/_bootstrap.php, loaded once WordPress is up. Without this line
+# Codeception never read it. It picks the order storage for the run (HPOS).
+bootstrap: _bootstrap.php

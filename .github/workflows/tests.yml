@@ -1,4 +1,5 @@
-# Run the standalone tests on every pull request and every push to main.
+# Run the tests on every pull request and every push to main: the standalone
+# tests, and the WordPress suite under tests/wpunit (the `wpunit` job below).
 #
 # `php tests/standalone/run.php` needs no database, no WordPress and no
 # Composer install: bootstrap.php stands in for WordPress and requires the
@@ -9,7 +10,9 @@
 #
 # PHP 8.1 is the plugin's floor (`Requires PHP: 8.1`); 8.3 is a current one.
 # Deliberately not 8.5 or "latest": the locked Composer dev packages do not
-# install there, so the rest of the toolchain has never stood on it.
+# install there, so the rest of the toolchain has never stood on it. The wpunit
+# job runs on 8.3 alone: it takes a few minutes, not seconds, and Actions
+# minutes on this account are budgeted.
 
 name: Tests
 
@@ -45,3 +48,98 @@ jobs:
 
       - name: Standalone tests
         run: php tests/standalone/run.php
+
+  wpunit:
+    name: WordPress tests (wpunit, posts + HPOS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Pinned, so a WordPress or WooCommerce release cannot turn an unrelated
+      # pull request red overnight. Raise them on purpose, in a PR of their own.
+      WP_VERSION: '7.1.3'
+      WC_VERSION: '11.2.1'
+
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: wordpress_test
+          MARIADB_ROOT_PASSWORD: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, pdo_mysql, zip
+          coverage: none
+          tools: composer:v2
+          # Anything PHP prints to stdout before the tests start — a
+          # deprecation in a dev package, say — counts as output, and every
+          # later setcookie() then fails with "headers already sent". On
+          # stderr it is still in the log and harms nothing. Locally:
+          # `php -d display_errors=stderr vendor/bin/codecept run wpunit`.
+          ini-values: display_errors=stderr
+
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
+
+      # With the dev packages (Codeception, wp-browser), in this job only. The
+      # committed vendor/ is what ships to the shops: runtime packages only,
+      # and it stays that way. Nothing here is ever committed.
+      - name: Composer install (with dev packages)
+        run: composer install --no-interaction --no-progress --optimize-autoloader
+
+      - name: Download WordPress and WooCommerce
+        run: |
+          WP_ROOT="$RUNNER_TEMP/wordpress"
+          mkdir -p "$WP_ROOT"
+          curl -fsSL "https://wordpress.org/wordpress-${WP_VERSION}.tar.gz" \
+            | tar -xz -C "$WP_ROOT" --strip-components=1
+          curl -fsSL -o "$RUNNER_TEMP/woocommerce.zip" \
+            "https://downloads.wordpress.org/plugin/woocommerce.${WC_VERSION}.zip"
+          unzip -q "$RUNNER_TEMP/woocommerce.zip" -d "$WP_ROOT/wp-content/plugins"
+          # codeception.dist.yml loads the plugin from WordPress's plugin folder.
+          ln -s "$GITHUB_WORKSPACE" "$WP_ROOT/wp-content/plugins/okoskabet-woocommerce-plugin"
+
+          # Read by codeception.dist.yml and wp-config-test.php; not in git.
+          mkdir -p tests/_envs
+          {
+            echo "WP_ROOT=$WP_ROOT"
+            echo "WP_DOMAIN=example.org"
+            echo "WP_URL=http://example.org"
+            echo "DB_HOST=127.0.0.1"
+            echo "DB_NAME=wordpress_test"
+            echo "DB_USER=root"
+            echo "DB_PASSWORD=wordpress"
+          } > tests/_envs/.env
+
+      - name: wpunit on the posts table
+        id: posts
+        run: vendor/bin/codecept run wpunit
+
+      # The whole suite once more on WooCommerce's own order tables (HPOS),
+      # the default for new shops. A second run in the same job, not a matrix:
+      # the suite takes under a minute, the setup above about as long, and
+      # a second job would pay for the setup twice. It runs even when the
+      # posts run is red, so a failure shows whether it is storage-specific.
+      - name: wpunit on WooCommerce's order tables (HPOS)
+        if: success() || steps.posts.outcome == 'failure'
+        env:
+          OKO_TEST_HPOS: 'yes'
+        run: vendor/bin/codecept run wpunit
