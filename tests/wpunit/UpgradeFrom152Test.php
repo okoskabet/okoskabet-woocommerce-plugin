@@ -110,8 +110,15 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
 		$sent = wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true);
 		$this->assertIsArray($sent, 'The order is upgraded to a record of what was sent.');
+		// Less what the catalogue says about the goods, which the record never
+		// keeps: a new picture on a product is not an edit of the order.
+		$written = array_map(static function (array $line): array {
+			unset($line['tags'], $line['properties'], $line['image']);
+
+			return $line;
+		}, json_decode($this->puts[0], true)['line_items']);
 		$this->assertSame(
-			json_decode($this->puts[0], true)['line_items'],
+			$written,
 			$sent['line_items'],
 			'The record holds what the addition just wrote, its goods included.'
 		);

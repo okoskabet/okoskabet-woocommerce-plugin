@@ -3983,14 +3983,39 @@ function oko_orders_by_ids(array $ids): array
  * Økoskabet that has not heard of the field answers nothing, which reads the
  * same way: the shop sends no prices until the day it is asked to.
  *
+ * No answer at all is not a no. The configuration is an empty array when it
+ * could not be read (see oko_merchant_configuration()), and that is kept for
+ * half a minute; read as "no prices", every order saved in that half minute
+ * sent its goods again without them, and the first save after Økoskabet came
+ * back sent them again with. So the account's last real answer stands until
+ * there is a new one, and an account that has never answered sends none.
+ *
  * @param array<string,mixed> $merchant
  */
 function oko_shop_sends_line_totals(array $merchant): bool
 {
-	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
+	$merchant_id   = (string) ($merchant['id'] ?? '');
+	$configuration = oko_merchant_configuration($merchant_id);
+	$last_said     = (array) get_option(OKO_LINE_TOTALS_SAID_OPTION, array());
 
-	return ! empty($configuration['send_line_totals']);
+	if ($configuration === array()) {
+		return ! empty($last_said[$merchant_id]);
+	}
+
+	$sends = ! empty($configuration['send_line_totals']);
+
+	// Written only when it changes, which is when a shop starts or stops
+	// using offers — not on every order.
+	if (! empty($last_said[$merchant_id]) !== $sends) {
+		$last_said[$merchant_id] = $sends;
+		update_option(OKO_LINE_TOTALS_SAID_OPTION, $last_said, false);
+	}
+
+	return $sends;
 }
+
+/** What each account's Økoskabet last said about line totals, for when it says nothing. */
+const OKO_LINE_TOTALS_SAID_OPTION = 'okoskabet_line_totals_last_said';
 
 /**
  * What a line came to, as this shop reports money.
@@ -5268,6 +5293,9 @@ function oko_order_save_depth(int $delta = 0): int
  * note is the only thing that moved, with the note stripped, achieving
  * nothing.
  *
+ * And from each line, what the catalogue says about the goods rather than
+ * what the order says: see OKO_CATALOGUE_LINE_KEYS.
+ *
  * @param array<string,mixed> $payload
  * @return array<string,mixed>
  */
@@ -5280,8 +5308,28 @@ function oko_comparable_payload(array $payload): array
 		$payload['allow_invalid']
 	);
 
+	if (isset($payload['line_items']) && is_array($payload['line_items'])) {
+		$payload['line_items'] = array_map(static function ($line) {
+			return is_array($line) ? array_diff_key($line, array_flip(OKO_CATALOGUE_LINE_KEYS)) : $line;
+		}, $payload['line_items']);
+	}
+
 	return $payload;
 }
+
+/**
+ * The keys of a line that come from the catalogue, not from the order.
+ *
+ * A new picture on a product, a tag, a category or an attribute is an edit of
+ * the product, and every open order with that product would have read it as
+ * an edit of the order: its next save, a status change from a webhook
+ * included, sent the goods again. That is a PUT of the whole list for each of
+ * them, and any change Økoskabet refused before went along with it, to be
+ * refused and noted once more. So these do not count as a change, and are not
+ * kept in the record of what was sent. They still travel whenever the goods
+ * do, which is when the packing room reads them.
+ */
+const OKO_CATALOGUE_LINE_KEYS = array('tags', 'properties', 'image');
 
 /** A fingerprint of a payload, for telling two of them apart. */
 function oko_shipment_fingerprint(array $payload): string
@@ -5645,13 +5693,22 @@ function oko_resend_shipment_on_update(int $order_id): void
 
 	$seen[$order_id] = true;
 
+	// The goods go as the payload has them, catalogue and all. The difference
+	// was found without what the catalogue says (see OKO_CATALOGUE_LINE_KEYS),
+	// and so was the refusal's print above, but the packing room reads those
+	// facts off the very lines this replaces.
+	$body = $changes;
+	if (isset($body['line_items'])) {
+		$body['line_items'] = $payload['line_items'];
+	}
+
 	// The reference Økoskabet booked it under, not the order's number: a shop
 	// with a numbering plugin has two, and only one of them is ours (#52).
 	$response = oko_api_request(
 		$merchant,
 		'PUT',
 		'/api/v1/shipments/' . rawurlencode(oko_shipment_reference($order)),
-		(string) wp_json_encode($changes)
+		(string) wp_json_encode($body)
 	);
 
 	// Could not reach Økoskabet at all. Leave the fingerprint alone so the
