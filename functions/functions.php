@@ -5103,6 +5103,15 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 		$changed[] = $pickup !== ''
 			? __('collection from the shop', O_TEXTDOMAIN)
 			: __('no longer a collection from the shop', O_TEXTDOMAIN);
+	} elseif (oko_collection_place($order) === ''
+		&& ! in_array((string) ($shipment['shipment_type'] ?? 'store_pickup'), array('', 'store_pickup'), true)) {
+		// A collection with no place — a shop with no pickup locations books
+		// one with none — reads the same as no collection above, so Økoskabet
+		// moving it to a shed or the door was never marked, the store-pickup
+		// line won the next payload, and the shop's later address corrections
+		// never went (#80's review). Økoskabet's own type says it moved.
+		$order->update_meta_data(OKO_PICKUP_FROM_OKOSKABET_META, true);
+		$changed[] = __('no longer a collection from the shop', O_TEXTDOMAIN);
 	}
 
 	$shed      = (array) (((array) ($shipment['shed_reservation'] ?? array()))['shed'] ?? array());
