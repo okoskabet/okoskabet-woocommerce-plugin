@@ -5395,10 +5395,11 @@ function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
  * What was hashed, which is not always today's payload. A hash of today's
  * payload says today's payload. A hash 1.5.2 took says the order as 1.5.2
  * built it, and where 1.5.2 built a field differently, the match vouches for
- * 1.5.2's version and not for ours — so those fields are written down as
- * 1.5.2 sent them (oko_sent_by_1_5_2()). Writing today's down instead recorded
- * as sent a flat 1.5.2 never sent, taken from the billing address, and it
- * never reached Økoskabet: every later edit found it already there.
+ * 1.5.2's version and not for ours — so the address is written down as 1.5.2
+ * sent it (oko_sent_by_1_5_2(), which says what else is and is not). Writing
+ * today's down instead recorded as sent a flat 1.5.2 never sent, taken from
+ * the billing address, and it never reached Økoskabet: every later edit found
+ * it already there.
  *
  * Without it, every order placed before this release would send its *whole*
  * payload on its first save — over whatever the backoffice had corrected in
@@ -5678,10 +5679,9 @@ function oko_lines_as_1_5_2(\WC_Order $order, ?array $merchant = null): array
  * matters. 1.5.2 sent the shipping line as typed, and today's payload falls
  * back to the billing address when the checkout has no second shipping line —
  * so writing today's payload down recorded as sent a flat Økoskabet never got,
- * and the next edit found nothing to send for the address. The goods are the
- * other: 1.5.2 sent six keys on a line.
+ * and the next edit found nothing to send for the address.
  *
- * So those are written as 1.5.2 sent them, and everything else as today's
+ * So the address is written as 1.5.2 sent it, and everything else as today's
  * payload has it, which the match says is the same. Two of 1.5.2's quirks are
  * left out on purpose, because Økoskabet's copy does not have them either:
  * `location` on the address, a field it never had and cast away unread, which
@@ -5690,21 +5690,23 @@ function oko_lines_as_1_5_2(\WC_Order $order, ?array $merchant = null): array
  * to take a space off — over whatever the packing room corrected while the
  * shop ran 1.5.2, which wrote nothing back.
  *
- * The goods are 1.5.2's only while no addition has been written onto the
- * shipment. That write sends today's whole list, so after it today's list is
- * what Økoskabet holds.
+ * The goods are today's too, on purpose. The match vouches for the six keys
+ * 1.5.2 sent on a line, which are today's six; beside them today's line has
+ * what the catalogue says, which is never recorded (OKO_CATALOGUE_LINE_KEYS),
+ * and at a shop that sends them, the line's total. 1.5.2 never sent a total,
+ * but it is written down as sent all the same: recorded as missing, it made
+ * the second save of every open 1.5.2 order — a status change, or another
+ * plugin's meta — send all its goods to add the totals, and an order Økoskabet
+ * had locked by then got a note about an edit nobody made. The totals go with
+ * the goods the next time the goods change.
  *
  * @param \WC_Order           $order
  * @param array<string,mixed> $comparable Today's payload for it, comparable.
  * @return array<string,mixed>
  */
-function oko_sent_by_1_5_2(\WC_Order $order, array $comparable, ?array $merchant = null): array
+function oko_sent_by_1_5_2(\WC_Order $order, array $comparable): array
 {
 	$sent = $comparable;
-
-	if (oko_addition_ids($order) === array()) {
-		$sent['line_items'] = oko_lines_as_1_5_2($order, $merchant);
-	}
 
 	if (isset($sent['home_delivery'])) {
 		$sent['home_delivery'] = array_filter(array(
@@ -5746,7 +5748,7 @@ function oko_sent_according_to_the_fingerprint(\WC_Order $order, array $payload,
 	}
 
 	if (oko_fingerprint_as_1_5_2($order, $payload, $merchant) === $fingerprint) {
-		return oko_sent_by_1_5_2($order, $comparable, $merchant);
+		return oko_sent_by_1_5_2($order, $comparable);
 	}
 
 	return null;

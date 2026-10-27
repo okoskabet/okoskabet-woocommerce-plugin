@@ -26,13 +26,17 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	/** @var array<string,mixed>|null The shipment a GET answers with, when a test says. */
 	private $shipment = null;
 
+	/** Whether Økoskabet asks this shop for the line totals. */
+	private $line_totals = false;
+
 	public function setUp(): void
 	{
 		parent::setUp();
 		$this->a_merchant_with_an_account();
 		$this->puts       = array();
-		$this->put_answer = 200;
-		$this->shipment   = null;
+		$this->put_answer  = 200;
+		$this->shipment    = null;
+		$this->line_totals = false;
 
 		add_filter('pre_http_request', function ($preempt, $args, $url) {
 			if (($args['method'] ?? '') === 'PUT') {
@@ -49,9 +53,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 				));
 			}
 			if (strpos($url, '/api/v1/configuration') !== false) {
-				return array('response' => array('code' => 200), 'body' => wp_json_encode(array('order_cutoff' => array(
-					'time' => '23:59:00', 'days_before_delivery' => 1, 'time_zone' => 'Europe/Copenhagen',
-				))));
+				return array('response' => array('code' => 200), 'body' => wp_json_encode(array(
+					'order_cutoff'     => array('time' => '23:59:00', 'days_before_delivery' => 1, 'time_zone' => 'Europe/Copenhagen'),
+					'send_line_totals' => $this->line_totals,
+				)));
 			}
 
 			return array('response' => array('code' => 200), 'body' => '{}');
@@ -61,6 +66,7 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	public function tearDown(): void
 	{
 		$this->forget_the_merchant();
+		delete_option(OKO_LINE_TOTALS_SAID_OPTION);
 		parent::tearDown();
 	}
 
@@ -276,6 +282,33 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
+	 * At a shop Økoskabet asks for line totals, an open 1.5.2 order is not
+	 * sent for them on its own.
+	 *
+	 * 1.5.2 never sent a total. Written down as missing, the second save of
+	 * every such order — even one that changed nothing — sent all its goods to
+	 * add them, and one Økoskabet had locked by then got a note about an edit
+	 * nobody made. The totals go with the goods the next time those change.
+	 */
+	public function test_a_1_5_2_order_at_a_shop_that_sends_line_totals_is_not_sent_for_them(): void
+	{
+		$this->line_totals = true;
+		$order             = $this->an_order_sent_by_1_5_2(array('dkk' => true));
+		$this->assertArrayHasKey(
+			'total',
+			oko_shipment_payload($order, oko_merchant_for_order($order))['line_items'][0],
+			'Today the line goes with its total.'
+		);
+
+		$order->update_status('completed');
+		$order = wc_get_order($order->get_id());
+		$order->update_meta_data('_another_plugins_meta', 'x');
+		$order->save();
+
+		$this->assertSame(array(), $this->puts);
+	}
+
+	/**
 	 * But a recipient with no last name is not sent again for the space 1.5.2
 	 * left after it. Økoskabet has the same name either way, and the address
 	 * would go with it, over whatever was corrected while the shop ran 1.5.2.
@@ -369,6 +402,7 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	 * shape says otherwise:
 	 *   - `shed`           a shed reservation instead;
 	 *   - `address_2`      a second address line;
+	 *   - `dkk`            sold in kroner, the only money line totals go in;
 	 *   - `billing_address_2` a flat on the billing address only, the same
 	 *                      street — which 1.5.2 did not send;
 	 *   - `no_last_name`   a recipient of one word, which 1.5.2 sent with a
@@ -391,6 +425,9 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		$order = wc_create_order();
 		$order->add_product($product, 1);
+		if (! empty($shape['dkk'])) {
+			$order->set_currency('DKK');
+		}
 
 		$lines = array(array(
 			'product_id'    => $product->get_id(),

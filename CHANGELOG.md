@@ -72,10 +72,10 @@ sendt ved hver gemning, oven i det pakkeriet havde rettet.
 
 Åbne ordrer fra 1.5.2 sendes ikke igen, bare fordi pluginet er opdateret, og
 heller ikke, når de får et tillæg. De sendes først, når der faktisk ændres
-noget på dem, eller når de har noget, 1.5.2 aldrig sendte — fx en lejlighed,
-der kun står i fakturaadressen. Den sendes med adressen, anden gang ordren
-gemmes efter opdateringen. Ordrer sendt af en version før 1.5.2 sendes hele én
-gang, første gang de gemmes.
+noget på dem, eller når de har en lejlighed, 1.5.2 aldrig sendte, fordi den
+kun står i fakturaadressen. Den sendes med adressen, anden gang ordren gemmes
+efter opdateringen. Ordrer sendt af en version før 1.5.2 sendes hele én gang,
+første gang de gemmes.
 
 Afviser Økoskabet en rettelse, står det nu på ordren, med Økoskabets egen
 begrundelse. Før stod det kun i en logfil.
