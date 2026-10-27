@@ -164,6 +164,38 @@ class TwoAdditionsAtOnceTest extends \Codeception\TestCase\WPTestCase
 		$this->assertCount(0, $this->notes_saying(wc_get_order($bread->get_id()), 'could not be taken off'));
 	}
 
+	/**
+	 * The earlier order's own resend of its goods holds its additions still
+	 * too (#81).
+	 *
+	 * The shop edits the earlier order's goods while an addition is written.
+	 * The resend built its list before the addition was on it, and its PUT
+	 * landed last: the addition's goods gone from the delivery while the
+	 * addition said they were on, and no later save to notice. Now the
+	 * addition finds the order held, and is held for the shop instead.
+	 */
+	public function test_the_earlier_orders_resend_holds_its_additions_still(): void
+	{
+		$parent = $this->a_delivery();
+		$bread  = $this->an_addition_to($parent, 'Rugbrød');
+
+		$this->meanwhile = static function () use ($bread, $parent) {
+			oko_send_addition_to_its_order(wc_get_order($bread->get_id()), $parent->get_id(), array());
+		};
+		$parent = wc_get_order($parent->get_id());
+		foreach ($parent->get_items() as $item) {
+			$item->set_quantity(3);
+			$item->save();
+		}
+		$parent->save();
+
+		$bread    = wc_get_order($bread->get_id());
+		$on       = in_array('ADDITION — Rugbrød', (array) $this->holds, true);
+		$says_on  = (string) $bread->get_meta('billing_okoskabet_done', true) === 'yes';
+		$this->assertSame($says_on, $on, 'The addition says it is on the delivery exactly when it is.');
+		$this->assertFalse($this->held($parent), 'And the hold is let go of.');
+	}
+
 	/** @return array<string,array{0:bool}> */
 	public function with_and_without_an_earlier_addition(): array
 	{

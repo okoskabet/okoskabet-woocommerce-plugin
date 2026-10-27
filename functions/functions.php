@@ -2509,6 +2509,8 @@ function oko_lock_additions_to(int $parent_id, int $for = 0): string
 		$hold
 	));
 	if ((int) $taken === 1) {
+		$here             = &oko_additions_held_here();
+		$here[$parent_id] = $hold;
 		return $hold;
 	}
 
@@ -2528,7 +2530,29 @@ function oko_lock_additions_to(int $parent_id, int $for = 0): string
 		$since
 	));
 
-	return (int) $taken === 1 ? $hold : '';
+	if ((int) $taken !== 1) {
+		return '';
+	}
+	$here             = &oko_additions_held_here();
+	$here[$parent_id] = $hold;
+
+	return $hold;
+}
+
+/**
+ * The holds on additions this request has, by the order they are on.
+ *
+ * A write under a hold saves the order, and the save runs the order's own
+ * resend, which takes the same hold before it sends goods (#81). It is this
+ * request's already, so that resend goes ahead rather than finding it taken.
+ *
+ * @return array<int,string>
+ */
+function &oko_additions_held_here(): array
+{
+	static $held = array();
+
+	return $held;
 }
 
 /**
@@ -2545,6 +2569,11 @@ function oko_unlock_additions_to(int $parent_id, string $hold): void
 		'option_name'  => OKO_ADDITION_LOCK_PREFIX . $parent_id,
 		'option_value' => $hold,
 	));
+
+	$here = &oko_additions_held_here();
+	if (($here[$parent_id] ?? '') === $hold) {
+		unset($here[$parent_id]);
+	}
 }
 
 /**
@@ -6128,6 +6157,13 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
+	// Under the hold on its additions, the list is read as the last write
+	// left it, not as this request first loaded it.
+	$held_here = isset(oko_additions_held_here()[$order_id]);
+	if ($held_here) {
+		$order->read_meta_data(true);
+	}
+
 	// Never sent, or on its way out. A cancellation is a DELETE elsewhere.
 	//
 	// A refund in full is neither: the money went back, often after the goods
@@ -6231,6 +6267,27 @@ function oko_resend_shipment_on_update(int $order_id): void
 	}
 
 	if ($changes === array()) {
+		return;
+	}
+
+	// The goods go only while the order's additions are held still, as every
+	// other write of its list of goods does. Built outside the hold, the list
+	// could miss an addition written at the same moment and land after it:
+	// its goods gone from the delivery while the order says they are on, and
+	// no later save to notice, because the record says they were sent (#81).
+	// So the hold is taken and the whole resend run again under it, reading
+	// the order afresh. Taken by another request, nothing is sent and nothing
+	// recorded: the next save tries again.
+	if (isset($changes['line_items']) && ! $held_here) {
+		$hold = oko_lock_additions_to($order_id);
+		if ($hold === '') {
+			return;
+		}
+		try {
+			oko_resend_shipment_on_update($order_id);
+		} finally {
+			oko_unlock_additions_to($order_id, $hold);
+		}
 		return;
 	}
 
