@@ -2,7 +2,11 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
-## Unreleased
+## 1.6.0 - 2026-10-27
+
+Tillægsordrer, adresseforslag og etagefelt i kassen, og pakkeriets rettelser
+kommer tilbage til butikken. De nye felter i kassen er slået fra, indtil du
+slår dem til i pluginets indstillinger.
 
 = Tillægsordrer: læg flere varer på en levering, der allerede er bestilt =
 
