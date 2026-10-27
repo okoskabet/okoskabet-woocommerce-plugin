@@ -196,6 +196,54 @@ class TwoAdditionsAtOnceTest extends \Codeception\TestCase\WPTestCase
 		$this->assertFalse($this->held($parent), 'And the hold is let go of.');
 	}
 
+	/**
+	 * The earlier order saved in the middle of an addition's write keeps the
+	 * addition's goods (#89).
+	 *
+	 * On WooCommerce's order tables a meta write saves the whole order when
+	 * its "modified" time is a second or more old, which in a shop it always
+	 * is. Recording the goods just sent was such a write, and the save ran the
+	 * earlier order's resend before the addition was on its list: the goods
+	 * went again without the addition. It showed only now and then in the
+	 * suite, where an order is seldom a second old. Here the save is made to
+	 * happen every time: on the posts store by doing what the order tables do,
+	 * and on the order tables by an order last modified an hour ago.
+	 *
+	 * @dataProvider with_and_without_an_earlier_addition
+	 */
+	public function test_the_earlier_order_saved_during_an_addition_keeps_its_goods(bool $earlier): void
+	{
+		$parent = $this->a_delivery();
+		$goods  = array('Økologiske æg');
+		if ($earlier) {
+			$most = $this->an_addition_to($parent, 'Æblemost');
+			wc_get_order($most->get_id())->update_status('processing');
+			$goods[] = 'ADDITION — Æblemost';
+		}
+		$bread   = $this->an_addition_to($parent, 'Rugbrød');
+		$goods[] = 'ADDITION — Rugbrød';
+
+		$an_hour_ago = wc_get_order($parent->get_id());
+		$an_hour_ago->set_date_modified(time() - HOUR_IN_SECONDS);
+		$an_hour_ago->save();
+
+		$save = static function ($meta_id, $object_id, $key) use ($parent) {
+			if ($key === OKO_SENT_META && (int) $object_id === $parent->get_id()) {
+				wc_get_order($parent->get_id())->save();
+			}
+		};
+		add_action('added_post_meta', $save, 10, 3);
+		add_action('updated_post_meta', $save, 10, 3);
+
+		oko_send_addition_to_its_order(wc_get_order($bread->get_id()), $parent->get_id(), array());
+
+		remove_action('added_post_meta', $save, 10);
+		remove_action('updated_post_meta', $save, 10);
+
+		$this->assertSame($goods, $this->holds, 'The last list of goods Økoskabet got has the addition on it.');
+		$this->assertContains($bread->get_id(), oko_addition_ids(wc_get_order($parent->get_id())));
+	}
+
 	/** @return array<string,array{0:bool}> */
 	public function with_and_without_an_earlier_addition(): array
 	{
