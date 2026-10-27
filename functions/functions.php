@@ -4812,7 +4812,13 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 		$lines = oko_delivery_address_lines($address);
 		$held  = array(
 			'shipping_address_1' => $order->get_shipping_address_1(),
-			'shipping_address_2' => $order->get_shipping_address_2(),
+			// The second line as we send it, not as the shipping form holds
+			// it. A checkout with no second shipping line keeps the flat in
+			// billing only, and we send it from there; compared with the empty
+			// shipping line, the first webhook about such a delivery — a date
+			// moved by a day — read Økoskabet's copy of our own flat as a move,
+			// and wrote a note saying so on the order.
+			'shipping_address_2' => oko_second_address_line($order),
 			'shipping_city'      => $order->get_shipping_city(),
 			'shipping_postcode'  => $order->get_shipping_postcode(),
 		);
@@ -4824,14 +4830,17 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			$order->set_shipping_address_2($lines['shipping_address_2']);
 			$order->set_shipping_city($lines['shipping_city']);
 			$order->set_shipping_postcode($lines['shipping_postcode']);
-		}
 
-		// Whether or not the lines moved. The fact that matters is that
-		// Økoskabet has given us the address — and the case this exists for is
-		// precisely the one where nothing moved: a flat taken off a delivery
-		// whose shipping line was empty all along, because the shop's checkout
-		// has no second line and the flat only ever lived in billing.
-		$order->update_meta_data(OKO_ADDRESS_FROM_OKOSKABET_META, true);
+			// Økoskabet's address now, so the billing fallback is switched off
+			// and cannot bring back a flat the backoffice took away. Only when
+			// it moved: an address that did not is the one we sent, billing
+			// flat and all, and marking it would drop from the next payload a
+			// flat Økoskabet has — the shop's next address edit would then send
+			// the address without it. The case the mark exists for, a flat
+			// taken off a delivery whose shipping line was empty all along, is
+			// a move now that the flat is compared as we send it.
+			$order->update_meta_data(OKO_ADDRESS_FROM_OKOSKABET_META, true);
+		}
 	}
 
 	if ($address_moved) {
@@ -5003,12 +5012,9 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 
 	$changed = oko_write_delivery_back($order, $shipment);
 	if ($changed === array()) {
-		// Nothing of the shop's own moved, so there is no note to write and no
-		// edit to record — but the write-back may have marked the address as
-		// Økoskabet's, and that mark is the whole point when the correction
-		// was a flat being taken off. Meta only: a full save here would read
-		// as an edit and call the resend straight back.
-		$order->save_meta_data();
+		// Nothing of the shop's own moved, so there is no note to write and
+		// nothing to save: the write-back writes, and marks, only what it
+		// finds different, and every one of those is in `$changed`.
 		return array();
 	}
 

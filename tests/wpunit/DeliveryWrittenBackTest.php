@@ -654,6 +654,116 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
+	 * A flat we sent from the billing address is not read back as a move.
+	 *
+	 * The comparison read the shipping line, which a checkout with no second
+	 * shipping line leaves empty, while we send the flat from billing. So the
+	 * first webhook about such a delivery — the date moved by a day, nothing
+	 * else — found Økoskabet's copy of our own flat "new", and the order got a
+	 * note saying Økoskabet had moved the address.
+	 */
+	public function test_a_flat_sent_from_billing_is_not_read_as_a_move(): void
+	{
+		$order = $this->an_order_with_its_flat_only_in_billing();
+		$this->okoskabet_answers_with($this->the_same_flat_on(
+			(string) $order->get_order_number(),
+			'2026-10-22'
+		));
+
+		$changed = oko_take_delivery_from_okoskabet((string) $order->get_order_number(), $this->merchant());
+
+		$this->assertSame(array('delivery date 2026-10-22'), $changed);
+	}
+
+	/**
+	 * And the flat is still on the next payload.
+	 *
+	 * Marking the address as Økoskabet's switches the billing fallback off. A
+	 * mark set on an address that did not move left the shipping line empty
+	 * and the fallback off, so the payload lost the flat, and the shop's next
+	 * address edit would have sent the address without it.
+	 */
+	public function test_a_flat_sent_from_billing_stays_on_the_payload(): void
+	{
+		$order     = $this->an_order_with_its_flat_only_in_billing();
+		$reference = (string) $order->get_order_number();
+
+		$this->okoskabet_answers_with($this->the_same_flat_on($reference, '2026-10-22'));
+		oko_take_delivery_from_okoskabet($reference, $this->merchant());
+		$this->okoskabet_answers_with($this->the_same_flat_on($reference, '2026-10-23'));
+		$second = oko_take_delivery_from_okoskabet($reference, $this->merchant());
+
+		$payload = oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant());
+
+		$this->assertSame('1. tv', $payload['home_delivery']['address_2'] ?? null);
+		$this->assertSame(array('delivery date 2026-10-23'), $second);
+	}
+
+	/**
+	 * A billing flat Økoskabet took off is a move, and the order says so.
+	 *
+	 * The case the mark was made for. Compared as we send it, the flat being
+	 * taken off is a change like any other, and the note names the address
+	 * the delivery now goes to.
+	 */
+	public function test_a_billing_flat_okoskabet_took_off_is_noted_as_a_move(): void
+	{
+		$order = $this->an_order_with_its_flat_only_in_billing();
+		$this->okoskabet_answers_with(array(
+			'shipment_reference' => (string) $order->get_order_number(),
+			'delivery_date'      => '2026-10-20',
+			'home_delivery'      => array('address' => array(
+				'street_name'  => 'Prøvevej',
+				'house_number' => '98',
+				'city'         => 'København N',
+				'postal_code'  => '2200',
+			)),
+		));
+
+		$changed = oko_take_delivery_from_okoskabet((string) $order->get_order_number(), $this->merchant());
+
+		$this->assertSame(array('delivery address Prøvevej 98, 2200 København N'), $changed);
+		$this->assertArrayNotHasKey(
+			'address_2',
+			oko_shipment_payload(wc_get_order($order->get_id()), $this->merchant())['home_delivery']
+		);
+	}
+
+	/** Gaardmester's shape: one address, the flat written only on the invoice. */
+	private function an_order_with_its_flat_only_in_billing(): \WC_Order
+	{
+		$order = $this->an_order_delivered_to_the_door();
+		$order->set_billing_address_1('Prøvevej 98');
+		$order->set_billing_postcode('2200');
+		$order->set_billing_city('København N');
+		$order->set_billing_address_2('1. tv');
+		$order->save();
+
+		$order = wc_get_order($order->get_id());
+		$this->assertSame('1. tv', oko_second_address_line($order), 'The flat reaches us through billing.');
+
+		return $order;
+	}
+
+	/** Økoskabet's copy of that address, flat included, on this date. */
+	private function the_same_flat_on(string $reference, string $date): array
+	{
+		return array(
+			'shipment_reference' => $reference,
+			'shipment_type'      => 'home_delivery',
+			'delivery_date'      => $date,
+			'home_delivery'      => array('address' => array(
+				'street_name'  => 'Prøvevej',
+				'house_number' => '98',
+				'floor'        => '1',
+				'door'         => 'tv',
+				'city'         => 'København N',
+				'postal_code'  => '2200',
+			)),
+		);
+	}
+
+	/**
 	 * A collection the packing room arranged survives the shop's next edit.
 	 *
 	 * The shed has had this guard since the first review round; the
