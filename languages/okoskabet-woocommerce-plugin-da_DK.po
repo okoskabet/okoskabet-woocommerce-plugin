@@ -1802,6 +1802,9 @@ msgstr "TILLÆG: ordre %1$s er lagt til %2$s. Dens varer står nederst på liste
 msgid "ADDITION: order %s was cancelled. Its goods have been taken off the list."
 msgstr "TILLÆG: ordre %s er annulleret. Dens varer er taget af listen."
 
+msgid "ADDITION: order %s was refunded. Its goods have been taken off the list."
+msgstr "TILLÆG: ordre %s er refunderet. Dens varer er taget af listen."
+
 msgid "That order can no longer take anything more. This is ordered on its own, with its own delivery."
 msgstr "Den ordre kan ikke tage imod mere. Dette bestilles for sig, med sin egen levering."
 

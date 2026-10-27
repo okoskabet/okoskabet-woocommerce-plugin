@@ -2530,17 +2530,36 @@ function oko_write_shipment_contents(\WC_Order $parent, array $additions, array 
 
 	oko_forget_shipment($reference, $merchant);
 
-	return is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+	$code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+
+	// And the goods are now what Økoskabet holds, so the record says so. The
+	// caller saves the order next, to keep the list of additions, and that
+	// save runs the order's own resend: against a record without these goods
+	// it found the list it had just been sent and sent it a second time.
+	//
+	// Only for an order that has a record. One with a fingerprint and no
+	// record gets one at that save, its additions' goods included — see
+	// oko_sent_by_1_5_2(). Meta only, and kept even when the caller has no
+	// reason to save after all.
+	$sent = $parent->get_meta(OKO_SENT_META, true);
+	if ($code === 200 && is_array($sent)) {
+		$sent['line_items'] = $body['line_items'];
+		oko_remember_what_was_sent($parent, $sent);
+		$parent->save_meta_data();
+	}
+
+	return $code;
 }
 
 /**
- * Take a cancelled addition's goods off the delivery they rode along with.
+ * Take a cancelled, or fully refunded, addition's goods off the delivery they
+ * rode along with.
  *
  * The list is sent again without it. Only then is it dropped from the order's
  * own list — a write that did not get through leaves the goods where they are,
  * and the shop should see that rather than a record saying they are gone.
  *
- * @param \WC_Order           $order     The cancelled addition.
+ * @param \WC_Order           $order     The cancelled or refunded addition.
  * @param int                 $parent_id The order it rode along with.
  * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
  *                                       order's, and so is the account it is
@@ -2570,11 +2589,17 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 		$parent,
 		oko_additions_to($parent, $order),
 		$merchant,
-		sprintf(
-			/* translators: %s: the cancelled addition's order number. */
-			__('ADDITION: order %s was cancelled. Its goods have been taken off the list.', O_TEXTDOMAIN),
-			$order->get_order_number()
-		)
+		$order->get_status() === 'refunded'
+			? sprintf(
+				/* translators: %s: the refunded addition's order number. */
+				__('ADDITION: order %s was refunded. Its goods have been taken off the list.', O_TEXTDOMAIN),
+				$order->get_order_number()
+			)
+			: sprintf(
+				/* translators: %s: the cancelled addition's order number. */
+				__('ADDITION: order %s was cancelled. Its goods have been taken off the list.', O_TEXTDOMAIN),
+				$order->get_order_number()
+			)
 	);
 
 	if ($code !== 200) {
@@ -4595,6 +4620,17 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		}
 	}
 
+	// An addition refunded in full comes off its delivery the way a cancelled
+	// one does. Refunding is how a shop takes goods off an order that has
+	// been paid, and a refund of the money alone leaves the lines whole, so
+	// only taking the addition off the list takes its goods off the box. An
+	// order of its own is left as it was: what a refunded delivery should be
+	// is the shop's to say, not ours.
+	if ($new_status === 'refunded' && $parent_id !== 0) {
+		oko_take_addition_off_its_order($order, $parent_id, $merchant);
+		return;
+	}
+
 	if ($new_status === 'on-hold' || $new_status === 'processing') {
 		$order_submitted = $order->get_meta('billing_okoskabet_done', true);
 		if (!empty($order_submitted)) {
@@ -5780,6 +5816,29 @@ function oko_resend_shipment_on_update(int $order_id): void
 
 	// Never sent, or on its way out. A cancellation is a DELETE elsewhere.
 	if (empty($order->get_meta('billing_okoskabet_done', true)) || $order->get_status() === 'cancelled') {
+		return;
+	}
+
+	// An addition has no shipment of its own: its goods are lines on the
+	// shipment of the order it rides on, so that is the order to send again.
+	// It is never fingerprinted, and this used to stop at the fingerprint —
+	// so a line refunded off an addition, or edited on it, stayed on the
+	// packing list, and the customer paid for less than went in the box.
+	// The earlier order's own resend builds its goods with every addition's,
+	// refunds taken off, and sends them when they differ from what Økoskabet
+	// holds; a save that changed nothing about the goods sends nothing.
+	//
+	// Only while the addition is on that order's list, and not once it is
+	// refunded in full: the status hook takes it off the list then, with a
+	// line on the shipment's note, as it does for a cancelled one.
+	$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+	if ($parent_id !== 0 && $parent_id !== $order_id) {
+		$parent = wc_get_order($parent_id);
+		if ($order->get_status() !== 'refunded'
+			&& $parent instanceof \WC_Order
+			&& in_array($order_id, oko_addition_ids($parent), true)) {
+			oko_resend_shipment_on_update($parent_id);
+		}
 		return;
 	}
 

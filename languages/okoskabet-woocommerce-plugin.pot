@@ -824,6 +824,13 @@ msgid ""
 "ADDITION: order %s was cancelled. Its goods have been taken off the list."
 msgstr ""
 
+#. translators: %s: the refunded addition's order number.
+#: functions/functions.php:2595
+#, php-format
+msgid ""
+"ADDITION: order %s was refunded. Its goods have been taken off the list."
+msgstr ""
+
 #. translators: 1: the order the addition rode along with, 2: the HTTP status or 0 when unreachable.
 #: functions/functions.php:2416
 #, php-format
