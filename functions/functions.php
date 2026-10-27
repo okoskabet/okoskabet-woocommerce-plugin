@@ -2459,6 +2459,158 @@ function oko_forget_addition($parent, $addition): void
 }
 
 /**
+ * Hold an order's additions still while one of them is written.
+ *
+ * Writing an addition reads the order's list of additions, sends the whole
+ * list of goods with the new ones at the bottom, and then puts the addition
+ * on the list. Two additions to one order written at the same moment — two
+ * bank transfers marked paid from two tabs, a gateway's callbacks crossing —
+ * each read the list before the other had written it. The later PUT replaced
+ * the earlier one's goods, the later list replaced the earlier one's id, and
+ * one addition was gone from the delivery and from the order with nothing to
+ * ever put it back. Rare, and silent when it happens.
+ *
+ * A row in the options table, inserted only where there is none: the table's
+ * unique name makes the insert itself the test, so two requests cannot both
+ * get it. Not add_option(), which asks first and then inserts "on duplicate
+ * key update" — two requests asking at once are both told there is none, and
+ * both succeed. Not a transient, which an object cache keeps outside the
+ * table, with no such promise.
+ *
+ * A hold nobody let go of, from a request that died before its `finally`, is
+ * taken over once it is OKO_ADDITION_LOCK_SECONDS old — by one request only:
+ * the take-over names the stale value it replaces.
+ *
+ * The value is the hold's own: when it was taken, and a part nobody else's
+ * can share, handed back so only this request can let go of it. A holder that
+ * overran the limit and then finished used to delete the row by its name —
+ * the hold another request had taken over, while that one was still writing.
+ *
+ * The hold also names the addition it was taken for, so a request that
+ * finds an order held can tell another addition from this one written twice —
+ * a gateway's callback and the customer's return both marking it paid. See
+ * oko_additions_held_for().
+ *
+ * @param int $parent_id The order the additions ride on.
+ * @param int $for       The addition being written, or 0.
+ * @return string The hold, for oko_unlock_additions_to(); empty when another
+ *                request has it.
+ */
+function oko_lock_additions_to(int $parent_id, int $for = 0): string
+{
+	global $wpdb;
+
+	$name = OKO_ADDITION_LOCK_PREFIX . $parent_id;
+	$hold = time() . ':' . wp_generate_uuid4() . ':' . $for;
+
+	$taken = $wpdb->query($wpdb->prepare(
+		"INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')",
+		$name,
+		$hold
+	));
+	if ((int) $taken === 1) {
+		$here             = &oko_additions_held_here();
+		$here[$parent_id] = $hold;
+		return $hold;
+	}
+
+	$since = (string) $wpdb->get_var($wpdb->prepare(
+		"SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s",
+		$name
+	));
+	// The value starts with the time it was taken, which is all (int) reads.
+	if ($since === '' || (int) $since > time() - OKO_ADDITION_LOCK_SECONDS) {
+		return '';
+	}
+
+	$taken = $wpdb->query($wpdb->prepare(
+		"UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s",
+		$hold,
+		$name,
+		$since
+	));
+
+	if ((int) $taken !== 1) {
+		return '';
+	}
+	$here             = &oko_additions_held_here();
+	$here[$parent_id] = $hold;
+
+	return $hold;
+}
+
+/**
+ * The holds on additions this request has, by the order they are on.
+ *
+ * A write under a hold saves the order, and the save runs the order's own
+ * resend, which takes the same hold before it sends goods (#81). It is this
+ * request's already, so that resend goes ahead rather than finding it taken.
+ *
+ * @return array<int,string>
+ */
+function &oko_additions_held_here(): array
+{
+	static $held = array();
+
+	return $held;
+}
+
+/**
+ * And let go of them again — this hold, and never one taken over from it.
+ *
+ * @param int    $parent_id The order the additions ride on.
+ * @param string $hold      What oko_lock_additions_to() handed back.
+ */
+function oko_unlock_additions_to(int $parent_id, string $hold): void
+{
+	global $wpdb;
+
+	$wpdb->delete($wpdb->options, array(
+		'option_name'  => OKO_ADDITION_LOCK_PREFIX . $parent_id,
+		'option_value' => $hold,
+	));
+
+	$here = &oko_additions_held_here();
+	if (($here[$parent_id] ?? '') === $hold) {
+		unset($here[$parent_id]);
+	}
+}
+
+/**
+ * The addition the hold on an order's additions was taken for: 0 when it is
+ * not held, or held for something else.
+ *
+ * @param int $parent_id The order the additions ride on.
+ */
+function oko_additions_held_for(int $parent_id): int
+{
+	global $wpdb;
+
+	$hold  = (string) $wpdb->get_var($wpdb->prepare(
+		"SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s",
+		OKO_ADDITION_LOCK_PREFIX . $parent_id
+	));
+	$parts = explode(':', $hold);
+
+	return count($parts) === 3 ? (int) $parts[2] : 0;
+}
+
+/** The name of the hold on an order's additions, before the order's id. */
+const OKO_ADDITION_LOCK_PREFIX = '_oko_addition_lock_';
+
+/**
+ * How long a hold on an order's additions is honoured, in seconds.
+ *
+ * Longer than any write that holds it can take: the questions an addition
+ * asks Økoskabet before it is sent, a PUT of fifteen seconds, and the save
+ * after it can each wait on Økoskabet when it is slow, and PHP does not count
+ * that wait against its own time limit. A hold broken while its write is
+ * still going is the very race it exists to stop; one kept too long only
+ * holds an addition for the shop to try again.
+ */
+const OKO_ADDITION_LOCK_SECONDS = 60;
+
+/**
  * An addition's goods, each line named as one.
  *
  * A packer who has already picked this order will not pick it again, so the
@@ -2530,23 +2682,94 @@ function oko_write_shipment_contents(\WC_Order $parent, array $additions, array 
 
 	oko_forget_shipment($reference, $merchant);
 
-	return is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+	$code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+
+	// And the goods are now what Økoskabet holds, so the record says so. The
+	// caller saves the order next, to keep the list of additions, and that
+	// save runs the order's own resend: against a record without these goods
+	// it found the list it had just been sent and sent it a second time.
+	//
+	// Only for an order that has a record. One with a fingerprint and no
+	// record gets one at that save, its additions' goods included — see
+	// oko_sent_by_1_5_2(). Meta only, and kept even when the caller has no
+	// reason to save after all.
+	$sent = $parent->get_meta(OKO_SENT_META, true);
+	if ($code === 200 && is_array($sent)) {
+		$sent['line_items'] = $body['line_items'];
+		oko_remember_what_was_sent($parent, $sent);
+		$parent->save_meta_data();
+	}
+
+	return $code;
 }
 
 /**
- * Take a cancelled addition's goods off the delivery they rode along with.
+ * Take a cancelled, or fully refunded, addition's goods off the delivery they
+ * rode along with.
  *
  * The list is sent again without it. Only then is it dropped from the order's
  * own list — a write that did not get through leaves the goods where they are,
  * and the shop should see that rather than a record saying they are gone.
  *
- * @param \WC_Order           $order     The cancelled addition.
+ * Only while holding the earlier order's additions still, as any write of its
+ * list of goods does; see oko_lock_additions_to().
+ *
+ * @param \WC_Order           $order     The cancelled or refunded addition.
  * @param int                 $parent_id The order it rode along with.
  * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
  *                                       order's, and so is the account it is
  *                                       written under. Kept for the callers.
  */
 function oko_take_addition_off_its_order($order, int $parent_id, array $merchant): void
+{
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	// An addition the order never took is nothing to take off it, and nothing
+	// to wait for a hold over: asked before the hold as well as inside it, or a
+	// cancellation of an addition that never got on was told the goods "may
+	// still be on that delivery" whenever another addition was being written.
+	$parent = wc_get_order($parent_id);
+	if (! $parent instanceof \WC_Order || ! in_array($order->get_id(), oko_addition_ids($parent), true)) {
+		return;
+	}
+
+	// Already cancelled or refunded, so it cannot be put on hold to try again
+	// later. The shop is told, the way it is told when the write itself fails.
+	// Unless the hold is this addition's own: the cancellation is being
+	// handled by another request at this moment.
+	$hold = oko_lock_additions_to($parent_id, $order->get_id());
+	if ($hold === '') {
+		if (oko_additions_held_for($parent_id) === $order->get_id()) {
+			return;
+		}
+		$order->add_order_note(sprintf(
+			/* translators: %s: the order the addition rode along with. */
+			__('The goods could not be taken off order %s: another addition to it was being written at the same moment. They may still be on that delivery.', O_TEXTDOMAIN),
+			oko_shipment_reference($parent)
+		));
+		return;
+	}
+
+	try {
+		oko_take_addition_off_while_its_order_is_held($order, $parent_id, $merchant);
+	} finally {
+		oko_unlock_additions_to($parent_id, $hold);
+	}
+}
+
+/**
+ * The taking off itself, once the earlier order's additions are held still.
+ *
+ * The earlier order is read here, inside the hold, so its list of additions is
+ * the one the last write left — not one read before another write began.
+ *
+ * @param \WC_Order           $order     The cancelled or refunded addition.
+ * @param int                 $parent_id The order it rode along with.
+ * @param array<string,mixed> $merchant  Unused; see above.
+ */
+function oko_take_addition_off_while_its_order_is_held($order, int $parent_id, array $merchant): void
 {
 	$parent = wc_get_order($parent_id);
 	if (! $order instanceof \WC_Order || ! $parent instanceof \WC_Order) {
@@ -2570,11 +2793,17 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 		$parent,
 		oko_additions_to($parent, $order),
 		$merchant,
-		sprintf(
-			/* translators: %s: the cancelled addition's order number. */
-			__('ADDITION: order %s was cancelled. Its goods have been taken off the list.', O_TEXTDOMAIN),
-			$order->get_order_number()
-		)
+		$order->get_status() === 'refunded'
+			? sprintf(
+				/* translators: %s: the refunded addition's order number. */
+				__('ADDITION: order %s was refunded. Its goods have been taken off the list.', O_TEXTDOMAIN),
+				$order->get_order_number()
+			)
+			: sprintf(
+				/* translators: %s: the cancelled addition's order number. */
+				__('ADDITION: order %s was cancelled. Its goods have been taken off the list.', O_TEXTDOMAIN),
+				$order->get_order_number()
+			)
 	);
 
 	if ($code !== 200) {
@@ -2603,6 +2832,10 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
  * an order that did not reach Økoskabet rather than one that silently did not
  * get its goods. The note says which order was meant.
  *
+ * Only while holding the earlier order's additions still; see
+ * oko_lock_additions_to(). An addition that arrives while another is being
+ * written is held for the shop, like any other that did not get on.
+ *
  * @param \WC_Order           $order     The addition.
  * @param int                 $parent_id The earlier order's WooCommerce id.
  * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
@@ -2615,6 +2848,43 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 		return;
 	}
 
+	// Held for this very addition, by another request writing it at the same
+	// moment — a gateway's callback and the customer's return both marking it
+	// paid. That request puts it on; holding it here told the shop the goods
+	// were not added while they were.
+	$hold = oko_lock_additions_to($parent_id, $order->get_id());
+	if ($hold === '' && oko_additions_held_for($parent_id) === $order->get_id()) {
+		return;
+	}
+	if ($hold === '') {
+		$parent = wc_get_order($parent_id);
+		oko_hold_addition($order, sprintf(
+			/* translators: %s: the earlier order's number. */
+			__('Another addition to order %s was being written at the same moment, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
+			$parent instanceof \WC_Order ? oko_shipment_reference($parent) : (string) $parent_id
+		));
+		return;
+	}
+
+	try {
+		oko_send_addition_while_its_order_is_held($order, $parent_id, $merchant);
+	} finally {
+		oko_unlock_additions_to($parent_id, $hold);
+	}
+}
+
+/**
+ * The sending itself, once the earlier order's additions are held still.
+ *
+ * The earlier order is read here, inside the hold, so its list of additions is
+ * the one the last write left — not one read before another write began.
+ *
+ * @param \WC_Order           $order     The addition.
+ * @param int                 $parent_id The earlier order's WooCommerce id.
+ * @param array<string,mixed> $merchant  Unused; see above.
+ */
+function oko_send_addition_while_its_order_is_held(\WC_Order $order, int $parent_id, array $merchant): void
+{
 	// The earlier order's goods have to be sent again with the addition's: a
 	// PUT replaces the shipment's lines, so a list that is missing them would
 	// delete them. If that order cannot be read, nothing is sent at all —
@@ -2632,6 +2902,13 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 			__('Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
 			(string) $parent_id
 		));
+		return;
+	}
+
+	// Already on it: written by a request that held the order first, while
+	// this one waited for nothing but its own turn. Sent again, it would be
+	// on the list twice.
+	if (in_array($order->get_id(), oko_addition_ids($parent), true)) {
 		return;
 	}
 
@@ -2859,6 +3136,12 @@ function oko_second_address_line($order): string
 		return '';
 	}
 
+	// Nor for an order 1.5.2 sent, which never had it: see
+	// OKO_SENT_BY_1_5_2_META.
+	if (! empty($order->get_meta(OKO_SENT_BY_1_5_2_META, true))) {
+		return '';
+	}
+
 	$same_address = oko_same_line($order->get_shipping_address_1(), $order->get_billing_address_1())
 		&& oko_same_line($order->get_shipping_postcode(), $order->get_billing_postcode());
 
@@ -2873,6 +3156,32 @@ function oko_second_address_line($order): string
  * what the customer typed in another field months ago is not a second opinion.
  */
 const OKO_ADDRESS_FROM_OKOSKABET_META = '_okoskabet_address_written_back';
+
+/**
+ * Meta marking an order 1.5.2 sent, recognised by its 1.5.2 fingerprint.
+ *
+ * Such an order keeps 1.5.2's second address line: the shipping line as
+ * typed, never the billing flat. 1.5.2 did not send the billing flat, so
+ * Økoskabet's copy has none, and anything the packing room corrected while
+ * the shop ran 1.5.2 stands on that copy without being written back.
+ * Bringing the flat in afterwards made the address differ from both: the
+ * first webhook about the delivery read Økoskabet's copy as a move, wrote a
+ * note saying so and switched the fallback off, and the second save of the
+ * order sent the whole address, over the correction (#80's review). The flat
+ * is no worse off than it was under 1.5.2, and orders placed since get it.
+ */
+const OKO_SENT_BY_1_5_2_META = '_okoskabet_sent_by_1_5_2';
+
+/**
+ * Meta marking a place to collect from that Økoskabet's backoffice decided.
+ *
+ * Set by the write-back whenever it writes the place, or takes it away. With
+ * it the place alone says whether the order is a collection, whatever the
+ * shipping line says; without it only a store-pickup shipping line makes one,
+ * because a place on any other order can be a leftover. See
+ * oko_collection_place().
+ */
+const OKO_PICKUP_FROM_OKOSKABET_META = '_okoskabet_pickup_written_back';
 
 /** Two written forms of one line, give or take case and spacing. */
 function oko_same_line(string $one, string $other): bool
@@ -3513,13 +3822,13 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 		echo $line . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 	}
 	if (!empty($order_done)) {
-		echo 'Økoskabet Done' . ': ' . esc_html($order_done) . "\n";
+		echo esc_html__('Økoskabet Done', O_TEXTDOMAIN) . ': ' . esc_html($order_done) . "\n";
 	}
 	if (!empty($shed_id)) {
-		echo 'Økoskabet SHED ID' . ': ' . esc_html($shed_id) . "\n";
+		echo esc_html__('Økoskabet SHED ID', O_TEXTDOMAIN) . ': ' . esc_html($shed_id) . "\n";
 	}
 	if (!empty($delivery_date)) {
-		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date) . "\n";
+		echo esc_html__('Økoskabet Delivery Date', O_TEXTDOMAIN) . ': ' . esc_html($delivery_date) . "\n";
 	}
 	if (!empty($pickup_location_id)) {
 		echo esc_html__('Økoskabet pickup location', O_TEXTDOMAIN) . ': ' . esc_html($pickup_location_id) . "\n";
@@ -3973,14 +4282,39 @@ function oko_orders_by_ids(array $ids): array
  * Økoskabet that has not heard of the field answers nothing, which reads the
  * same way: the shop sends no prices until the day it is asked to.
  *
+ * No answer at all is not a no. The configuration is an empty array when it
+ * could not be read (see oko_merchant_configuration()), and that is kept for
+ * half a minute; read as "no prices", every order saved in that half minute
+ * sent its goods again without them, and the first save after Økoskabet came
+ * back sent them again with. So the account's last real answer stands until
+ * there is a new one, and an account that has never answered sends none.
+ *
  * @param array<string,mixed> $merchant
  */
 function oko_shop_sends_line_totals(array $merchant): bool
 {
-	$configuration = oko_merchant_configuration((string) ($merchant['id'] ?? ''));
+	$merchant_id   = (string) ($merchant['id'] ?? '');
+	$configuration = oko_merchant_configuration($merchant_id);
+	$last_said     = (array) get_option(OKO_LINE_TOTALS_SAID_OPTION, array());
 
-	return ! empty($configuration['send_line_totals']);
+	if ($configuration === array()) {
+		return ! empty($last_said[$merchant_id]);
+	}
+
+	$sends = ! empty($configuration['send_line_totals']);
+
+	// Written only when it changes, which is when a shop starts or stops
+	// using offers — not on every order.
+	if (! empty($last_said[$merchant_id]) !== $sends) {
+		$last_said[$merchant_id] = $sends;
+		update_option(OKO_LINE_TOTALS_SAID_OPTION, $last_said, false);
+	}
+
+	return $sends;
 }
+
+/** What each account's Økoskabet last said about line totals, for when it says nothing. */
+const OKO_LINE_TOTALS_SAID_OPTION = 'okoskabet_line_totals_last_said';
 
 /**
  * What a line came to, as this shop reports money.
@@ -4233,6 +4567,59 @@ function oko_logistics_note(\WC_Order $order): string
 }
 
 /**
+ * Where an order is collected from, if it is a collection from the shop.
+ *
+ * Null when it is not one; an empty string for a collection with no place
+ * yet, which goes to Økoskabet as one for a place to be given by hand. One
+ * decision, asked by the payload and by the write-back: two copies of it
+ * would let the write-back read as moved what was never sent.
+ *
+ * A collection Økoskabet itself moved the order to counts, even though the
+ * shipping line the customer chose still says home delivery — for the same
+ * reason the shed does. Without it the next edit in the shop sent the order
+ * back as a home delivery and undid the move by hand.
+ *
+ * But only a place Økoskabet gave us counts that way, and the write-back
+ * marks the ones it gave. Unlike the shed, a place to collect from is not a
+ * decision just by being there. Only the browser emptied it when a customer
+ * moved on from store pickup, so open orders from 1.5.2 can carry one beside
+ * a locker or the door, and an admin who changes a collection's shipping line
+ * to home delivery leaves one behind. 1.5.2 read it for a store pickup only;
+ * read on every order, each of those became a collection on nobody's say-so,
+ * and was sent as one on its next save.
+ *
+ * The mark cuts the other way as well. Once Økoskabet has moved a collection
+ * to a shed or to the door, the write-back empties the place — and the
+ * shipping line, still saying store pickup, kept sending a collection with
+ * nowhere to collect from. That threw the move away, and the shop's next
+ * address edit with it.
+ *
+ * @param \WC_Order $order
+ * @return string|null
+ */
+function oko_collection_place(\WC_Order $order): ?string
+{
+	$place = trim((string) $order->get_meta('_billing_okoskabet_pickup_location_id', true));
+
+	if (! empty($order->get_meta(OKO_PICKUP_FROM_OKOSKABET_META, true))) {
+		return $place !== '' ? $place : null;
+	}
+
+	// The first of our shipping lines decides, as it does for the shed.
+	foreach ($order->get_shipping_methods() as $shipping_method) {
+		$method_id = $shipping_method->get_method_id();
+		if ($method_id === 'hey_okoskabet_shipping_store_pickup') {
+			return $place;
+		}
+		if ($method_id === 'hey_okoskabet_shipping_shed') {
+			return null;
+		}
+	}
+
+	return null;
+}
+
+/**
  * Everything Økoskabet is told about an order, in one place.
  *
  * Built once and used twice — when the order is first sent, and again when it
@@ -4281,15 +4668,14 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	$without_date = empty($order_delivery_date);
 
 	$is_shed_delivery  = false;
-	$is_store_pickup   = false;
 	foreach ($order->get_shipping_methods() as $shipping_method) {
 		$method_id = $shipping_method->get_method_id();
 		if ($method_id === 'hey_okoskabet_shipping_shed') {
 			$is_shed_delivery = true;
 			break;
 		}
+		// A collection's line, which is not a shed's: see oko_collection_place().
 		if ($method_id === 'hey_okoskabet_shipping_store_pickup') {
-			$is_store_pickup = true;
 			break;
 		}
 	}
@@ -4310,22 +4696,11 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	// goods until the customer collects them — so it carries neither a
 	// shed reservation nor a delivery address. What it does carry is the
 	// place to collect from, chosen at checkout from the merchant's own
-	// pickup locations.
-	//
-	// Read before the decision, not after it, for the same reason the shed is:
-	// a collection Økoskabet itself moved the order to counts too, even though
-	// the shipping line the customer chose still says home delivery. Without
-	// it the next edit in the shop sent the order back as a home delivery and
-	// undid the move by hand — the shed had its guard and this did not.
-	$order_pickup_location_id = trim(
-		(string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)
-	);
-
-	$is_store_pickup = $is_store_pickup || $order_pickup_location_id !== '';
-
-	if (! $is_store_pickup) {
-		$order_pickup_location_id = '';
-	}
+	// pickup locations. Whether the order is one, and from where, is one
+	// decision, asked by the write-back too; see oko_collection_place().
+	$order_pickup_location_id = oko_collection_place($order);
+	$is_store_pickup          = $order_pickup_location_id !== null;
+	$order_pickup_location_id = (string) $order_pickup_location_id;
 
 
 	// One shipment, three shapes. Everything every shipment carries is
@@ -4541,6 +4916,17 @@ function hey_after_order_placed(int $order_id, string $old_status, string $new_s
 		}
 	}
 
+	// An addition refunded in full comes off its delivery the way a cancelled
+	// one does. Refunding is how a shop takes goods off an order that has
+	// been paid, and a refund of the money alone leaves the lines whole, so
+	// only taking the addition off the list takes its goods off the box. An
+	// order of its own is left as it was: what a refunded delivery should be
+	// is the shop's to say, not ours.
+	if ($new_status === 'refunded' && $parent_id !== 0) {
+		oko_take_addition_off_its_order($order, $parent_id, $merchant);
+		return;
+	}
+
 	if ($new_status === 'on-hold' || $new_status === 'processing') {
 		$order_submitted = $order->get_meta('billing_okoskabet_done', true);
 		if (!empty($order_submitted)) {
@@ -4713,16 +5099,32 @@ function oko_changes_touch_the_delivery(array $changes): bool
  * order the customer has already paid is not, and a shop that saw its totals
  * change by themselves would be right to stop trusting this.
  *
- * @param \WC_Order           $order    The order to write on.
- * @param array<string,mixed> $shipment The shipment as Økoskabet has it.
+ * Only what Økoskabet changed. Given what we last sent, a field where
+ * Økoskabet still holds what we sent is left as the order has it: if the
+ * order says something else, that is an edit of the shop's own still on its
+ * way — a 5xx left to retry, a key Økoskabet would not take — and writing
+ * Økoskabet's copy over it put the parcel back on the old address, with a
+ * note blaming Økoskabet (#80's review). The save after the write-back then
+ * sends it.
+ *
+ * @param \WC_Order                $order    The order to write on.
+ * @param array<string,mixed>      $shipment The shipment as Økoskabet has it.
+ * @param array<string,mixed>|null $sent     What we last sent, when known.
  * @return array<int,string> What was changed, for the order's own note.
  */
-function oko_write_delivery_back(\WC_Order $order, array $shipment): array
+function oko_write_delivery_back(\WC_Order $order, array $shipment, ?array $sent = null): array
 {
 	$changed = array();
 
+	// Økoskabet holds this field as we sent it, so it did not change it.
+	$as_sent = static function (string $value, string $what_we_sent) use ($sent): bool {
+		return $sent !== null && $value === $what_we_sent;
+	};
+	$sent_home = (array) ($sent['home_delivery'] ?? array());
+
 	$date = sanitize_text_field((string) ($shipment['delivery_date'] ?? ''));
-	if ($date !== '' && $date !== (string) $order->get_meta('_billing_okoskabet_delivery_date', true)) {
+	if ($date !== '' && ! $as_sent($date, (string) ($sent['delivery_date'] ?? ''))
+		&& $date !== (string) $order->get_meta('_billing_okoskabet_delivery_date', true)) {
 		$order->update_meta_data('_billing_okoskabet_delivery_date', $date);
 		/* translators: %s: the new delivery date. */
 		$changed[] = sprintf(__('delivery date %s', O_TEXTDOMAIN), $date);
@@ -4734,17 +5136,36 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	// collection made by hand survives the shop's next edit.
 	$pickup = $shipment['pickup_location_id'] ?? null;
 	$pickup = ($pickup === null || $pickup === '') ? '' : (string) (int) $pickup;
-	if ($pickup !== (string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)) {
+	// Compared with the place we send, not with whatever the order carries.
+	// A place left behind on a door or a shed delivery is not one we send,
+	// and read as ours, every webhook about such a delivery — a date moved by
+	// a day — said it was "no longer a collection from the shop", and marked
+	// the emptied place as Økoskabet's word.
+	$sent_pickup = ($sent['shipment_type'] ?? '') === 'store_pickup' ? (string) ($sent['pickup_location_id'] ?? '') : '';
+	if (! $as_sent($pickup, $sent_pickup) && $pickup !== (string) oko_collection_place($order)) {
 		$order->update_meta_data('_billing_okoskabet_pickup_location_id', $pickup);
+		// Økoskabet's word now, set or emptied, whatever the shipping line says.
+		$order->update_meta_data(OKO_PICKUP_FROM_OKOSKABET_META, true);
 		$changed[] = $pickup !== ''
 			? __('collection from the shop', O_TEXTDOMAIN)
 			: __('no longer a collection from the shop', O_TEXTDOMAIN);
+	} elseif (oko_collection_place($order) === ''
+		&& ! in_array((string) ($shipment['shipment_type'] ?? 'store_pickup'), array('', 'store_pickup'), true)
+		&& ($sent === null || ($sent['shipment_type'] ?? '') === 'store_pickup')) {
+		// A collection with no place — a shop with no pickup locations books
+		// one with none — reads the same as no collection above, so Økoskabet
+		// moving it to a shed or the door was never marked, the store-pickup
+		// line won the next payload, and the shop's later address corrections
+		// never went (#80's review). Økoskabet's own type says it moved.
+		$order->update_meta_data(OKO_PICKUP_FROM_OKOSKABET_META, true);
+		$changed[] = __('no longer a collection from the shop', O_TEXTDOMAIN);
 	}
 
 	$shed      = (array) (((array) ($shipment['shed_reservation'] ?? array()))['shed'] ?? array());
 	$shed_id   = isset($shed['id']) ? sanitize_text_field((string) $shed['id']) : '';
 	$shed_name = sanitize_text_field((string) ($shed['name'] ?? $shed_id));
-	if ($shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
+	if (! $as_sent($shed_id, (string) ($sent['reservation']['shed_id'] ?? ''))
+		&& $shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', $shed_id);
 		$changed[] = $shed_id !== ''
 			/* translators: %s: the name of the Økoskab. */
@@ -4760,7 +5181,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	$home      = (array) ($shipment['home_delivery'] ?? array());
 	$recipient = isset($home['recipient_name']) ? sanitize_text_field((string) $home['recipient_name']) : '';
 	$held_name = oko_recipient_name($order);
-	if ($recipient !== '' && $recipient !== $held_name) {
+	if ($recipient !== '' && ! $as_sent($recipient, (string) ($sent_home['recipient_name'] ?? '')) && $recipient !== $held_name) {
 		$name = explode(' ', $recipient, 2);
 		$order->set_shipping_first_name($name[0]);
 		$order->set_shipping_last_name($name[1] ?? '');
@@ -4781,26 +5202,41 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 		$lines = oko_delivery_address_lines($address);
 		$held  = array(
 			'shipping_address_1' => $order->get_shipping_address_1(),
-			'shipping_address_2' => $order->get_shipping_address_2(),
+			// The second line as we send it, not as the shipping form holds
+			// it. A checkout with no second shipping line keeps the flat in
+			// billing only, and we send it from there; compared with the empty
+			// shipping line, the first webhook about such a delivery — a date
+			// moved by a day — read Økoskabet's copy of our own flat as a move,
+			// and wrote a note saying so on the order.
+			'shipping_address_2' => oko_second_address_line($order),
 			'shipping_city'      => $order->get_shipping_city(),
 			'shipping_postcode'  => $order->get_shipping_postcode(),
 		);
 
-		$address_moved = oko_address_as_compared($lines) !== oko_address_as_compared($held);
+		$address_moved = oko_address_as_compared($lines) !== oko_address_as_compared($held)
+			&& ! $as_sent(oko_address_as_compared($lines), oko_address_as_compared(array(
+				'shipping_address_1' => (string) ($sent_home['address_1'] ?? ''),
+				'shipping_address_2' => (string) ($sent_home['address_2'] ?? ''),
+				'shipping_city'      => (string) ($sent_home['city'] ?? ''),
+				'shipping_postcode'  => (string) ($sent_home['postal_code'] ?? ''),
+			)));
 
 		if ($address_moved) {
 			$order->set_shipping_address_1($lines['shipping_address_1']);
 			$order->set_shipping_address_2($lines['shipping_address_2']);
 			$order->set_shipping_city($lines['shipping_city']);
 			$order->set_shipping_postcode($lines['shipping_postcode']);
-		}
 
-		// Whether or not the lines moved. The fact that matters is that
-		// Økoskabet has given us the address — and the case this exists for is
-		// precisely the one where nothing moved: a flat taken off a delivery
-		// whose shipping line was empty all along, because the shop's checkout
-		// has no second line and the flat only ever lived in billing.
-		$order->update_meta_data(OKO_ADDRESS_FROM_OKOSKABET_META, true);
+			// Økoskabet's address now, so the billing fallback is switched off
+			// and cannot bring back a flat the backoffice took away. Only when
+			// it moved: an address that did not is the one we sent, billing
+			// flat and all, and marking it would drop from the next payload a
+			// flat Økoskabet has — the shop's next address edit would then send
+			// the address without it. The case the mark exists for, a flat
+			// taken off a delivery whose shipping line was empty all along, is
+			// a move now that the flat is compared as we send it.
+			$order->update_meta_data(OKO_ADDRESS_FROM_OKOSKABET_META, true);
+		}
 	}
 
 	if ($address_moved) {
@@ -4926,10 +5362,10 @@ function oko_delivery_address_lines(array $address): array
  * and written whole; the order gets a note naming what moved, so the shop can
  * see that somebody at Økoskabet changed it and what to.
  *
- * It does not send anything back. Writing the order is itself an edit, and the
- * resend would push Økoskabet's own change at Økoskabet — so the resend is
- * held off for this save, and the fingerprint is moved forward to what the
- * shipment now is. The next genuine edit in the shop is then a difference
+ * It does not send Økoskabet's change back. Writing the order is itself an
+ * edit, and the resend would push that change at Økoskabet — so the record of
+ * what Økoskabet holds is moved forward by what Økoskabet changed, and by
+ * nothing else. The next genuine edit in the shop is then a difference
  * against the corrected delivery rather than against the one it replaced,
  * which is the whole point: it is what stops a product rename from undoing
  * the packing room's work.
@@ -4970,22 +5406,44 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 		return array();
 	}
 
-	$changed = oko_write_delivery_back($order, $shipment);
+	// The order as it stands and what Økoskabet held of it, read before the
+	// write-back changes the one they are both read from.
+	//
+	// An order with no record but a fingerprint that still matches gets the
+	// record the resend would have written for it. One whose fingerprint does
+	// not match has moved since it was sent, from something nobody knows; it
+	// gets none, and the save below sends it whole, as any save of it would —
+	// Økoskabet's change included, which is by then the order's own. An order
+	// with no fingerprint at all was never compared with anything, so nothing
+	// of the shop's is waiting to go, and the order as it stood is where its
+	// record starts.
+	$before = oko_shipment_payload($order, $merchant);
+	$held   = null;
+	if ($before !== null) {
+		$held = $order->get_meta(OKO_SENT_META, true);
+		if (! is_array($held)) {
+			$held = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true) === ''
+				? oko_comparable_payload($before)
+				: oko_sent_according_to_the_fingerprint($order, $before, $merchant);
+		}
+	}
+
+	$changed = oko_write_delivery_back($order, $shipment, is_array($held) ? $held : null);
 	if ($changed === array()) {
-		// Nothing of the shop's own moved, so there is no note to write and no
-		// edit to record — but the write-back may have marked the address as
-		// Økoskabet's, and that mark is the whole point when the correction
-		// was a flat being taken off. Meta only: a full save here would read
-		// as an edit and call the resend straight back.
-		$order->save_meta_data();
+		// Nothing of the shop's own moved, so there is no note to write and
+		// nothing to save: the write-back writes, and marks, only what it
+		// finds different, and every one of those is in `$changed`.
 		return array();
 	}
 
-	// What Økoskabet holds is now what we would send, written in the same
-	// breath as the change itself. The resend hook fires on this save, builds
-	// the payload, finds the fingerprint already matching, and stops — so
-	// Økoskabet's own correction is not pushed back at Økoskabet, and nothing
-	// has to be marked, filtered or saved a second time to arrange it.
+	// Økoskabet's change goes into the record of what it holds, written in
+	// the same breath as the change itself, and only that change. The resend
+	// hook fires on this save and compares the order with the record: what
+	// Økoskabet just changed is the same on both sides, so it is not pushed
+	// back at Økoskabet — while an edit of the shop's own that has not got
+	// through, a 5xx or a refused key left to retry, or a refusal held back,
+	// is still a difference. This used to write the whole order down, and
+	// those were marked as sent and never sent again.
 	//
 	// It replaces a "do not send" meta and a filter that read it. That worked,
 	// but only as long as the meta came off again: an order that could not
@@ -4993,9 +5451,9 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	// for good, with no note and no line in the log. Saying what was sent is
 	// the thing the resend already asks about; saying "not now" was a second
 	// mechanism for the same question.
-	$payload = oko_shipment_payload($order, $merchant);
-	if ($payload !== null) {
-		oko_remember_what_was_sent($order, $payload);
+	$after = oko_shipment_payload($order, $merchant);
+	if (is_array($held) && $after !== null) {
+		oko_remember_what_was_sent($order, oko_with_okoskabets_changes($held, $before, $after));
 	}
 
 	$order->save();
@@ -5007,6 +5465,49 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 	));
 
 	return $changed;
+}
+
+/**
+ * The record of what Økoskabet holds, moved by what the write-back changed.
+ *
+ * What the write-back changed is told by the order's payload before and after
+ * it, and nothing else touches the order in between. A key that moved takes
+ * its new value, or goes, in the record; a key that did not keeps the
+ * record's, whatever the order says — that difference is the shop's, still
+ * on its way. The customer is followed field by field, as the resend sends
+ * it: a renamed recipient is Økoskabet's, and a new phone beside it is not.
+ *
+ * @param array<string,mixed> $held   What Økoskabet held before.
+ * @param array<string,mixed> $before The order's payload before the write-back.
+ * @param array<string,mixed> $after  And after it.
+ * @return array<string,mixed>
+ */
+function oko_with_okoskabets_changes(array $held, array $before, array $after): array
+{
+	$held   = oko_comparable_payload($held);
+	$before = oko_comparable_payload($before);
+	$after  = oko_comparable_payload($after);
+
+	foreach (array_keys($before + $after) as $key) {
+		if (array_key_exists($key, $before) && array_key_exists($key, $after) && $before[$key] === $after[$key]) {
+			continue;
+		}
+
+		if (! array_key_exists($key, $after)) {
+			unset($held[$key]);
+			continue;
+		}
+
+		if (in_array($key, OKO_NESTED_PAYLOAD_KEYS, true)
+			&& is_array($after[$key]) && is_array($before[$key] ?? null) && is_array($held[$key] ?? null)) {
+			$held[$key] = oko_with_okoskabets_changes($held[$key], $before[$key], $after[$key]);
+			continue;
+		}
+
+		$held[$key] = $after[$key];
+	}
+
+	return $held;
 }
 
 /**
@@ -5068,9 +5569,16 @@ function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
  * the same breath — so the hash answers nothing for an order that has the
  * payload. Its one job is the order that does *not*: one sent by a version
  * that recorded a fingerprint and no payload. For such an order the hash is
- * the only thing left to compare, and it buys the branch at
- * `oko_resend_shipment_on_update()` that writes the payload down for free
- * when nothing has moved.
+ * the only thing left to compare, and it buys the moment the record can be
+ * written down for free: the order has not moved since it was hashed, so what
+ * was hashed is what Økoskabet holds. See oko_sent_according_to_the_fingerprint().
+ *
+ * What was hashed, which is not always today's payload. A hash of today's
+ * payload says today's payload. A hash 1.5.2 took says the order as 1.5.2
+ * built it, and where 1.5.2 built a field differently, the match vouches for
+ * 1.5.2's version and not for ours — so the address is written down as 1.5.2
+ * sent it (oko_sent_by_1_5_2(), which says what else is and is not), and the
+ * order stays on 1.5.2's address from then on (OKO_SENT_BY_1_5_2_META).
  *
  * Without it, every order placed before this release would send its *whole*
  * payload on its first save — over whatever the backoffice had corrected in
@@ -5081,12 +5589,13 @@ function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
  *   1. this release live long enough that every such order has either been
  *      saved once, which upgrades it, or been locked by Økoskabet;
  *   2. no backfill — the hash is not reversible, so writing `OKO_SENT_META`
- *      from the current payload would bless edits Økoskabet never accepted.
+ *      for an order whose hash does not match would bless edits Økoskabet
+ *      never accepted.
  *
  * When that holds: delete this constant, the `$sent_fingerprint === ''` guard,
- * and the `elseif` branch. `is_array($sent)` then carries "sent by a recording
- * version" on its own. Tracked as an issue rather than left here to be
- * remembered.
+ * and oko_sent_according_to_the_fingerprint() with the 1.5.2 projection it
+ * reads. `is_array($sent)` then carries "sent by a recording version" on its
+ * own. Tracked as an issue rather than left here to be remembered.
  */
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
 
@@ -5231,6 +5740,9 @@ function oko_order_save_depth(int $delta = 0): int
  * note is the only thing that moved, with the note stripped, achieving
  * nothing.
  *
+ * And from each line, what the catalogue says about the goods rather than
+ * what the order says: see OKO_CATALOGUE_LINE_KEYS.
+ *
  * @param array<string,mixed> $payload
  * @return array<string,mixed>
  */
@@ -5243,8 +5755,28 @@ function oko_comparable_payload(array $payload): array
 		$payload['allow_invalid']
 	);
 
+	if (isset($payload['line_items']) && is_array($payload['line_items'])) {
+		$payload['line_items'] = array_map(static function ($line) {
+			return is_array($line) ? array_diff_key($line, array_flip(OKO_CATALOGUE_LINE_KEYS)) : $line;
+		}, $payload['line_items']);
+	}
+
 	return $payload;
 }
+
+/**
+ * The keys of a line that come from the catalogue, not from the order.
+ *
+ * A new picture on a product, a tag, a category or an attribute is an edit of
+ * the product, and every open order with that product would have read it as
+ * an edit of the order: its next save, a status change from a webhook
+ * included, sent the goods again. That is a PUT of the whole list for each of
+ * them, and any change Økoskabet refused before went along with it, to be
+ * refused and noted once more. So these do not count as a change, and are not
+ * kept in the record of what was sent. They still travel whenever the goods
+ * do, which is when the packing room reads them.
+ */
+const OKO_CATALOGUE_LINE_KEYS = array('tags', 'properties', 'image');
 
 /** A fingerprint of a payload, for telling two of them apart. */
 function oko_shipment_fingerprint(array $payload): string
@@ -5276,16 +5808,7 @@ function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload, ?array $merc
 {
 	$payload['shipment_reference'] = (string) $order->get_order_number();
 
-	$payload['line_items'] = array_map(static function (array $line): array {
-		return array(
-			'product_id'    => $line['product_id'] ?? null,
-			'variant_id'    => $line['variant_id'] ?? null,
-			'name'          => $line['name'] ?? '',
-			'variant_title' => $line['variant_title'] ?? null,
-			'sku'           => $line['sku'] ?? '',
-			'quantity'      => $line['quantity'] ?? 0,
-		);
-	}, oko_order_line_items($order, $merchant));
+	$payload['line_items'] = oko_lines_as_1_5_2($order, $merchant);
 
 	if (isset($payload['home_delivery'])) {
 		$recipient = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
@@ -5304,6 +5827,118 @@ function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload, ?array $merc
 	unset($payload['locale'], $payload['webshop_products_url']);
 
 	return md5((string) wp_json_encode($payload));
+}
+
+/**
+ * The order's own goods as 1.5.2 sent them: six keys on a line, in its order.
+ *
+ * @param \WC_Order $order
+ * @return array<int,array<string,mixed>>
+ */
+function oko_lines_as_1_5_2(\WC_Order $order, ?array $merchant = null): array
+{
+	return array_map(static function (array $line): array {
+		return array(
+			'product_id'    => $line['product_id'] ?? null,
+			'variant_id'    => $line['variant_id'] ?? null,
+			'name'          => $line['name'] ?? '',
+			'variant_title' => $line['variant_title'] ?? null,
+			'sku'           => $line['sku'] ?? '',
+			'quantity'      => $line['quantity'] ?? 0,
+		);
+	}, oko_order_line_items($order, $merchant));
+}
+
+/**
+ * What 1.5.2 told Økoskabet about an order whose 1.5.2 fingerprint matches.
+ *
+ * The match says nothing has moved since 1.5.2 sent the order, but in 1.5.2's
+ * terms: it vouches for the fields as 1.5.2 built them, and some of those are
+ * not what today's payload sends. The second address line is the one that
+ * matters. 1.5.2 sent the shipping line as typed, and today's payload falls
+ * back to the billing address when the checkout has no second shipping line —
+ * so writing today's payload down recorded as sent a flat Økoskabet never got,
+ * and the next edit found nothing to send for the address.
+ *
+ * So the address is written as 1.5.2 sent it, and everything else as today's
+ * payload has it, which the match says is the same. And it stays 1.5.2's:
+ * the order is marked (OKO_SENT_BY_1_5_2_META), and the billing flat is not
+ * brought in later either, where it would be sent over the backoffice's
+ * corrections. Two of 1.5.2's quirks are
+ * left out on purpose, because Økoskabet's copy does not have them either:
+ * `location` on the address, a field it never had and cast away unread, which
+ * written down would make every address differ forever; and the space 1.5.2
+ * put after a recipient with no last name, which would send the whole address
+ * to take a space off — over whatever the packing room corrected while the
+ * shop ran 1.5.2, which wrote nothing back.
+ *
+ * The goods are today's too, on purpose. The match vouches for the six keys
+ * 1.5.2 sent on a line, which are today's six; beside them today's line has
+ * what the catalogue says, which is never recorded (OKO_CATALOGUE_LINE_KEYS),
+ * and at a shop that sends them, the line's total. 1.5.2 never sent a total,
+ * but it is written down as sent all the same: recorded as missing, it made
+ * the second save of every open 1.5.2 order — a status change, or another
+ * plugin's meta — send all its goods to add the totals, and an order Økoskabet
+ * had locked by then got a note about an edit nobody made. The totals go with
+ * the goods the next time the goods change.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $comparable Today's payload for it, comparable.
+ * @return array<string,mixed>
+ */
+function oko_sent_by_1_5_2(\WC_Order $order, array $comparable): array
+{
+	$sent = $comparable;
+
+	if (isset($sent['home_delivery'])) {
+		$sent['home_delivery'] = array_filter(array(
+			'recipient_name' => oko_recipient_name($order),
+			'address_1'      => $order->get_shipping_address_1(),
+			'address_2'      => $order->get_shipping_address_2(),
+			'city'           => $order->get_shipping_city(),
+			'postal_code'    => $order->get_shipping_postcode(),
+		));
+	}
+
+	return $sent;
+}
+
+/**
+ * What Økoskabet holds for an order that has a fingerprint and no record, as
+ * far as the fingerprint can say — or null when it cannot.
+ *
+ * It can when the order has not moved since it was hashed, by today's hash or
+ * by 1.5.2's; see OKO_SENT_FINGERPRINT_META. An order that has moved is one we
+ * know nothing about: what it moved from is not in a hash.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $payload Today's payload for it.
+ * @param array<string,mixed> $merchant
+ * @return array<string,mixed>|null
+ */
+function oko_sent_according_to_the_fingerprint(\WC_Order $order, array $payload, array $merchant): ?array
+{
+	$fingerprint = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true);
+	$comparable  = oko_comparable_payload($payload);
+
+	if ($fingerprint === '') {
+		return null;
+	}
+
+	if (oko_shipment_fingerprint($comparable) === $fingerprint) {
+		return $comparable;
+	}
+
+	if (oko_fingerprint_as_1_5_2($order, $payload, $merchant) === $fingerprint) {
+		// Remembered on the order with the record the caller writes, and in
+		// memory before that, so the address is read in 1.5.2's terms from
+		// here on — the write-back about to compare it included.
+		$order->update_meta_data(OKO_SENT_BY_1_5_2_META, true);
+
+		return oko_sent_by_1_5_2($order, $comparable);
+	}
+
+	return null;
 }
 
 /**
@@ -5522,8 +6157,44 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
+	// Under the hold on its additions, the list is read as the last write
+	// left it, not as this request first loaded it.
+	$held_here = isset(oko_additions_held_here()[$order_id]);
+	if ($held_here) {
+		$order->read_meta_data(true);
+	}
+
 	// Never sent, or on its way out. A cancellation is a DELETE elsewhere.
-	if (empty($order->get_meta('billing_okoskabet_done', true)) || $order->get_status() === 'cancelled') {
+	//
+	// A refund in full is neither: the money went back, often after the goods
+	// were delivered, and the shipment is the shop's to cancel if the delivery
+	// is not to happen (Marc, #82). Sent again it went with `line_items: []`,
+	// and the packing room found a delivery with nothing in it.
+	if (empty($order->get_meta('billing_okoskabet_done', true))
+		|| in_array($order->get_status(), array('cancelled', 'refunded'), true)) {
+		return;
+	}
+
+	// An addition has no shipment of its own: its goods are lines on the
+	// shipment of the order it rides on, so that is the order to send again.
+	// It is never fingerprinted, and this used to stop at the fingerprint —
+	// so a line refunded off an addition, or edited on it, stayed on the
+	// packing list, and the customer paid for less than went in the box.
+	// The earlier order's own resend builds its goods with every addition's,
+	// refunds taken off, and sends them when they differ from what Økoskabet
+	// holds; a save that changed nothing about the goods sends nothing.
+	//
+	// Only while the addition is on that order's list, and not once it is
+	// refunded in full: the status hook takes it off the list then, with a
+	// line on the shipment's note, as it does for a cancelled one.
+	$parent_id = (int) $order->get_meta(OKO_ADDON_PARENT_ID_META, true);
+	if ($parent_id !== 0 && $parent_id !== $order_id) {
+		$parent = wc_get_order($parent_id);
+		if ($order->get_status() !== 'refunded'
+			&& $parent instanceof \WC_Order
+			&& in_array($order_id, oko_addition_ids($parent), true)) {
+			oko_resend_shipment_on_update($parent_id);
+		}
 		return;
 	}
 
@@ -5572,18 +6243,20 @@ function oko_resend_shipment_on_update(int $order_id): void
 	// describes the request rather than the order.
 	$comparable = oko_comparable_payload($payload);
 	$sent       = $order->get_meta(OKO_SENT_META, true);
+	$held       = is_array($sent) ? null : oko_sent_according_to_the_fingerprint($order, $payload, $merchant);
 
 	if (is_array($sent)) {
 		$changes = oko_payload_changes($sent, $comparable);
-	} elseif (oko_shipment_fingerprint($comparable) === $sent_fingerprint
-		|| oko_fingerprint_as_1_5_2($order, $payload, $merchant) === $sent_fingerprint) {
+	} elseif ($held !== null) {
 		// Sent by a version that recorded a fingerprint and not the payload.
 		// Nothing has moved, so this is the free moment to write down what
 		// Økoskabet holds — after this the order compares like any other.
 		//
 		// Asked in 1.5.2's terms too, or every open order would be sent whole
 		// on its first save after the update — see oko_fingerprint_as_1_5_2().
-		$order->update_meta_data(OKO_SENT_META, $comparable);
+		// And written down in them: where 1.5.2 sent a field differently from
+		// today, the next save sends today's, which is a real difference.
+		$order->update_meta_data(OKO_SENT_META, $held);
 		$order->save_meta_data();
 		return;
 	} else {
@@ -5594,6 +6267,27 @@ function oko_resend_shipment_on_update(int $order_id): void
 	}
 
 	if ($changes === array()) {
+		return;
+	}
+
+	// The goods go only while the order's additions are held still, as every
+	// other write of its list of goods does. Built outside the hold, the list
+	// could miss an addition written at the same moment and land after it:
+	// its goods gone from the delivery while the order says they are on, and
+	// no later save to notice, because the record says they were sent (#81).
+	// So the hold is taken and the whole resend run again under it, reading
+	// the order afresh. Taken by another request, nothing is sent and nothing
+	// recorded: the next save tries again.
+	if (isset($changes['line_items']) && ! $held_here) {
+		$hold = oko_lock_additions_to($order_id);
+		if ($hold === '') {
+			return;
+		}
+		try {
+			oko_resend_shipment_on_update($order_id);
+		} finally {
+			oko_unlock_additions_to($order_id, $hold);
+		}
 		return;
 	}
 
@@ -5608,13 +6302,22 @@ function oko_resend_shipment_on_update(int $order_id): void
 
 	$seen[$order_id] = true;
 
+	// The goods go as the payload has them, catalogue and all. The difference
+	// was found without what the catalogue says (see OKO_CATALOGUE_LINE_KEYS),
+	// and so was the refusal's print above, but the packing room reads those
+	// facts off the very lines this replaces.
+	$body = $changes;
+	if (isset($body['line_items'])) {
+		$body['line_items'] = $payload['line_items'];
+	}
+
 	// The reference Økoskabet booked it under, not the order's number: a shop
 	// with a numbering plugin has two, and only one of them is ours (#52).
 	$response = oko_api_request(
 		$merchant,
 		'PUT',
 		'/api/v1/shipments/' . rawurlencode(oko_shipment_reference($order)),
-		(string) wp_json_encode($changes)
+		(string) wp_json_encode($body)
 	);
 
 	// Could not reach Økoskabet at all. Leave the fingerprint alone so the
@@ -5807,6 +6510,28 @@ function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $d
 
 	if (in_array('hey_okoskabet_shipping_home', $shipping_methods, true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', '');
+	}
+}
+
+add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_clear_pickup_id_unless_store_pickup', 10, 2);
+
+/**
+ * A place to collect from stays only on an order collected from one.
+ *
+ * The hidden field keeps whatever the pickup picker last wrote into it, and
+ * only the browser empties it when the customer moves on to a locker or the
+ * door. A checkout whose script did not run there posted it anyway, and the
+ * order carried a collection point beside its shed. The payload no longer
+ * reads such a place, but the admin screen prints it, and the order should
+ * say what was chosen. The shed's own clear, above, for the same reason.
+ *
+ * @param \WC_Order           $order The order being created.
+ * @param array<string,mixed> $data  Posted checkout data.
+ */
+function okoskabet_woocommerce_plugin_clear_pickup_id_unless_store_pickup($order, $data): void
+{
+	if (! in_array('hey_okoskabet_shipping_store_pickup', (array) ($data['shipping_method'] ?? array()), true)) {
+		$order->update_meta_data('_billing_okoskabet_pickup_location_id', '');
 	}
 }
 

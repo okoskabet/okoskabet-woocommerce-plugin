@@ -53,43 +53,50 @@ function o_uninstall_multisite()
 }
 
 /**
- * What happen on uninstall?
+ * What uninstalling removes: what the plugin keeps for a while, and nothing a
+ * shop set up.
  *
- * @global WP_Roles $wp_roles
+ * The shop's settings, its Økoskabet accounts and the list of migrations that
+ * have run stay. The guide in Økoskabet's backoffice tells a shop on an old
+ * installation to delete the plugin and install it again from a release, and
+ * promises its setup survives that (»Skift fra en gammel installation«); a
+ * shop that followed it would otherwise lose its API key and every setting.
+ * The orders keep their Økoskabet meta too: they go on existing in
+ * WooCommerce after the plugin does, and say which delivery they had.
+ *
+ * Removed: the answers remembered from Økoskabet (configuration, shipping
+ * methods, shipments, delivery locations, feature prices, the address-lookup
+ * rate limit), holds on an order's additions, and the last word on line
+ * totals. Each is rebuilt by asking again.
+ *
  * @return void
  */
 function o_uninstall()
-{ // phpcs:ignore
-	global $wp_roles;
-	/*
-	@TODO
-	// Delete all transient and options
-	delete_transient( 'TRANSIENT_NAME' );
-	delete_option( 'OPTION_NAME' );
-	remove_role( 'advanced' );
-	// Remove custom file directory
-	$upload_dir = wp_upload_dir();
-	$directory = $upload_dir['basedir'] . DIRECTORY_SEPARATOR . "CUSTOM_DIRECTORY_NAME" . DIRECTORY_SEPARATOR;
-	if (is_dir($directory)) {
-	foreach(glob($directory.'*.*') as $v){
-	unlink($v);
+{
+	global $wpdb;
+
+	$transients = array(
+		'okoskabet-woocommerce-plugin_',
+		'okoskabet_feature_pricing_',
+		'okoskabet_delivery_location_options_',
+		'oko_addr_rl_',
+	);
+
+	foreach ($transients as $prefix) {
+		foreach (array('_transient_', '_transient_timeout_') as $kind) {
+			$wpdb->query($wpdb->prepare(
+				"DELETE FROM `{$wpdb->options}` WHERE `option_name` LIKE %s",
+				$wpdb->esc_like($kind . $prefix) . '%'
+			));
+		}
 	}
-	rmdir($directory);
-	// Delete post meta data
-	$posts = get_posts(array('posts_per_page' => -1));
-	foreach ($posts as $post) {
-	$post_meta = get_post_meta($post->ID);
-	delete_post_meta($post->ID, 'your-post-meta');
-	}
-	// Delete user meta data
-	$users = get_users();
-	foreach ($users as $user) {
-	delete_user_meta($user->ID, 'your-user-meta');
-	}
-	// Remove and optimize tables
-	$GLOBALS['wpdb']->query("DROP TABLE `".$GLOBALS['wpdb']->prefix."TABLE_NAME`");
-	$GLOBALS['wpdb']->query("OPTIMIZE TABLE `" .$GLOBALS['wpdb']->prefix."options`");
-	 */
+
+	$wpdb->query($wpdb->prepare(
+		"DELETE FROM `{$wpdb->options}` WHERE `option_name` LIKE %s",
+		$wpdb->esc_like('_oko_addition_lock_') . '%'
+	));
+
+	delete_option('okoskabet_line_totals_last_said');
 }
 
 o_uninstall_multisite();

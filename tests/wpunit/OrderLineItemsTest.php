@@ -113,6 +113,36 @@ class OrderLineItemsTest extends \Codeception\TestCase\WPTestCase {
 
 	/**
 	 * @test
+	 * Refunded in full, the order is not sent again (#82). Its lines all come
+	 * to nothing, and the resend used to put a delivery with no goods on the
+	 * packing room's list. A full refund often comes after delivery; whether
+	 * the delivery still happens is the shop's to decide by cancelling it.
+	 */
+	public function an_order_refunded_in_full_is_not_sent_again() {
+		$order = $this->sent_order();
+
+		$refund = wc_create_refund(
+			array(
+				'order_id'       => $order->get_id(),
+				'amount'         => (float) $order->get_total(),
+				'line_items'     => array( $this->item_of_type( $order, 'line_item' )->get_id() => array( 'qty' => 2, 'refund_total' => 20 ) ),
+				'refund_payment' => false,
+				'restock_items'  => false,
+			)
+		);
+		$this->assertNotWPError( $refund );
+		$this->assertSame( 'refunded', wc_get_order( $order->get_id() )->get_status() );
+
+		// And saved again by the shop, which is when a resend would go.
+		wc_get_order( $order->get_id() )->save();
+
+		$this->assertSame( array(), array_filter( $this->requests, static function ( array $request ): bool {
+			return $request['method'] === 'PUT';
+		} ) );
+	}
+
+	/**
+	 * @test
 	 * WooCommerce gives a fee a quantity of 1, refund lines included, so
 	 * counting a refunded fee the way a refunded product is counted adds one
 	 * where it should take one off. The packing room was sent the fee twice.
