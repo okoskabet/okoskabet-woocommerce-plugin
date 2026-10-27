@@ -2459,6 +2459,89 @@ function oko_forget_addition($parent, $addition): void
 }
 
 /**
+ * Hold an order's additions still while one of them is written.
+ *
+ * Writing an addition reads the order's list of additions, sends the whole
+ * list of goods with the new ones at the bottom, and then puts the addition
+ * on the list. Two additions to one order written at the same moment — two
+ * bank transfers marked paid from two tabs, a gateway's callbacks crossing —
+ * each read the list before the other had written it. The later PUT replaced
+ * the earlier one's goods, the later list replaced the earlier one's id, and
+ * one addition was gone from the delivery and from the order with nothing to
+ * ever put it back. Rare, and silent when it happens.
+ *
+ * A row in the options table, inserted only where there is none: the table's
+ * unique name makes the insert itself the test, so two requests cannot both
+ * get it. Not add_option(), which asks first and then inserts "on duplicate
+ * key update" — two requests asking at once are both told there is none, and
+ * both succeed. Not a transient, which an object cache keeps outside the
+ * table, with no such promise.
+ *
+ * A hold nobody let go of, from a request that died before its `finally`, is
+ * taken over once it is OKO_ADDITION_LOCK_SECONDS old — by one request only:
+ * the take-over names the stale value it replaces.
+ *
+ * @param int $parent_id The order the additions ride on.
+ * @return bool Whether this request now holds it.
+ */
+function oko_lock_additions_to(int $parent_id): bool
+{
+	global $wpdb;
+
+	$name = OKO_ADDITION_LOCK_PREFIX . $parent_id;
+	$now  = (string) time();
+
+	$taken = $wpdb->query($wpdb->prepare(
+		"INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')",
+		$name,
+		$now
+	));
+	if ((int) $taken === 1) {
+		return true;
+	}
+
+	$since = (string) $wpdb->get_var($wpdb->prepare(
+		"SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s",
+		$name
+	));
+	if ($since === '' || (int) $since > time() - OKO_ADDITION_LOCK_SECONDS) {
+		return false;
+	}
+
+	$taken = $wpdb->query($wpdb->prepare(
+		"UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s",
+		$now,
+		$name,
+		$since
+	));
+
+	return (int) $taken === 1;
+}
+
+/** And let go of them again. */
+function oko_unlock_additions_to(int $parent_id): void
+{
+	global $wpdb;
+
+	$wpdb->delete($wpdb->options, array('option_name' => OKO_ADDITION_LOCK_PREFIX . $parent_id));
+}
+
+/** The name of the hold on an order's additions, before the order's id. */
+const OKO_ADDITION_LOCK_PREFIX = '_oko_addition_lock_';
+
+/**
+ * How long a hold on an order's additions is honoured, in seconds.
+ *
+ * Longer than any write that holds it can take: the questions an addition
+ * asks Økoskabet before it is sent, a PUT of fifteen seconds, and the save
+ * after it can each wait on Økoskabet when it is slow, and PHP does not count
+ * that wait against its own time limit. A hold broken while its write is
+ * still going is the very race it exists to stop; one kept too long only
+ * holds an addition for the shop to try again.
+ */
+const OKO_ADDITION_LOCK_SECONDS = 60;
+
+/**
  * An addition's goods, each line named as one.
  *
  * A packer who has already picked this order will not pick it again, so the
@@ -2559,6 +2642,9 @@ function oko_write_shipment_contents(\WC_Order $parent, array $additions, array 
  * own list — a write that did not get through leaves the goods where they are,
  * and the shop should see that rather than a record saying they are gone.
  *
+ * Only while holding the earlier order's additions still, as any write of its
+ * list of goods does; see oko_lock_additions_to().
+ *
  * @param \WC_Order           $order     The cancelled or refunded addition.
  * @param int                 $parent_id The order it rode along with.
  * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
@@ -2566,6 +2652,41 @@ function oko_write_shipment_contents(\WC_Order $parent, array $additions, array 
  *                                       written under. Kept for the callers.
  */
 function oko_take_addition_off_its_order($order, int $parent_id, array $merchant): void
+{
+	if (! $order instanceof \WC_Order) {
+		return;
+	}
+
+	// Already cancelled or refunded, so it cannot be put on hold to try again
+	// later. The shop is told, the way it is told when the write itself fails.
+	if (! oko_lock_additions_to($parent_id)) {
+		$parent = wc_get_order($parent_id);
+		$order->add_order_note(sprintf(
+			/* translators: %s: the order the addition rode along with. */
+			__('The goods could not be taken off order %s: another addition to it was being written at the same moment. They may still be on that delivery.', O_TEXTDOMAIN),
+			$parent instanceof \WC_Order ? oko_shipment_reference($parent) : (string) $parent_id
+		));
+		return;
+	}
+
+	try {
+		oko_take_addition_off_while_its_order_is_held($order, $parent_id, $merchant);
+	} finally {
+		oko_unlock_additions_to($parent_id);
+	}
+}
+
+/**
+ * The taking off itself, once the earlier order's additions are held still.
+ *
+ * The earlier order is read here, inside the hold, so its list of additions is
+ * the one the last write left — not one read before another write began.
+ *
+ * @param \WC_Order           $order     The cancelled or refunded addition.
+ * @param int                 $parent_id The order it rode along with.
+ * @param array<string,mixed> $merchant  Unused; see above.
+ */
+function oko_take_addition_off_while_its_order_is_held($order, int $parent_id, array $merchant): void
 {
 	$parent = wc_get_order($parent_id);
 	if (! $order instanceof \WC_Order || ! $parent instanceof \WC_Order) {
@@ -2628,6 +2749,10 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
  * an order that did not reach Økoskabet rather than one that silently did not
  * get its goods. The note says which order was meant.
  *
+ * Only while holding the earlier order's additions still; see
+ * oko_lock_additions_to(). An addition that arrives while another is being
+ * written is held for the shop, like any other that did not get on.
+ *
  * @param \WC_Order           $order     The addition.
  * @param int                 $parent_id The earlier order's WooCommerce id.
  * @param array<string,mixed> $merchant  Unused: the shipment is the earlier
@@ -2640,6 +2765,35 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 		return;
 	}
 
+	if (! oko_lock_additions_to($parent_id)) {
+		$parent = wc_get_order($parent_id);
+		oko_hold_addition($order, sprintf(
+			/* translators: %s: the earlier order's number. */
+			__('Another addition to order %s was being written at the same moment, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
+			$parent instanceof \WC_Order ? oko_shipment_reference($parent) : (string) $parent_id
+		));
+		return;
+	}
+
+	try {
+		oko_send_addition_while_its_order_is_held($order, $parent_id, $merchant);
+	} finally {
+		oko_unlock_additions_to($parent_id);
+	}
+}
+
+/**
+ * The sending itself, once the earlier order's additions are held still.
+ *
+ * The earlier order is read here, inside the hold, so its list of additions is
+ * the one the last write left — not one read before another write began.
+ *
+ * @param \WC_Order           $order     The addition.
+ * @param int                 $parent_id The earlier order's WooCommerce id.
+ * @param array<string,mixed> $merchant  Unused; see above.
+ */
+function oko_send_addition_while_its_order_is_held(\WC_Order $order, int $parent_id, array $merchant): void
+{
 	// The earlier order's goods have to be sent again with the addition's: a
 	// PUT replaces the shipment's lines, so a list that is missing them would
 	// delete them. If that order cannot be read, nothing is sent at all —
