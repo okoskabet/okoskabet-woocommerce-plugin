@@ -197,6 +197,47 @@ class TwoAdditionsAtOnceTest extends \Codeception\TestCase\WPTestCase
 		$this->assertNotSame('', oko_lock_additions_to($parent->get_id()), 'And gets it once A lets go.');
 	}
 
+	/**
+	 * Of two requests that find the same stale hold, one takes it over.
+	 *
+	 * The take-over names the stale value it replaces. A request that read the
+	 * stale hold and then lost the race — another took it over between its read
+	 * and its write — would otherwise write over the winner's hold, and both
+	 * would go on to write the additions.
+	 */
+	public function test_only_one_of_two_requests_takes_over_a_stale_hold(): void
+	{
+		global $wpdb;
+
+		$parent = $this->a_delivery();
+		$this->a_hold_from(time() - OKO_ADDITION_LOCK_SECONDS - 5, $parent);
+		$name = OKO_ADDITION_LOCK_PREFIX . $parent->get_id();
+
+		$fired     = false;
+		$meanwhile = static function ($query) use (&$fired, $wpdb, $name) {
+			if (! $fired && stripos((string) $query, 'UPDATE') === 0 && strpos((string) $query, $name) !== false) {
+				$fired = true;
+				$wpdb->query($wpdb->prepare(
+					"UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s",
+					'the-other-request',
+					$name
+				));
+			}
+
+			return $query;
+		};
+		add_filter('query', $meanwhile);
+		try {
+			$hold = oko_lock_additions_to($parent->get_id());
+		} finally {
+			remove_filter('query', $meanwhile);
+		}
+
+		$this->assertTrue($fired, 'The other request got in between the read and the write.');
+		$this->assertSame('', $hold, 'So this one lost the race.');
+		$this->assertSame('the-other-request', $this->hold_value($parent), "And the winner's hold stands.");
+	}
+
 	/** A write Økoskabet refused lets go of the hold too. */
 	public function test_a_refused_write_lets_go_of_the_hold(): void
 	{
@@ -283,6 +324,18 @@ class TwoAdditionsAtOnceTest extends \Codeception\TestCase\WPTestCase
 			'option_value' => (string) $when,
 			'autoload'     => 'no',
 		));
+	}
+
+	private function hold_value(\WC_Order $parent): ?string
+	{
+		global $wpdb;
+
+		$value = $wpdb->get_var($wpdb->prepare(
+			"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
+			OKO_ADDITION_LOCK_PREFIX . $parent->get_id()
+		));
+
+		return $value === null ? null : (string) $value;
 	}
 
 	private function held(\WC_Order $parent): bool
