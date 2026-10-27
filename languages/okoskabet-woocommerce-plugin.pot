@@ -2562,3 +2562,15 @@ msgstr ""
 
 msgid "Now type the house number."
 msgstr ""
+
+#: functions/functions.php
+msgid "Økoskabet Done"
+msgstr ""
+
+#: functions/functions.php
+msgid "Økoskabet SHED ID"
+msgstr ""
+
+#: functions/functions.php
+msgid "Location source"
+msgstr ""

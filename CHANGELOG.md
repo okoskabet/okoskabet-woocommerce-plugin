@@ -24,7 +24,10 @@ Har butikken ingen frist i Økoskabets backoffice, gælder Økoskabets egen fris
 kl. 21.30 dagen før levering.
 
 Pakkeriet ser varerne nederst på listen som »TILLÆG — …«, og leveringens note
-fortæller, at der er kommet mere. Annulleres tillægget, tages varerne af igen.
+fortæller, at der er kommet mere. Annulleres tillægget eller refunderes det
+helt, tages varerne af igen, med en linje i leveringens note. Refunderes en del
+af det, eller rettes varerne på det, sendes den første ordres varer igen, så
+pakkeriet pakker det, kunden har betalt for.
 Hæver eller afslutter Økoskabets statusbeskeder den første ordre, sker det
 samme med tillæggene.
 
@@ -72,10 +75,11 @@ sendt ved hver gemning, oven i det pakkeriet havde rettet.
 
 Åbne ordrer fra 1.5.2 sendes ikke igen, bare fordi pluginet er opdateret, og
 heller ikke, når de får et tillæg. De sendes først, når der faktisk ændres
-noget på dem, eller når de har en lejlighed, 1.5.2 aldrig sendte, fordi den
-kun står i fakturaadressen. Den sendes med adressen, anden gang ordren gemmes
-efter opdateringen. Ordrer sendt af en version før 1.5.2 sendes hele én gang,
-første gang de gemmes.
+noget på dem. De beholder adressen, som 1.5.2 sendte den: en lejlighed, der kun
+står i fakturaadressen, sendte 1.5.2 aldrig, og den sendes heller ikke bagefter,
+for så ville hele adressen gå med og skrive oven i det, pakkeriet har rettet.
+Nye ordrer får lejligheden med. Ordrer sendt af en version før 1.5.2 sendes
+hele én gang, første gang de gemmes.
 
 Afviser Økoskabet en rettelse, står det nu på ordren, med Økoskabets egen
 begrundelse. Før stod det kun i en logfil.
@@ -136,6 +140,16 @@ slået fra, eller webhookens secret ikke passer.
   alene, giver ikke længere en PHP-fejl.
 - Svarer Økoskabet, at en ordre allerede er modtaget, markeres den ikke som
   mislykket, og kunden ser ingen fejl i kassen.
+- En fuldt refunderet ordre sendes ikke igen. Skal leveringen ikke ske,
+  annullerer butikken ordren. Før gik den til Økoskabet uden varer.
+- Rettes en ordre i butikken, mens rettelsen ikke er nået frem til Økoskabet,
+  og flytter Økoskabet så fx datoen, bliver butikkens rettelse stående og
+  sendes. Før skrev Økoskabets gamle kopi sig oven i den.
+- En butiksafhentning uden afhentningssted, som Økoskabet flytter til et skab
+  eller til døren, er ikke længere en afhentning.
+- Afinstallation (Slet under Plugins) rydder pluginets midlertidige data.
+  Indstillinger, konti og ordrernes oplysninger bliver, så en butik kan slette
+  og installere igen uden at sætte noget op forfra.
 - Offentlige ruter i kassen er strammet op (postnummer og adresse kodes, kun
   udgivne varer navngives).
 
@@ -183,8 +197,10 @@ bankoverførsel, der markeres betalt dage senere — kan ikke komme med. Så sæ
 ordren på hold, så den ikke ligner enhver anden ordre på vej, og noten siger
 hvorfor. Butikken bestemmer selv: sæt den
 til Behandler for at prøve igen, eller send eller refundér varerne på anden
-vis. Det samme gælder, når Økoskabet afviser varerne, eller den første ordre
-ikke kan læses.
+vis. Det samme gælder, når Økoskabet afviser varerne, når den første ordre
+ikke kan læses, og når et andet tillæg til samme ordre bliver lagt på i præcis
+samme øjeblik. Det samme tillæg markeret betalt to gange på én gang lægges kun
+på én gang og sættes ikke på hold.
 
 = Installation kun fra en udgivelse =
 

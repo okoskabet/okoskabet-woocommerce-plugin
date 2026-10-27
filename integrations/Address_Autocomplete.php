@@ -415,16 +415,10 @@ class Address_Autocomplete extends Base {
 			return null;
 		}
 
-		$response = \wp_remote_get(
-			\o_merchant_api_url( $merchant ) . $path,
-			array(
-				'timeout' => self::TIMEOUT,
-				'headers' => array(
-					'Authorization' => $merchant['api_key'],
-					'Accept'        => 'application/json',
-				),
-			)
-		);
+		// Through the one request every call to Økoskabet goes through, so a
+		// change to the key header, the staging address or the user agent
+		// reaches this one too (#86).
+		$response = \oko_api_request( $merchant, 'GET', $path, null, self::TIMEOUT );
 
 		if ( \is_wp_error( $response ) || (int) \wp_remote_retrieve_response_code( $response ) !== 200 ) {
 			return null;

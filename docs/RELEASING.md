@@ -14,20 +14,18 @@ library look for a **release** first:
 2. the tag with the highest version number, then
 3. the branch itself.
 
-Today there are no releases and no tags, so every merchant is served whatever
-sits at the head of `main`. (There is no `master` branch either — GitHub still
-redirects the old name, which is the only reason step 3 resolves at all.)
-
-**The moment the first release exists, step 1 takes over.** From then on, `main`
-can receive merged work without offering anything to anyone, and a release is a
-deliberate act.
+The first release, v1.4.2, was published on 2026-10-08, so step 1 has answered
+ever since: every merchant is offered the latest release, and a merge to `main`
+offers nothing to anyone. A release is a deliberate act — the tag publishes,
+not the merge. (There is no `master` branch — GitHub redirects the old name,
+which only mattered while step 3 was the one answering.)
 
 ## Cutting a release
 
 1. Merge the work to `main` as usual. Nothing reaches merchants yet.
 2. Set the `Version:` header in `okoskabet-woocommerce-plugin.php` **and** the
    `O_VERSION` constant just below it.
-3. Add the matching section to `CHANGELOG.md`, headed `## 1.5.0 - YYYY-MM-DD`.
+3. Add the matching section to `CHANGELOG.md`, headed `## X.Y.Z - YYYY-MM-DD`.
    It becomes the release notes, so write it for merchants rather than for us.
 4. Tag it and push the tag:
 

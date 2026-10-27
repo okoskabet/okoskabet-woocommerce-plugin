@@ -145,6 +145,39 @@ class WhenAnOrderIsAStorePickupTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame('Eksempelvej 14', $this->puts[0]['home_delivery']['address_1'] ?? null);
 	}
 
+	/**
+	 * A collection with no place, moved to the door, is no longer one either.
+	 *
+	 * With no place on either side, the place said nothing had moved, so the
+	 * move was never marked: the store-pickup line won the next payload, and
+	 * the shop's address correction never went (#80's review).
+	 */
+	public function test_a_collection_with_no_place_moved_to_the_door_is_no_longer_one(): void
+	{
+		$order = $this->a_collection_at_okoskabet('');
+
+		$this->shipment = array(
+			'shipment_reference' => (string) $order->get_order_number(),
+			'shipment_type'      => 'home_delivery',
+			'delivery_date'      => '2026-10-20',
+			'pickup_location_id' => null,
+			'home_delivery'      => array('recipient_name' => 'Marc Hansen', 'address' => array(
+				'street_name' => 'Eksempelvej', 'house_number' => '12', 'city' => 'Beder', 'postal_code' => '8330',
+			)),
+		);
+		oko_take_delivery_from_okoskabet((string) $order->get_order_number(), $this->merchant());
+
+		$fresh = wc_get_order($order->get_id());
+		$this->assertArrayNotHasKey('shipment_type', oko_shipment_payload($fresh, $this->merchant()), 'No longer a collection.');
+		$this->assertSame(array(), $this->puts, "Økoskabet's own move is not sent back to it.");
+
+		$fresh->set_shipping_address_1('Eksempelvej 14');
+		$fresh->save();
+
+		$this->assertCount(1, $this->puts, "The shop's correction has to reach Økoskabet.");
+		$this->assertSame('Eksempelvej 14', $this->puts[0]['home_delivery']['address_1'] ?? null);
+	}
+
 	/** And one moved to a shed is a shed, whose next date edit sends the date. */
 	public function test_a_collection_moved_to_a_shed_is_sent_as_one(): void
 	{
@@ -291,11 +324,14 @@ class WhenAnOrderIsAStorePickupTest extends \Codeception\TestCase\WPTestCase
 		return wc_get_order($order->get_id());
 	}
 
-	/** A collection from place 7, booked, with Økoskabet holding what it says. */
-	private function a_collection_at_okoskabet(): \WC_Order
+	/**
+	 * A collection from place 7 — or from no place, as a shop with no pickup
+	 * locations books one — booked, with Økoskabet holding what it says.
+	 */
+	private function a_collection_at_okoskabet(string $place = '7'): \WC_Order
 	{
 		$order = $this->an_order('hey_okoskabet_shipping_store_pickup');
-		$order->update_meta_data('_billing_okoskabet_pickup_location_id', '7');
+		$order->update_meta_data('_billing_okoskabet_pickup_location_id', $place);
 		$order->update_meta_data('billing_okoskabet_done', 'yes');
 		$order->save();
 
