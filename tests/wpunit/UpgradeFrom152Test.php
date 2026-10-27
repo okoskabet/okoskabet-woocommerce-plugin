@@ -118,7 +118,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		oko_send_addition_to_its_order($addition, $order->get_id(), array());
 
-		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment.');
+		// Said in full when it fails: it has, rarely and only in the whole
+		// suite (#89), and what the second PUT carried is the clue.
+		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment. Sent again: '
+			. wp_json_encode(array_slice($this->puts, 1)));
 		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
 		$sent = wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true);
 		$this->assertIsArray($sent, 'The order is upgraded to a record of what was sent.');
@@ -147,7 +150,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		$this->an_addition_to($order);
 
-		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment.');
+		// Said in full when it fails: it has, rarely and only in the whole
+		// suite (#89), and what the second PUT carried is the clue.
+		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment. Sent again: '
+			. wp_json_encode(array_slice($this->puts, 1)));
 		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
 		$this->assertIsArray(wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true));
 	}
@@ -164,7 +170,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		$this->an_addition_to($order);
 
-		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment.');
+		// Said in full when it fails: it has, rarely and only in the whole
+		// suite (#89), and what the second PUT carried is the clue.
+		$this->assertCount(1, $this->puts, 'Only the write that puts the addition on the shipment. Sent again: '
+			. wp_json_encode(array_slice($this->puts, 1)));
 		$this->assertSame(array('line_items', 'notes'), array_keys(json_decode($this->puts[0], true)));
 		$this->assertIsArray(wc_get_order($order->get_id())->get_meta(OKO_SENT_META, true));
 	}
