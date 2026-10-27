@@ -122,6 +122,48 @@ class TwoAdditionsAtOnceTest extends \Codeception\TestCase\WPTestCase
 		$this->assertFalse($this->held($parent), 'And the hold is let go of.');
 	}
 
+	/**
+	 * The same addition written twice at once — a gateway's callback and the
+	 * customer's return both marking it paid — gets on once, and is not held.
+	 *
+	 * The second found the order held and put the addition on hold with a
+	 * note that its goods were not added, while the first was adding them
+	 * (#80's review). The shop could then send or refund them a second time.
+	 */
+	public function test_the_same_addition_written_twice_at_once_gets_on_once(): void
+	{
+		$parent = $this->a_delivery();
+		$bread  = $this->an_addition_to($parent, 'Rugbrød');
+
+		$this->meanwhile = static function () use ($bread, $parent) {
+			oko_send_addition_to_its_order(wc_get_order($bread->get_id()), $parent->get_id(), array());
+		};
+		oko_send_addition_to_its_order(wc_get_order($bread->get_id()), $parent->get_id(), array());
+
+		$this->assertSame(array('Økologiske æg', 'ADDITION — Rugbrød'), $this->holds);
+		$this->assertSame(array($bread->get_id()), oko_addition_ids(wc_get_order($parent->get_id())));
+
+		$bread = wc_get_order($bread->get_id());
+		$this->assertSame('', (string) $bread->get_meta(OKO_ADDITION_HELD_META, true), 'Not held for the shop.');
+		$this->assertSame('yes', (string) $bread->get_meta('billing_okoskabet_done', true));
+		$this->assertCount(0, $this->notes_saying($bread, 'was being written at the same moment'));
+	}
+
+	/**
+	 * A cancellation of an addition that never got on says nothing about a
+	 * hold, even while another addition to the order is being written.
+	 */
+	public function test_cancelling_an_addition_that_never_got_on_says_nothing_while_another_is_written(): void
+	{
+		$parent = $this->a_delivery();
+		$this->a_hold_from(time() - 5, $parent);
+		$bread = $this->an_addition_to($parent, 'Rugbrød');
+
+		oko_take_addition_off_its_order(wc_get_order($bread->get_id()), $parent->get_id(), array());
+
+		$this->assertCount(0, $this->notes_saying(wc_get_order($bread->get_id()), 'could not be taken off'));
+	}
+
 	/** @return array<string,array{0:bool}> */
 	public function with_and_without_an_earlier_addition(): array
 	{

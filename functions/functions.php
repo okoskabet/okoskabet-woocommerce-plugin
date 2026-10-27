@@ -2486,16 +2486,22 @@ function oko_forget_addition($parent, $addition): void
  * overran the limit and then finished used to delete the row by its name —
  * the hold another request had taken over, while that one was still writing.
  *
+ * The hold also names the addition it was taken for, so a request that
+ * finds an order held can tell another addition from this one written twice —
+ * a gateway's callback and the customer's return both marking it paid. See
+ * oko_additions_held_for().
+ *
  * @param int $parent_id The order the additions ride on.
+ * @param int $for       The addition being written, or 0.
  * @return string The hold, for oko_unlock_additions_to(); empty when another
  *                request has it.
  */
-function oko_lock_additions_to(int $parent_id): string
+function oko_lock_additions_to(int $parent_id, int $for = 0): string
 {
 	global $wpdb;
 
 	$name = OKO_ADDITION_LOCK_PREFIX . $parent_id;
-	$hold = time() . ':' . wp_generate_uuid4();
+	$hold = time() . ':' . wp_generate_uuid4() . ':' . $for;
 
 	$taken = $wpdb->query($wpdb->prepare(
 		"INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')",
@@ -2539,6 +2545,25 @@ function oko_unlock_additions_to(int $parent_id, string $hold): void
 		'option_name'  => OKO_ADDITION_LOCK_PREFIX . $parent_id,
 		'option_value' => $hold,
 	));
+}
+
+/**
+ * The addition the hold on an order's additions was taken for: 0 when it is
+ * not held, or held for something else.
+ *
+ * @param int $parent_id The order the additions ride on.
+ */
+function oko_additions_held_for(int $parent_id): int
+{
+	global $wpdb;
+
+	$hold  = (string) $wpdb->get_var($wpdb->prepare(
+		"SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s",
+		OKO_ADDITION_LOCK_PREFIX . $parent_id
+	));
+	$parts = explode(':', $hold);
+
+	return count($parts) === 3 ? (int) $parts[2] : 0;
 }
 
 /** The name of the hold on an order's additions, before the order's id. */
@@ -2672,15 +2697,28 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 		return;
 	}
 
+	// An addition the order never took is nothing to take off it, and nothing
+	// to wait for a hold over: asked before the hold as well as inside it, or a
+	// cancellation of an addition that never got on was told the goods "may
+	// still be on that delivery" whenever another addition was being written.
+	$parent = wc_get_order($parent_id);
+	if (! $parent instanceof \WC_Order || ! in_array($order->get_id(), oko_addition_ids($parent), true)) {
+		return;
+	}
+
 	// Already cancelled or refunded, so it cannot be put on hold to try again
 	// later. The shop is told, the way it is told when the write itself fails.
-	$hold = oko_lock_additions_to($parent_id);
+	// Unless the hold is this addition's own: the cancellation is being
+	// handled by another request at this moment.
+	$hold = oko_lock_additions_to($parent_id, $order->get_id());
 	if ($hold === '') {
-		$parent = wc_get_order($parent_id);
+		if (oko_additions_held_for($parent_id) === $order->get_id()) {
+			return;
+		}
 		$order->add_order_note(sprintf(
 			/* translators: %s: the order the addition rode along with. */
 			__('The goods could not be taken off order %s: another addition to it was being written at the same moment. They may still be on that delivery.', O_TEXTDOMAIN),
-			$parent instanceof \WC_Order ? oko_shipment_reference($parent) : (string) $parent_id
+			oko_shipment_reference($parent)
 		));
 		return;
 	}
@@ -2781,7 +2819,14 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 		return;
 	}
 
-	$hold = oko_lock_additions_to($parent_id);
+	// Held for this very addition, by another request writing it at the same
+	// moment — a gateway's callback and the customer's return both marking it
+	// paid. That request puts it on; holding it here told the shop the goods
+	// were not added while they were.
+	$hold = oko_lock_additions_to($parent_id, $order->get_id());
+	if ($hold === '' && oko_additions_held_for($parent_id) === $order->get_id()) {
+		return;
+	}
 	if ($hold === '') {
 		$parent = wc_get_order($parent_id);
 		oko_hold_addition($order, sprintf(
@@ -2828,6 +2873,13 @@ function oko_send_addition_while_its_order_is_held(\WC_Order $order, int $parent
 			__('Order %s could not be read, so nothing was added to it. Økoskabet has not been told about this order.', O_TEXTDOMAIN),
 			(string) $parent_id
 		));
+		return;
+	}
+
+	// Already on it: written by a request that held the order first, while
+	// this one waited for nothing but its own turn. Sent again, it would be
+	// on the list twice.
+	if (in_array($order->get_id(), oko_addition_ids($parent), true)) {
 		return;
 	}
 
