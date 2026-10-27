@@ -255,30 +255,49 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	}
 
 	/**
-	 * A flat 1.5.2 never sent reaches Økoskabet with the next edit.
+	 * A 1.5.2 order keeps 1.5.2's address: a flat only in billing is not
+	 * brought in afterwards.
 	 *
 	 * A checkout with no second shipping line keeps the flat in billing.
-	 * 1.5.2 sent the shipping line as typed, so the flat never went; today's
-	 * payload sends it from billing. The 1.5.2 fingerprint still matches such
-	 * an order, and writing today's payload down then recorded the flat as
-	 * sent — so no edit ever sent it.
+	 * 1.5.2 sent the shipping line as typed, so Økoskabet's copy has no flat,
+	 * and whatever the packing room corrected while the shop ran 1.5.2 stands
+	 * on that copy. Sending the flat now sends the whole address with it, over
+	 * the correction (#80's review). The next edit sends what it changed and
+	 * nothing of the address.
 	 */
-	public function test_a_flat_1_5_2_never_sent_goes_with_the_next_edit(): void
+	public function test_a_1_5_2_order_keeps_the_address_1_5_2_sent(): void
 	{
 		$order = $this->an_order_sent_by_1_5_2(array('billing_address_2' => '2. tv'));
-		$this->assertSame('2. tv', oko_second_address_line($order), 'Today the flat is sent from billing.');
 
 		$order->update_status('completed');
 		$this->assertSame(array(), $this->puts, 'Nothing has moved since 1.5.2 sent it.');
 
 		$order = wc_get_order($order->get_id());
+		$this->assertSame('', oko_second_address_line($order), "1.5.2's second line, as typed.");
 		$order->set_billing_phone('+4599887766');
 		$order->save();
 
-		$this->assertCount(1, $this->puts);
-		$sent = json_decode($this->puts[0], true);
-		$this->assertSame(array('phone' => '+4599887766'), $sent['customer'] ?? null);
-		$this->assertSame('2. tv', $sent['home_delivery']['address_2'] ?? null, 'The flat goes now, with the rest of the address.');
+		$this->assertSame(array('{"customer":{"phone":"+4599887766"}}'), $this->puts);
+	}
+
+	/**
+	 * Nor does Økoskabet moving the date of such an order read as a move of
+	 * its address.
+	 *
+	 * Compared with the billing flat, Økoskabet's copy without it was a move:
+	 * the shipping line was rewritten, the fallback switched off for good, and
+	 * the order got a note saying Økoskabet had changed the address.
+	 */
+	public function test_okoskabets_move_of_a_1_5_2_order_with_a_billing_flat_is_only_the_date(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('billing_address_2' => '2. tv'));
+
+		$this->okoskabet_moves_the_date_of($order);
+
+		$fresh = wc_get_order($order->get_id());
+		$this->assertSame('', $fresh->get_shipping_address_2());
+		$this->assertEmpty($fresh->get_meta(OKO_ADDRESS_FROM_OKOSKABET_META, true));
+		$this->assertSame(array(), $this->puts);
 	}
 
 	/**

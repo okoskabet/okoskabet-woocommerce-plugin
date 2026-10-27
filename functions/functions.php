@@ -3055,6 +3055,12 @@ function oko_second_address_line($order): string
 		return '';
 	}
 
+	// Nor for an order 1.5.2 sent, which never had it: see
+	// OKO_SENT_BY_1_5_2_META.
+	if (! empty($order->get_meta(OKO_SENT_BY_1_5_2_META, true))) {
+		return '';
+	}
+
 	$same_address = oko_same_line($order->get_shipping_address_1(), $order->get_billing_address_1())
 		&& oko_same_line($order->get_shipping_postcode(), $order->get_billing_postcode());
 
@@ -3069,6 +3075,21 @@ function oko_second_address_line($order): string
  * what the customer typed in another field months ago is not a second opinion.
  */
 const OKO_ADDRESS_FROM_OKOSKABET_META = '_okoskabet_address_written_back';
+
+/**
+ * Meta marking an order 1.5.2 sent, recognised by its 1.5.2 fingerprint.
+ *
+ * Such an order keeps 1.5.2's second address line: the shipping line as
+ * typed, never the billing flat. 1.5.2 did not send the billing flat, so
+ * Økoskabet's copy has none, and anything the packing room corrected while
+ * the shop ran 1.5.2 stands on that copy without being written back.
+ * Bringing the flat in afterwards made the address differ from both: the
+ * first webhook about the delivery read Økoskabet's copy as a move, wrote a
+ * note saying so and switched the fallback off, and the second save of the
+ * order sent the whole address, over the correction (#80's review). The flat
+ * is no worse off than it was under 1.5.2, and orders placed since get it.
+ */
+const OKO_SENT_BY_1_5_2_META = '_okoskabet_sent_by_1_5_2';
 
 /**
  * Meta marking a place to collect from that Økoskabet's backoffice decided.
@@ -5441,10 +5462,8 @@ function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
  * payload says today's payload. A hash 1.5.2 took says the order as 1.5.2
  * built it, and where 1.5.2 built a field differently, the match vouches for
  * 1.5.2's version and not for ours — so the address is written down as 1.5.2
- * sent it (oko_sent_by_1_5_2(), which says what else is and is not). Writing
- * today's down instead recorded as sent a flat 1.5.2 never sent, taken from
- * the billing address, and it never reached Økoskabet: every later edit found
- * it already there.
+ * sent it (oko_sent_by_1_5_2(), which says what else is and is not), and the
+ * order stays on 1.5.2's address from then on (OKO_SENT_BY_1_5_2_META).
  *
  * Without it, every order placed before this release would send its *whole*
  * payload on its first save — over whatever the backoffice had corrected in
@@ -5727,7 +5746,10 @@ function oko_lines_as_1_5_2(\WC_Order $order, ?array $merchant = null): array
  * and the next edit found nothing to send for the address.
  *
  * So the address is written as 1.5.2 sent it, and everything else as today's
- * payload has it, which the match says is the same. Two of 1.5.2's quirks are
+ * payload has it, which the match says is the same. And it stays 1.5.2's:
+ * the order is marked (OKO_SENT_BY_1_5_2_META), and the billing flat is not
+ * brought in later either, where it would be sent over the backoffice's
+ * corrections. Two of 1.5.2's quirks are
  * left out on purpose, because Økoskabet's copy does not have them either:
  * `location` on the address, a field it never had and cast away unread, which
  * written down would make every address differ forever; and the space 1.5.2
@@ -5793,6 +5815,11 @@ function oko_sent_according_to_the_fingerprint(\WC_Order $order, array $payload,
 	}
 
 	if (oko_fingerprint_as_1_5_2($order, $payload, $merchant) === $fingerprint) {
+		// Remembered on the order with the record the caller writes, and in
+		// memory before that, so the address is read in 1.5.2's terms from
+		// here on — the write-back about to compare it included.
+		$order->update_meta_data(OKO_SENT_BY_1_5_2_META, true);
+
 		return oko_sent_by_1_5_2($order, $comparable);
 	}
 
