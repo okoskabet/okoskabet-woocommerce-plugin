@@ -1870,3 +1870,15 @@ msgstr "Søger…"
 
 msgid "Now type the house number."
 msgstr "Skriv nu husnummeret."
+
+#: functions/functions.php
+msgid "Økoskabet Done"
+msgstr "Sendt til Økoskabet"
+
+#: functions/functions.php
+msgid "Økoskabet SHED ID"
+msgstr "Økoskab"
+
+#: functions/functions.php
+msgid "Location source"
+msgstr "Leveringssted valgt via"

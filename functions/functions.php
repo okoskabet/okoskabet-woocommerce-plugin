@@ -3720,13 +3720,13 @@ function my_custom_checkout_field_display_admin_order_meta($order): void
 		echo $line . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 	}
 	if (!empty($order_done)) {
-		echo 'Økoskabet Done' . ': ' . esc_html($order_done) . "\n";
+		echo esc_html__('Økoskabet Done', O_TEXTDOMAIN) . ': ' . esc_html($order_done) . "\n";
 	}
 	if (!empty($shed_id)) {
-		echo 'Økoskabet SHED ID' . ': ' . esc_html($shed_id) . "\n";
+		echo esc_html__('Økoskabet SHED ID', O_TEXTDOMAIN) . ': ' . esc_html($shed_id) . "\n";
 	}
 	if (!empty($delivery_date)) {
-		echo 'Økoskabet Delivery Date' . ': ' . esc_html($delivery_date) . "\n";
+		echo esc_html__('Økoskabet Delivery Date', O_TEXTDOMAIN) . ': ' . esc_html($delivery_date) . "\n";
 	}
 	if (!empty($pickup_location_id)) {
 		echo esc_html__('Økoskabet pickup location', O_TEXTDOMAIN) . ': ' . esc_html($pickup_location_id) . "\n";
@@ -6016,7 +6016,13 @@ function oko_resend_shipment_on_update(int $order_id): void
 	}
 
 	// Never sent, or on its way out. A cancellation is a DELETE elsewhere.
-	if (empty($order->get_meta('billing_okoskabet_done', true)) || $order->get_status() === 'cancelled') {
+	//
+	// A refund in full is neither: the money went back, often after the goods
+	// were delivered, and the shipment is the shop's to cancel if the delivery
+	// is not to happen (Marc, #82). Sent again it went with `line_items: []`,
+	// and the packing room found a delivery with nothing in it.
+	if (empty($order->get_meta('billing_okoskabet_done', true))
+		|| in_array($order->get_status(), array('cancelled', 'refunded'), true)) {
 		return;
 	}
 
