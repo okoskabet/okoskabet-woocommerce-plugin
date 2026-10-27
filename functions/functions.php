@@ -5130,9 +5130,17 @@ function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
  * the same breath — so the hash answers nothing for an order that has the
  * payload. Its one job is the order that does *not*: one sent by a version
  * that recorded a fingerprint and no payload. For such an order the hash is
- * the only thing left to compare, and it buys the branch at
- * `oko_resend_shipment_on_update()` that writes the payload down for free
- * when nothing has moved.
+ * the only thing left to compare, and it buys the moment the record can be
+ * written down for free: the order has not moved since it was hashed, so what
+ * was hashed is what Økoskabet holds. See oko_sent_according_to_the_fingerprint().
+ *
+ * What was hashed, which is not always today's payload. A hash of today's
+ * payload says today's payload. A hash 1.5.2 took says the order as 1.5.2
+ * built it, and where 1.5.2 built a field differently, the match vouches for
+ * 1.5.2's version and not for ours — so those fields are written down as
+ * 1.5.2 sent them (oko_sent_by_1_5_2()). Writing today's down instead recorded
+ * as sent a flat 1.5.2 never sent, taken from the billing address, and it
+ * never reached Økoskabet: every later edit found it already there.
  *
  * Without it, every order placed before this release would send its *whole*
  * payload on its first save — over whatever the backoffice had corrected in
@@ -5143,12 +5151,13 @@ function oko_remember_what_was_sent(\WC_Order $order, array $payload): void
  *   1. this release live long enough that every such order has either been
  *      saved once, which upgrades it, or been locked by Økoskabet;
  *   2. no backfill — the hash is not reversible, so writing `OKO_SENT_META`
- *      from the current payload would bless edits Økoskabet never accepted.
+ *      for an order whose hash does not match would bless edits Økoskabet
+ *      never accepted.
  *
  * When that holds: delete this constant, the `$sent_fingerprint === ''` guard,
- * and the `elseif` branch. `is_array($sent)` then carries "sent by a recording
- * version" on its own. Tracked as an issue rather than left here to be
- * remembered.
+ * and oko_sent_according_to_the_fingerprint() with the 1.5.2 projection it
+ * reads. `is_array($sent)` then carries "sent by a recording version" on its
+ * own. Tracked as an issue rather than left here to be remembered.
  */
 const OKO_SENT_FINGERPRINT_META = '_okoskabet_sent_fingerprint';
 
@@ -5361,16 +5370,7 @@ function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload, ?array $merc
 {
 	$payload['shipment_reference'] = (string) $order->get_order_number();
 
-	$payload['line_items'] = array_map(static function (array $line): array {
-		return array(
-			'product_id'    => $line['product_id'] ?? null,
-			'variant_id'    => $line['variant_id'] ?? null,
-			'name'          => $line['name'] ?? '',
-			'variant_title' => $line['variant_title'] ?? null,
-			'sku'           => $line['sku'] ?? '',
-			'quantity'      => $line['quantity'] ?? 0,
-		);
-	}, oko_order_line_items($order, $merchant));
+	$payload['line_items'] = oko_lines_as_1_5_2($order, $merchant);
 
 	if (isset($payload['home_delivery'])) {
 		$recipient = $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name();
@@ -5389,6 +5389,109 @@ function oko_fingerprint_as_1_5_2(\WC_Order $order, array $payload, ?array $merc
 	unset($payload['locale'], $payload['webshop_products_url']);
 
 	return md5((string) wp_json_encode($payload));
+}
+
+/**
+ * The order's own goods as 1.5.2 sent them: six keys on a line, in its order.
+ *
+ * @param \WC_Order $order
+ * @return array<int,array<string,mixed>>
+ */
+function oko_lines_as_1_5_2(\WC_Order $order, ?array $merchant = null): array
+{
+	return array_map(static function (array $line): array {
+		return array(
+			'product_id'    => $line['product_id'] ?? null,
+			'variant_id'    => $line['variant_id'] ?? null,
+			'name'          => $line['name'] ?? '',
+			'variant_title' => $line['variant_title'] ?? null,
+			'sku'           => $line['sku'] ?? '',
+			'quantity'      => $line['quantity'] ?? 0,
+		);
+	}, oko_order_line_items($order, $merchant));
+}
+
+/**
+ * What 1.5.2 told Økoskabet about an order whose 1.5.2 fingerprint matches.
+ *
+ * The match says nothing has moved since 1.5.2 sent the order, but in 1.5.2's
+ * terms: it vouches for the fields as 1.5.2 built them, and some of those are
+ * not what today's payload sends. The second address line is the one that
+ * matters. 1.5.2 sent the shipping line as typed, and today's payload falls
+ * back to the billing address when the checkout has no second shipping line —
+ * so writing today's payload down recorded as sent a flat Økoskabet never got,
+ * and the next edit found nothing to send for the address. The goods are the
+ * other: 1.5.2 sent six keys on a line.
+ *
+ * So those are written as 1.5.2 sent them, and everything else as today's
+ * payload has it, which the match says is the same. Two of 1.5.2's quirks are
+ * left out on purpose, because Økoskabet's copy does not have them either:
+ * `location` on the address, a field it never had and cast away unread, which
+ * written down would make every address differ forever; and the space 1.5.2
+ * put after a recipient with no last name, which would send the whole address
+ * to take a space off — over whatever the packing room corrected while the
+ * shop ran 1.5.2, which wrote nothing back.
+ *
+ * The goods are 1.5.2's only while no addition has been written onto the
+ * shipment. That write sends today's whole list, so after it today's list is
+ * what Økoskabet holds.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $comparable Today's payload for it, comparable.
+ * @return array<string,mixed>
+ */
+function oko_sent_by_1_5_2(\WC_Order $order, array $comparable, ?array $merchant = null): array
+{
+	$sent = $comparable;
+
+	if (oko_addition_ids($order) === array()) {
+		$sent['line_items'] = oko_lines_as_1_5_2($order, $merchant);
+	}
+
+	if (isset($sent['home_delivery'])) {
+		$sent['home_delivery'] = array_filter(array(
+			'recipient_name' => oko_recipient_name($order),
+			'address_1'      => $order->get_shipping_address_1(),
+			'address_2'      => $order->get_shipping_address_2(),
+			'city'           => $order->get_shipping_city(),
+			'postal_code'    => $order->get_shipping_postcode(),
+		));
+	}
+
+	return $sent;
+}
+
+/**
+ * What Økoskabet holds for an order that has a fingerprint and no record, as
+ * far as the fingerprint can say — or null when it cannot.
+ *
+ * It can when the order has not moved since it was hashed, by today's hash or
+ * by 1.5.2's; see OKO_SENT_FINGERPRINT_META. An order that has moved is one we
+ * know nothing about: what it moved from is not in a hash.
+ *
+ * @param \WC_Order           $order
+ * @param array<string,mixed> $payload Today's payload for it.
+ * @param array<string,mixed> $merchant
+ * @return array<string,mixed>|null
+ */
+function oko_sent_according_to_the_fingerprint(\WC_Order $order, array $payload, array $merchant): ?array
+{
+	$fingerprint = (string) $order->get_meta(OKO_SENT_FINGERPRINT_META, true);
+	$comparable  = oko_comparable_payload($payload);
+
+	if ($fingerprint === '') {
+		return null;
+	}
+
+	if (oko_shipment_fingerprint($comparable) === $fingerprint) {
+		return $comparable;
+	}
+
+	if (oko_fingerprint_as_1_5_2($order, $payload, $merchant) === $fingerprint) {
+		return oko_sent_by_1_5_2($order, $comparable, $merchant);
+	}
+
+	return null;
 }
 
 /**
@@ -5657,18 +5760,20 @@ function oko_resend_shipment_on_update(int $order_id): void
 	// describes the request rather than the order.
 	$comparable = oko_comparable_payload($payload);
 	$sent       = $order->get_meta(OKO_SENT_META, true);
+	$held       = is_array($sent) ? null : oko_sent_according_to_the_fingerprint($order, $payload, $merchant);
 
 	if (is_array($sent)) {
 		$changes = oko_payload_changes($sent, $comparable);
-	} elseif (oko_shipment_fingerprint($comparable) === $sent_fingerprint
-		|| oko_fingerprint_as_1_5_2($order, $payload, $merchant) === $sent_fingerprint) {
+	} elseif ($held !== null) {
 		// Sent by a version that recorded a fingerprint and not the payload.
 		// Nothing has moved, so this is the free moment to write down what
 		// Økoskabet holds — after this the order compares like any other.
 		//
 		// Asked in 1.5.2's terms too, or every open order would be sent whole
 		// on its first save after the update — see oko_fingerprint_as_1_5_2().
-		$order->update_meta_data(OKO_SENT_META, $comparable);
+		// And written down in them: where 1.5.2 sent a field differently from
+		// today, the next save sends today's, which is a real difference.
+		$order->update_meta_data(OKO_SENT_META, $held);
 		$order->save_meta_data();
 		return;
 	} else {

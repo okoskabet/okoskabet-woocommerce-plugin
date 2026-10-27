@@ -242,6 +242,50 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		return 0;
 	}
 
+	/**
+	 * A flat 1.5.2 never sent reaches Økoskabet with the next edit.
+	 *
+	 * A checkout with no second shipping line keeps the flat in billing.
+	 * 1.5.2 sent the shipping line as typed, so the flat never went; today's
+	 * payload sends it from billing. The 1.5.2 fingerprint still matches such
+	 * an order, and writing today's payload down then recorded the flat as
+	 * sent — so no edit ever sent it.
+	 */
+	public function test_a_flat_1_5_2_never_sent_goes_with_the_next_edit(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('billing_address_2' => '2. tv'));
+		$this->assertSame('2. tv', oko_second_address_line($order), 'Today the flat is sent from billing.');
+
+		$order->update_status('completed');
+		$this->assertSame(array(), $this->puts, 'Nothing has moved since 1.5.2 sent it.');
+
+		$order = wc_get_order($order->get_id());
+		$order->set_billing_phone('+4599887766');
+		$order->save();
+
+		$this->assertCount(1, $this->puts);
+		$sent = json_decode($this->puts[0], true);
+		$this->assertSame(array('phone' => '+4599887766'), $sent['customer'] ?? null);
+		$this->assertSame('2. tv', $sent['home_delivery']['address_2'] ?? null, 'The flat goes now, with the rest of the address.');
+	}
+
+	/**
+	 * But a recipient with no last name is not sent again for the space 1.5.2
+	 * left after it. Økoskabet has the same name either way, and the address
+	 * would go with it, over whatever was corrected while the shop ran 1.5.2.
+	 */
+	public function test_a_recipient_with_no_last_name_is_not_sent_again_for_a_space(): void
+	{
+		$order = $this->an_order_sent_by_1_5_2(array('no_last_name' => true));
+		$order->update_status('completed');
+
+		$order = wc_get_order($order->get_id());
+		$order->set_billing_phone('+4599887766');
+		$order->save();
+
+		$this->assertSame(array('{"customer":{"phone":"+4599887766"}}'), $this->puts);
+	}
+
 	/** An order that did move since 1.5.2 sent it is still sent, whole, as before. */
 	public function test_an_order_that_moved_since_is_still_sent(): void
 	{
@@ -260,6 +304,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 	 * shape says otherwise:
 	 *   - `shed`           a shed reservation instead;
 	 *   - `address_2`      a second address line;
+	 *   - `billing_address_2` a flat on the billing address only, the same
+	 *                      street — which 1.5.2 did not send;
+	 *   - `no_last_name`   a recipient of one word, which 1.5.2 sent with a
+	 *                      space after it;
 	 *   - `more_goods`     a variation, a packaging fee and a refunded unit
 	 *                      beside the simple product;
 	 *   - `sent_address_1` / `sent_date`  what 1.5.2 sent, where the order has
@@ -330,12 +378,20 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 		$shipping->set_method_title($shed !== '' ? 'Økoskab' : 'Hjemmelevering');
 		$order->add_item($shipping);
 
+		$last = empty($shape['no_last_name']) ? 'Hansen' : '';
+
 		$order->set_billing_first_name('Pernille');
 		$order->set_billing_last_name('Hansen');
 		$order->set_billing_phone('+4512345678');
 		$order->set_billing_email('pernille@example.org');
+		if (isset($shape['billing_address_2'])) {
+			$order->set_billing_address_1('Eksempelvej 12');
+			$order->set_billing_postcode('8330');
+			$order->set_billing_city('Beder');
+			$order->set_billing_address_2((string) $shape['billing_address_2']);
+		}
 		$order->set_shipping_first_name('Pernille');
-		$order->set_shipping_last_name('Hansen');
+		$order->set_shipping_last_name($last);
 		$order->set_shipping_address_1('Eksempelvej 12');
 		if (isset($shape['address_2'])) {
 			$order->set_shipping_address_2((string) $shape['address_2']);
@@ -376,14 +432,16 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 
 		// What 1.5.2's oko_shipment_payload() built for it, less the two keys
 		// its fingerprint left out (`locale` and `webshop_products_url`).
-		$customer = array(
+		// 1.5.2 did not trim the recipient.
+		$recipient = 'Pernille ' . $last;
+		$customer  = array(
 			'first_name' => 'Pernille',
 			'last_name'  => 'Hansen',
 			'phone'      => '+4512345678',
 			'email'      => 'pernille@example.org',
 		);
 		if ($shed === '') {
-			$customer['recipient_name'] = 'Pernille Hansen';
+			$customer['recipient_name'] = $recipient;
 		}
 
 		$sent_by_1_5_2 = array(
@@ -403,8 +461,10 @@ class UpgradeFrom152Test extends \Codeception\TestCase\WPTestCase
 				'max_duration_days' => 1,
 			);
 		} else {
+			// The second line is the shipping line as typed: 1.5.2 never read
+			// the billing address.
 			$sent_by_1_5_2['home_delivery'] = array_filter(array(
-				'recipient_name' => 'Pernille Hansen',
+				'recipient_name' => $recipient,
 				'address_1'      => (string) ($shape['sent_address_1'] ?? 'Eksempelvej 12'),
 				'address_2'      => (string) ($shape['address_2'] ?? ''),
 				'city'           => 'Beder',
