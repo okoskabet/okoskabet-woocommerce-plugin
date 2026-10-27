@@ -150,7 +150,10 @@ class AnAdditionsRefundReachesTheDeliveryTest extends \Codeception\TestCase\WPTe
 
 		oko_send_addition_to_its_order($smoer, $parent->get_id(), array());
 
-		$this->assertCount(1, $this->puts);
+		// Said in full when it fails: it has, rarely and only in the whole
+		// suite (#89), and what the second PUT carried is the clue.
+		$this->assertCount(1, $this->puts, 'Sent again: ' . wp_json_encode(array_slice($this->puts, 1))
+			. ' Record: ' . wp_json_encode(wc_get_order($parent->get_id())->get_meta(OKO_SENT_META, true)));
 		$this->assertContains('ADDITION — Smør', array_column($this->puts[0][1]['line_items'], 'name'));
 		$this->assertSame('yes', (string) wc_get_order($smoer->get_id())->get_meta('billing_okoskabet_done', true));
 	}
