@@ -6147,6 +6147,8 @@ function oko_short_reason(string $reason): string
 function oko_resend_shipment_on_update(int $order_id): void
 {
 	static $seen = array();
+	// Orders whose hold this function took itself, to send their goods under.
+	static $holding = array();
 
 	if (isset($seen[$order_id])) {
 		return;
@@ -6157,10 +6159,23 @@ function oko_resend_shipment_on_update(int $order_id): void
 		return;
 	}
 
-	// Under the hold on its additions, the list is read as the last write
-	// left it, not as this request first loaded it.
-	$held_here = isset(oko_additions_held_here()[$order_id]);
-	if ($held_here) {
+	// Held by this request, but not by this function: an addition is being
+	// written onto this order right now, and the save that brought us here is
+	// that write's own bookkeeping. On WooCommerce's order tables every meta
+	// write saves the whole order as well, to move its "modified" time — so
+	// recording the goods just sent ran this resend before the addition was
+	// on the order's list, and it sent the goods without it: the addition's
+	// goods gone from the delivery a moment after they were put on (#89,
+	// found by #84's HPOS run). The write sends the goods and keeps the record
+	// itself; nothing is sent here, and anything else of the order's own goes
+	// with its next save. A 1.5.2 order still gets its record below, which
+	// sends nothing.
+	$held_here  = isset(oko_additions_held_here()[$order_id]);
+	$by_a_write = $held_here && empty($holding[$order_id]);
+
+	// Under the hold it took itself, the list is read as the last write left
+	// it, not as this request first loaded it.
+	if ($held_here && ! $by_a_write) {
 		$order->read_meta_data(true);
 	}
 
@@ -6266,7 +6281,7 @@ function oko_resend_shipment_on_update(int $order_id): void
 		$changes = $comparable;
 	}
 
-	if ($changes === array()) {
+	if ($changes === array() || $by_a_write) {
 		return;
 	}
 
@@ -6283,9 +6298,11 @@ function oko_resend_shipment_on_update(int $order_id): void
 		if ($hold === '') {
 			return;
 		}
+		$holding[$order_id] = true;
 		try {
 			oko_resend_shipment_on_update($order_id);
 		} finally {
+			unset($holding[$order_id]);
 			oko_unlock_additions_to($order_id, $hold);
 		}
 		return;
