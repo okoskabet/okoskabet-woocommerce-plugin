@@ -2481,49 +2481,64 @@ function oko_forget_addition($parent, $addition): void
  * taken over once it is OKO_ADDITION_LOCK_SECONDS old — by one request only:
  * the take-over names the stale value it replaces.
  *
+ * The value is the hold's own: when it was taken, and a part nobody else's
+ * can share, handed back so only this request can let go of it. A holder that
+ * overran the limit and then finished used to delete the row by its name —
+ * the hold another request had taken over, while that one was still writing.
+ *
  * @param int $parent_id The order the additions ride on.
- * @return bool Whether this request now holds it.
+ * @return string The hold, for oko_unlock_additions_to(); empty when another
+ *                request has it.
  */
-function oko_lock_additions_to(int $parent_id): bool
+function oko_lock_additions_to(int $parent_id): string
 {
 	global $wpdb;
 
 	$name = OKO_ADDITION_LOCK_PREFIX . $parent_id;
-	$now  = (string) time();
+	$hold = time() . ':' . wp_generate_uuid4();
 
 	$taken = $wpdb->query($wpdb->prepare(
 		"INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')",
 		$name,
-		$now
+		$hold
 	));
 	if ((int) $taken === 1) {
-		return true;
+		return $hold;
 	}
 
 	$since = (string) $wpdb->get_var($wpdb->prepare(
 		"SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s",
 		$name
 	));
+	// The value starts with the time it was taken, which is all (int) reads.
 	if ($since === '' || (int) $since > time() - OKO_ADDITION_LOCK_SECONDS) {
-		return false;
+		return '';
 	}
 
 	$taken = $wpdb->query($wpdb->prepare(
 		"UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s",
-		$now,
+		$hold,
 		$name,
 		$since
 	));
 
-	return (int) $taken === 1;
+	return (int) $taken === 1 ? $hold : '';
 }
 
-/** And let go of them again. */
-function oko_unlock_additions_to(int $parent_id): void
+/**
+ * And let go of them again — this hold, and never one taken over from it.
+ *
+ * @param int    $parent_id The order the additions ride on.
+ * @param string $hold      What oko_lock_additions_to() handed back.
+ */
+function oko_unlock_additions_to(int $parent_id, string $hold): void
 {
 	global $wpdb;
 
-	$wpdb->delete($wpdb->options, array('option_name' => OKO_ADDITION_LOCK_PREFIX . $parent_id));
+	$wpdb->delete($wpdb->options, array(
+		'option_name'  => OKO_ADDITION_LOCK_PREFIX . $parent_id,
+		'option_value' => $hold,
+	));
 }
 
 /** The name of the hold on an order's additions, before the order's id. */
@@ -2659,7 +2674,8 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 
 	// Already cancelled or refunded, so it cannot be put on hold to try again
 	// later. The shop is told, the way it is told when the write itself fails.
-	if (! oko_lock_additions_to($parent_id)) {
+	$hold = oko_lock_additions_to($parent_id);
+	if ($hold === '') {
 		$parent = wc_get_order($parent_id);
 		$order->add_order_note(sprintf(
 			/* translators: %s: the order the addition rode along with. */
@@ -2672,7 +2688,7 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 	try {
 		oko_take_addition_off_while_its_order_is_held($order, $parent_id, $merchant);
 	} finally {
-		oko_unlock_additions_to($parent_id);
+		oko_unlock_additions_to($parent_id, $hold);
 	}
 }
 
@@ -2765,7 +2781,8 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 		return;
 	}
 
-	if (! oko_lock_additions_to($parent_id)) {
+	$hold = oko_lock_additions_to($parent_id);
+	if ($hold === '') {
 		$parent = wc_get_order($parent_id);
 		oko_hold_addition($order, sprintf(
 			/* translators: %s: the earlier order's number. */
@@ -2778,7 +2795,7 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 	try {
 		oko_send_addition_while_its_order_is_held($order, $parent_id, $merchant);
 	} finally {
-		oko_unlock_additions_to($parent_id);
+		oko_unlock_additions_to($parent_id, $hold);
 	}
 }
 

@@ -172,6 +172,31 @@ class TwoAdditionsAtOnceTest extends \Codeception\TestCase\WPTestCase
 		$this->assertTrue($this->held($parent), 'The other request still has it.');
 	}
 
+	/**
+	 * A holder that overran lets go of its own hold, and not of the one taken
+	 * over from it.
+	 *
+	 * Request X took the hold and then waited on Økoskabet past the limit;
+	 * request A took it over. When X finally finished, its `finally` deleted
+	 * the row by name — A's hold — and a third request got in while A was
+	 * still writing.
+	 */
+	public function test_a_holder_that_overran_does_not_let_go_of_the_hold_taken_over(): void
+	{
+		$parent = $this->a_delivery();
+		$stale  = (string) (time() - OKO_ADDITION_LOCK_SECONDS - 60);
+		$this->a_hold_from((int) $stale, $parent);
+
+		$a = oko_lock_additions_to($parent->get_id());
+		$this->assertNotSame('', $a, 'A takes over the hold X let run out.');
+
+		oko_unlock_additions_to($parent->get_id(), $stale);
+
+		$this->assertSame('', oko_lock_additions_to($parent->get_id()), 'A third request waits: A still has it.');
+		oko_unlock_additions_to($parent->get_id(), $a);
+		$this->assertNotSame('', oko_lock_additions_to($parent->get_id()), 'And gets it once A lets go.');
+	}
+
 	/** A write Økoskabet refused lets go of the hold too. */
 	public function test_a_refused_write_lets_go_of_the_hold(): void
 	{
