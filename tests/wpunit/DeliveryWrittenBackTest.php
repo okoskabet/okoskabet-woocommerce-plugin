@@ -818,6 +818,9 @@ class DeliveryWrittenBackTest extends \Codeception\TestCase\WPTestCase
 	{
 		$order = $this->an_order_delivered_to_the_door();
 		$order->update_meta_data('_billing_okoskabet_pickup_location_id', '7');
+		// A collection Økoskabet made of it: on a home delivery, a place
+		// without the write-back's mark is a leftover, and nothing to move.
+		$order->update_meta_data(OKO_PICKUP_FROM_OKOSKABET_META, true);
 		$order->save();
 
 		$order = wc_get_order($order->get_id());

@@ -51,8 +51,9 @@ class WhenAnOrderIsAStorePickupTest extends \Codeception\TestCase\WPTestCase
 	/**
 	 * The shipping line, the place and the shed, and what is sent.
 	 *
-	 * `okoskabet` is a place the write-back wrote; `cleared` is one it took
-	 * away, which is what Økoskabet moving a collection elsewhere looks like.
+	 * `okoskabet` is a place the write-back wrote; `cleared` is one it wrote
+	 * and then took away, which is what Økoskabet moving a collection
+	 * elsewhere looks like.
 	 *
 	 * @dataProvider every_combination
 	 */
@@ -213,6 +214,41 @@ class WhenAnOrderIsAStorePickupTest extends \Codeception\TestCase\WPTestCase
 		), $kept);
 	}
 
+	/**
+	 * A place left behind on a door delivery is not read back as a collection
+	 * Økoskabet moved away.
+	 *
+	 * The write-back compared Økoskabet's place with whatever the order
+	 * carried, so a webhook that moved only the date found Økoskabet's "no
+	 * place" different from the leftover, noted "no longer a collection from
+	 * the shop" on a delivery that never was one, and marked the emptied place
+	 * as Økoskabet's word.
+	 */
+	public function test_a_leftover_place_is_not_read_as_a_collection_moved_away(): void
+	{
+		$order = $this->an_order_on('hey_okoskabet_shipping_home', 'checkout', '');
+		$order->update_meta_data('billing_okoskabet_done', 'yes');
+		oko_remember_what_was_sent($order, oko_shipment_payload($order, $this->merchant()));
+		$order->save_meta_data();
+
+		$this->shipment = array(
+			'shipment_reference' => (string) $order->get_order_number(),
+			'shipment_type'      => 'home_delivery',
+			'delivery_date'      => '2026-12-24',
+			'pickup_location_id' => null,
+			'home_delivery'      => array('recipient_name' => 'Marc Hansen', 'address' => array(
+				'street_name' => 'Prøvevej', 'house_number' => '98', 'city' => 'København N', 'postal_code' => '2200',
+			)),
+		);
+		$changed = oko_take_delivery_from_okoskabet((string) $order->get_order_number(), $this->merchant());
+
+		$this->assertSame(array('delivery date 2026-12-24'), $changed);
+		$fresh = wc_get_order($order->get_id());
+		$this->assertSame('', (string) $fresh->get_meta(OKO_PICKUP_FROM_OKOSKABET_META, true), 'Økoskabet said nothing about a place.');
+		$this->assertSame('home', $this->destination(oko_shipment_payload($fresh, $this->merchant())));
+		$this->assertSame(array(), $this->puts);
+	}
+
 	/** What a payload sends the goods to, as one word. */
 	private function destination(?array $payload): string
 	{
@@ -236,11 +272,12 @@ class WhenAnOrderIsAStorePickupTest extends \Codeception\TestCase\WPTestCase
 	{
 		$order = $this->an_order($method);
 
-		if ($pickup === 'checkout' || $pickup === 'cleared') {
+		if ($pickup === 'checkout') {
 			$order->update_meta_data('_billing_okoskabet_pickup_location_id', '7');
 		}
 		if ($pickup === 'okoskabet' || $pickup === 'cleared') {
 			$order->update_meta_data('_billing_okoskabet_shed_id', '');
+			oko_write_delivery_back($order, array('pickup_location_id' => 7));
 			$shipment = array('pickup_location_id' => $pickup === 'okoskabet' ? 7 : null);
 			if ($shed !== '') {
 				$shipment['shed_reservation'] = array('shed' => array('id' => $shed, 'name' => $shed));

@@ -3059,7 +3059,8 @@ const OKO_ADDRESS_FROM_OKOSKABET_META = '_okoskabet_address_written_back';
  * Set by the write-back whenever it writes the place, or takes it away. With
  * it the place alone says whether the order is a collection, whatever the
  * shipping line says; without it only a store-pickup shipping line makes one,
- * because a place on any other order can be a leftover. See the payload.
+ * because a place on any other order can be a leftover. See
+ * oko_collection_place().
  */
 const OKO_PICKUP_FROM_OKOSKABET_META = '_okoskabet_pickup_written_back';
 
@@ -4447,6 +4448,59 @@ function oko_logistics_note(\WC_Order $order): string
 }
 
 /**
+ * Where an order is collected from, if it is a collection from the shop.
+ *
+ * Null when it is not one; an empty string for a collection with no place
+ * yet, which goes to Økoskabet as one for a place to be given by hand. One
+ * decision, asked by the payload and by the write-back: two copies of it
+ * would let the write-back read as moved what was never sent.
+ *
+ * A collection Økoskabet itself moved the order to counts, even though the
+ * shipping line the customer chose still says home delivery — for the same
+ * reason the shed does. Without it the next edit in the shop sent the order
+ * back as a home delivery and undid the move by hand.
+ *
+ * But only a place Økoskabet gave us counts that way, and the write-back
+ * marks the ones it gave. Unlike the shed, a place to collect from is not a
+ * decision just by being there. Only the browser emptied it when a customer
+ * moved on from store pickup, so open orders from 1.5.2 can carry one beside
+ * a locker or the door, and an admin who changes a collection's shipping line
+ * to home delivery leaves one behind. 1.5.2 read it for a store pickup only;
+ * read on every order, each of those became a collection on nobody's say-so,
+ * and was sent as one on its next save.
+ *
+ * The mark cuts the other way as well. Once Økoskabet has moved a collection
+ * to a shed or to the door, the write-back empties the place — and the
+ * shipping line, still saying store pickup, kept sending a collection with
+ * nowhere to collect from. That threw the move away, and the shop's next
+ * address edit with it.
+ *
+ * @param \WC_Order $order
+ * @return string|null
+ */
+function oko_collection_place(\WC_Order $order): ?string
+{
+	$place = trim((string) $order->get_meta('_billing_okoskabet_pickup_location_id', true));
+
+	if (! empty($order->get_meta(OKO_PICKUP_FROM_OKOSKABET_META, true))) {
+		return $place !== '' ? $place : null;
+	}
+
+	// The first of our shipping lines decides, as it does for the shed.
+	foreach ($order->get_shipping_methods() as $shipping_method) {
+		$method_id = $shipping_method->get_method_id();
+		if ($method_id === 'hey_okoskabet_shipping_store_pickup') {
+			return $place;
+		}
+		if ($method_id === 'hey_okoskabet_shipping_shed') {
+			return null;
+		}
+	}
+
+	return null;
+}
+
+/**
  * Everything Økoskabet is told about an order, in one place.
  *
  * Built once and used twice — when the order is first sent, and again when it
@@ -4495,15 +4549,14 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	$without_date = empty($order_delivery_date);
 
 	$is_shed_delivery  = false;
-	$is_store_pickup   = false;
 	foreach ($order->get_shipping_methods() as $shipping_method) {
 		$method_id = $shipping_method->get_method_id();
 		if ($method_id === 'hey_okoskabet_shipping_shed') {
 			$is_shed_delivery = true;
 			break;
 		}
+		// A collection's line, which is not a shed's: see oko_collection_place().
 		if ($method_id === 'hey_okoskabet_shipping_store_pickup') {
-			$is_store_pickup = true;
 			break;
 		}
 	}
@@ -4524,41 +4577,11 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	// goods until the customer collects them — so it carries neither a
 	// shed reservation nor a delivery address. What it does carry is the
 	// place to collect from, chosen at checkout from the merchant's own
-	// pickup locations.
-	//
-	// Read before the decision, not after it, for the same reason the shed is:
-	// a collection Økoskabet itself moved the order to counts too, even though
-	// the shipping line the customer chose still says home delivery. Without
-	// it the next edit in the shop sent the order back as a home delivery and
-	// undid the move by hand — the shed had its guard and this did not.
-	//
-	// But only a place Økoskabet gave us counts that way, and the write-back
-	// marks the ones it gave. Unlike the shed, a place to collect from is not a
-	// decision just by being there. Only the browser emptied it when a customer
-	// moved on from store pickup, so open orders from 1.5.2 can carry one beside
-	// a locker or the door, and an admin who changes a collection's shipping
-	// line to home delivery leaves one behind. 1.5.2 read it for a store pickup
-	// only; read on every order, each of those became a collection on nobody's
-	// say-so, and was sent as one on its next save.
-	//
-	// The mark cuts the other way as well. Once Økoskabet has moved a
-	// collection to a shed or to the door, the write-back empties the place —
-	// and the shipping line, still saying store pickup, kept sending a
-	// collection with nowhere to collect from. That threw the move away, and
-	// the shop's next address edit with it. Without the mark, a store pickup
-	// with no place is still one, as 1.5.2 sent it, for Økoskabet to give it a
-	// place by hand.
-	$order_pickup_location_id = trim(
-		(string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)
-	);
-
-	if (! empty($order->get_meta(OKO_PICKUP_FROM_OKOSKABET_META, true))) {
-		$is_store_pickup = $order_pickup_location_id !== '';
-	}
-
-	if (! $is_store_pickup) {
-		$order_pickup_location_id = '';
-	}
+	// pickup locations. Whether the order is one, and from where, is one
+	// decision, asked by the write-back too; see oko_collection_place().
+	$order_pickup_location_id = oko_collection_place($order);
+	$is_store_pickup          = $order_pickup_location_id !== null;
+	$order_pickup_location_id = (string) $order_pickup_location_id;
 
 
 	// One shipment, three shapes. Everything every shipment carries is
@@ -4978,7 +5001,12 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	// collection made by hand survives the shop's next edit.
 	$pickup = $shipment['pickup_location_id'] ?? null;
 	$pickup = ($pickup === null || $pickup === '') ? '' : (string) (int) $pickup;
-	if ($pickup !== (string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)) {
+	// Compared with the place we send, not with whatever the order carries.
+	// A place left behind on a door or a shed delivery is not one we send,
+	// and read as ours, every webhook about such a delivery — a date moved by
+	// a day — said it was "no longer a collection from the shop", and marked
+	// the emptied place as Økoskabet's word.
+	if ($pickup !== (string) oko_collection_place($order)) {
 		$order->update_meta_data('_billing_okoskabet_pickup_location_id', $pickup);
 		// Økoskabet's word now, set or emptied, whatever the shipping line says.
 		$order->update_meta_data(OKO_PICKUP_FROM_OKOSKABET_META, true);
