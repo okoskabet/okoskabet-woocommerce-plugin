@@ -2757,6 +2757,10 @@ function oko_take_addition_off_its_order($order, int $parent_id, array $merchant
 	} finally {
 		oko_unlock_additions_to($parent_id, $hold);
 	}
+
+	// What the earlier order has of its own still to send, now that its list
+	// and its record agree again; see oko_send_addition_to_its_order().
+	oko_resend_shipment_on_update($parent_id);
 }
 
 /**
@@ -2871,6 +2875,12 @@ function oko_send_addition_to_its_order($order, int $parent_id, array $merchant)
 	} finally {
 		oko_unlock_additions_to($parent_id, $hold);
 	}
+
+	// The earlier order's own resend sends nothing while the write holds it
+	// (#89), so what the order has of its own still to send — an edit that has
+	// not got through, or a 1.5.2 order that moved since it was sent — goes
+	// now, with the addition on its list and in its record.
+	oko_resend_shipment_on_update($parent_id);
 }
 
 /**
