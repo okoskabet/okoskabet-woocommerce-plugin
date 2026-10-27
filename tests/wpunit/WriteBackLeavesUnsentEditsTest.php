@@ -107,6 +107,32 @@ class WriteBackLeavesUnsentEditsTest extends \Codeception\TestCase\WPTestCase
 		$this->assertArrayNotHasKey('home_delivery', $record);
 	}
 
+	/**
+	 * An address the shop corrected, still on its way, is not put back by
+	 * Økoskabet moving the date.
+	 *
+	 * Økoskabet still holds the address we sent, so it did not change it. The
+	 * write-back read the difference as Økoskabet's, wrote the old address
+	 * over the correction with a note blaming Økoskabet, and the parcel went
+	 * to the old address (#80's review). Now the correction stays, and goes.
+	 */
+	public function test_an_address_still_on_its_way_is_not_put_back_by_a_date_move(): void
+	{
+		$order = $this->an_order_at_okoskabet();
+		add_filter('oko_resend_shipment_on_update', '__return_false');
+		$order->set_shipping_address_1('Eksempelvej 14');
+		$order->save();
+		remove_filter('oko_resend_shipment_on_update', '__return_false');
+
+		$this->okoskabet_moves_it($order, array('delivery_date' => '2026-10-23'));
+
+		$fresh = wc_get_order($order->get_id());
+		$this->assertSame('Eksempelvej 14', $fresh->get_shipping_address_1(), "The shop's correction stays.");
+		$this->assertSame('2026-10-23', (string) $fresh->get_meta('_billing_okoskabet_delivery_date', true));
+		$this->assertCount(1, $this->puts);
+		$this->assertSame('Eksempelvej 14', json_decode($this->puts[0], true)['home_delivery']['address_1'] ?? null, 'And goes.');
+	}
+
 	/** And Økoskabet's own move, on an order with nothing waiting, sends nothing. */
 	public function test_okoskabets_own_move_is_not_sent_back(): void
 	{

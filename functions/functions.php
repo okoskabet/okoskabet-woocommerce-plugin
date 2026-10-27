@@ -5070,16 +5070,32 @@ function oko_changes_touch_the_delivery(array $changes): bool
  * order the customer has already paid is not, and a shop that saw its totals
  * change by themselves would be right to stop trusting this.
  *
- * @param \WC_Order           $order    The order to write on.
- * @param array<string,mixed> $shipment The shipment as Økoskabet has it.
+ * Only what Økoskabet changed. Given what we last sent, a field where
+ * Økoskabet still holds what we sent is left as the order has it: if the
+ * order says something else, that is an edit of the shop's own still on its
+ * way — a 5xx left to retry, a key Økoskabet would not take — and writing
+ * Økoskabet's copy over it put the parcel back on the old address, with a
+ * note blaming Økoskabet (#80's review). The save after the write-back then
+ * sends it.
+ *
+ * @param \WC_Order                $order    The order to write on.
+ * @param array<string,mixed>      $shipment The shipment as Økoskabet has it.
+ * @param array<string,mixed>|null $sent     What we last sent, when known.
  * @return array<int,string> What was changed, for the order's own note.
  */
-function oko_write_delivery_back(\WC_Order $order, array $shipment): array
+function oko_write_delivery_back(\WC_Order $order, array $shipment, ?array $sent = null): array
 {
 	$changed = array();
 
+	// Økoskabet holds this field as we sent it, so it did not change it.
+	$as_sent = static function (string $value, string $what_we_sent) use ($sent): bool {
+		return $sent !== null && $value === $what_we_sent;
+	};
+	$sent_home = (array) ($sent['home_delivery'] ?? array());
+
 	$date = sanitize_text_field((string) ($shipment['delivery_date'] ?? ''));
-	if ($date !== '' && $date !== (string) $order->get_meta('_billing_okoskabet_delivery_date', true)) {
+	if ($date !== '' && ! $as_sent($date, (string) ($sent['delivery_date'] ?? ''))
+		&& $date !== (string) $order->get_meta('_billing_okoskabet_delivery_date', true)) {
 		$order->update_meta_data('_billing_okoskabet_delivery_date', $date);
 		/* translators: %s: the new delivery date. */
 		$changed[] = sprintf(__('delivery date %s', O_TEXTDOMAIN), $date);
@@ -5096,7 +5112,8 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	// and read as ours, every webhook about such a delivery — a date moved by
 	// a day — said it was "no longer a collection from the shop", and marked
 	// the emptied place as Økoskabet's word.
-	if ($pickup !== (string) oko_collection_place($order)) {
+	$sent_pickup = ($sent['shipment_type'] ?? '') === 'store_pickup' ? (string) ($sent['pickup_location_id'] ?? '') : '';
+	if (! $as_sent($pickup, $sent_pickup) && $pickup !== (string) oko_collection_place($order)) {
 		$order->update_meta_data('_billing_okoskabet_pickup_location_id', $pickup);
 		// Økoskabet's word now, set or emptied, whatever the shipping line says.
 		$order->update_meta_data(OKO_PICKUP_FROM_OKOSKABET_META, true);
@@ -5104,7 +5121,8 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			? __('collection from the shop', O_TEXTDOMAIN)
 			: __('no longer a collection from the shop', O_TEXTDOMAIN);
 	} elseif (oko_collection_place($order) === ''
-		&& ! in_array((string) ($shipment['shipment_type'] ?? 'store_pickup'), array('', 'store_pickup'), true)) {
+		&& ! in_array((string) ($shipment['shipment_type'] ?? 'store_pickup'), array('', 'store_pickup'), true)
+		&& ($sent === null || ($sent['shipment_type'] ?? '') === 'store_pickup')) {
 		// A collection with no place — a shop with no pickup locations books
 		// one with none — reads the same as no collection above, so Økoskabet
 		// moving it to a shed or the door was never marked, the store-pickup
@@ -5117,7 +5135,8 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	$shed      = (array) (((array) ($shipment['shed_reservation'] ?? array()))['shed'] ?? array());
 	$shed_id   = isset($shed['id']) ? sanitize_text_field((string) $shed['id']) : '';
 	$shed_name = sanitize_text_field((string) ($shed['name'] ?? $shed_id));
-	if ($shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
+	if (! $as_sent($shed_id, (string) ($sent['reservation']['shed_id'] ?? ''))
+		&& $shed_id !== (string) $order->get_meta('_billing_okoskabet_shed_id', true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', $shed_id);
 		$changed[] = $shed_id !== ''
 			/* translators: %s: the name of the Økoskab. */
@@ -5133,7 +5152,7 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	$home      = (array) ($shipment['home_delivery'] ?? array());
 	$recipient = isset($home['recipient_name']) ? sanitize_text_field((string) $home['recipient_name']) : '';
 	$held_name = oko_recipient_name($order);
-	if ($recipient !== '' && $recipient !== $held_name) {
+	if ($recipient !== '' && ! $as_sent($recipient, (string) ($sent_home['recipient_name'] ?? '')) && $recipient !== $held_name) {
 		$name = explode(' ', $recipient, 2);
 		$order->set_shipping_first_name($name[0]);
 		$order->set_shipping_last_name($name[1] ?? '');
@@ -5165,7 +5184,13 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 			'shipping_postcode'  => $order->get_shipping_postcode(),
 		);
 
-		$address_moved = oko_address_as_compared($lines) !== oko_address_as_compared($held);
+		$address_moved = oko_address_as_compared($lines) !== oko_address_as_compared($held)
+			&& ! $as_sent(oko_address_as_compared($lines), oko_address_as_compared(array(
+				'shipping_address_1' => (string) ($sent_home['address_1'] ?? ''),
+				'shipping_address_2' => (string) ($sent_home['address_2'] ?? ''),
+				'shipping_city'      => (string) ($sent_home['city'] ?? ''),
+				'shipping_postcode'  => (string) ($sent_home['postal_code'] ?? ''),
+			)));
 
 		if ($address_moved) {
 			$order->set_shipping_address_1($lines['shipping_address_1']);
@@ -5374,7 +5399,7 @@ function oko_take_delivery_from_okoskabet(string $reference, array $merchant): a
 		}
 	}
 
-	$changed = oko_write_delivery_back($order, $shipment);
+	$changed = oko_write_delivery_back($order, $shipment, is_array($held) ? $held : null);
 	if ($changed === array()) {
 		// Nothing of the shop's own moved, so there is no note to write and
 		// nothing to save: the write-back writes, and marks, only what it
