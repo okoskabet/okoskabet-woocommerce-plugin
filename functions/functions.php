@@ -2874,6 +2874,16 @@ function oko_second_address_line($order): string
  */
 const OKO_ADDRESS_FROM_OKOSKABET_META = '_okoskabet_address_written_back';
 
+/**
+ * Meta marking a place to collect from that Økoskabet's backoffice decided.
+ *
+ * Set by the write-back whenever it writes the place, or takes it away. With
+ * it the place alone says whether the order is a collection, whatever the
+ * shipping line says; without it only a store-pickup shipping line makes one,
+ * because a place on any other order can be a leftover. See the payload.
+ */
+const OKO_PICKUP_FROM_OKOSKABET_META = '_okoskabet_pickup_written_back';
+
 /** Two written forms of one line, give or take case and spacing. */
 function oko_same_line(string $one, string $other): bool
 {
@@ -4317,11 +4327,30 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 	// the shipping line the customer chose still says home delivery. Without
 	// it the next edit in the shop sent the order back as a home delivery and
 	// undid the move by hand — the shed had its guard and this did not.
+	//
+	// But only a place Økoskabet gave us counts that way, and the write-back
+	// marks the ones it gave. Unlike the shed, a place to collect from is not a
+	// decision just by being there. Only the browser emptied it when a customer
+	// moved on from store pickup, so open orders from 1.5.2 can carry one beside
+	// a locker or the door, and an admin who changes a collection's shipping
+	// line to home delivery leaves one behind. 1.5.2 read it for a store pickup
+	// only; read on every order, each of those became a collection on nobody's
+	// say-so, and was sent as one on its next save.
+	//
+	// The mark cuts the other way as well. Once Økoskabet has moved a
+	// collection to a shed or to the door, the write-back empties the place —
+	// and the shipping line, still saying store pickup, kept sending a
+	// collection with nowhere to collect from. That threw the move away, and
+	// the shop's next address edit with it. Without the mark, a store pickup
+	// with no place is still one, as 1.5.2 sent it, for Økoskabet to give it a
+	// place by hand.
 	$order_pickup_location_id = trim(
 		(string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)
 	);
 
-	$is_store_pickup = $is_store_pickup || $order_pickup_location_id !== '';
+	if (! empty($order->get_meta(OKO_PICKUP_FROM_OKOSKABET_META, true))) {
+		$is_store_pickup = $order_pickup_location_id !== '';
+	}
 
 	if (! $is_store_pickup) {
 		$order_pickup_location_id = '';
@@ -4736,6 +4765,8 @@ function oko_write_delivery_back(\WC_Order $order, array $shipment): array
 	$pickup = ($pickup === null || $pickup === '') ? '' : (string) (int) $pickup;
 	if ($pickup !== (string) $order->get_meta('_billing_okoskabet_pickup_location_id', true)) {
 		$order->update_meta_data('_billing_okoskabet_pickup_location_id', $pickup);
+		// Økoskabet's word now, set or emptied, whatever the shipping line says.
+		$order->update_meta_data(OKO_PICKUP_FROM_OKOSKABET_META, true);
 		$changed[] = $pickup !== ''
 			? __('collection from the shop', O_TEXTDOMAIN)
 			: __('no longer a collection from the shop', O_TEXTDOMAIN);
@@ -5807,6 +5838,28 @@ function okoskabet_woocommerce_plugin_clear_shed_id_for_home_delivery($order, $d
 
 	if (in_array('hey_okoskabet_shipping_home', $shipping_methods, true)) {
 		$order->update_meta_data('_billing_okoskabet_shed_id', '');
+	}
+}
+
+add_action('woocommerce_checkout_create_order', 'okoskabet_woocommerce_plugin_clear_pickup_id_unless_store_pickup', 10, 2);
+
+/**
+ * A place to collect from stays only on an order collected from one.
+ *
+ * The hidden field keeps whatever the pickup picker last wrote into it, and
+ * only the browser empties it when the customer moves on to a locker or the
+ * door. A checkout whose script did not run there posted it anyway, and the
+ * order carried a collection point beside its shed. The payload no longer
+ * reads such a place, but the admin screen prints it, and the order should
+ * say what was chosen. The shed's own clear, above, for the same reason.
+ *
+ * @param \WC_Order           $order The order being created.
+ * @param array<string,mixed> $data  Posted checkout data.
+ */
+function okoskabet_woocommerce_plugin_clear_pickup_id_unless_store_pickup($order, $data): void
+{
+	if (! in_array('hey_okoskabet_shipping_store_pickup', (array) ($data['shipping_method'] ?? array()), true)) {
+		$order->update_meta_data('_billing_okoskabet_pickup_location_id', '');
 	}
 }
 
