@@ -2,7 +2,7 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
-## 1.6.0 - 2026-10-27
+## 1.6.0 - 2026-10-28
 
 Tillægsordrer, adresseforslag og etagefelt i kassen, og pakkeriets rettelser
 kommer tilbage til butikken. De nye felter i kassen er slået fra, indtil du
@@ -77,13 +77,16 @@ Retter du en ordre, der allerede er sendt, sendes kun det, du har ændret — en
 omdøbt vare sender varerne, en ny adresse sender adressen. Før blev hele ordren
 sendt ved hver gemning, oven i det pakkeriet havde rettet.
 
-Åbne ordrer fra 1.5.2 sendes ikke igen, bare fordi pluginet er opdateret, og
-heller ikke, når de får et tillæg. De sendes først, når der faktisk ændres
-noget på dem. De beholder adressen, som 1.5.2 sendte den: en lejlighed, der kun
-står i fakturaadressen, sendte 1.5.2 aldrig, og den sendes heller ikke bagefter,
-for så ville hele adressen gå med og skrive oven i det, pakkeriet har rettet.
-Nye ordrer får lejligheden med. Ordrer sendt af en version før 1.5.2 sendes
-hele én gang, første gang de gemmes.
+Åbne ordrer sendt af 1.5.0, 1.5.1 eller 1.5.2 sendes ikke igen, bare fordi
+pluginet er opdateret, og heller ikke, når de får et tillæg. Gemmes sådan en
+ordre første gang efter opdateringen uden at være ændret, husker pluginet, hvad
+Økoskabet har, og derefter sendes kun det, der ændres. Adressen bliver, som den
+blev sendt: en lejlighed, der kun står i fakturaadressen, sendes ikke bagefter.
+Er den første gemning derimod en rigtig rettelse, eller er en vare på ordren
+omdøbt, har fået nyt varenummer eller er slettet siden, sendes hele ordren én
+gang, som før opdateringen — med lejligheden fra fakturaadressen. Ordrer sendt
+af 1.4.x sendes ikke igen, når de rettes i butikken; ret dem i Økoskabets
+backoffice. Nye ordrer får lejligheden med.
 
 Afviser Økoskabet en rettelse, står det nu på ordren, med Økoskabets egen
 begrundelse. Før stod det kun i en logfil.
