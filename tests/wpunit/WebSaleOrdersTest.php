@@ -128,6 +128,46 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * A variable product names no variant, so no stock is taken off any of
+	 * them; a variation's own id names one, and its stock is taken.
+	 */
+	public function test_a_variable_product_is_a_line_of_its_own_and_a_variation_is_linked(): void
+	{
+		$parent = new \WC_Product_Variable();
+		$parent->set_name('Æbler');
+		$parent->save();
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id($parent->get_id());
+		$variation->set_regular_price('30');
+		$variation->set_manage_stock(true);
+		$variation->set_stock_quantity(10);
+		$variation->save();
+		$other = new \WC_Product_Variation();
+		$other->set_parent_id($parent->get_id());
+		$other->set_regular_price('30');
+		$other->set_manage_stock(true);
+		$other->set_stock_quantity(10);
+		$other->save();
+
+		$this->sales = array($this->a_sale('web-123', array(
+			array('product_external_id' => (string) $parent->get_id(), 'title' => 'Æbler, 1 kg', 'quantity' => 2, 'unit_price' => '30.00'),
+			array('product_external_id' => (string) $variation->get_id(), 'title' => 'Æbler, 2 kg', 'quantity' => 1, 'unit_price' => '60.00'),
+		)));
+		$this->sales[0]['total'] = '169.00';
+
+		oko_fetch_web_sale_orders();
+
+		$lines = array_values(oko_web_sale_order('web-123')->get_items());
+		$this->assertCount(2, $lines);
+		$this->assertSame(0, $lines[0]->get_product_id());
+		$this->assertSame('Æbler, 1 kg', $lines[0]->get_name());
+		$this->assertSame($variation->get_id(), $lines[1]->get_variation_id());
+
+		$this->assertSame(9, wc_get_product($variation->get_id())->get_stock_quantity());
+		$this->assertSame(10, wc_get_product($other->get_id())->get_stock_quantity());
+	}
+
 	public function test_the_plugin_never_books_it_itself(): void
 	{
 		$this->sales = array($this->a_sale('web-123'));

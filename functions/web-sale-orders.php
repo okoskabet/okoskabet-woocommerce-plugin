@@ -489,7 +489,14 @@ function oko_web_sale_line(\WC_Order $order, array $line): void
 
 	$product_id = (string) ($line['product_external_id'] ?? '');
 	$product    = preg_match('/^\d+$/', $product_id) ? wc_get_product((int) $product_id) : null;
-	if ($product instanceof \WC_Product && $product->get_status() === 'trash') {
+	// The id is the shop's product as its own order lines name it, so a
+	// variable product says which product and not which of its variants.
+	// Guessed, the stock would come off the wrong one; as a line of its own,
+	// it comes off none, and the shop sees which it is from the title. Only a
+	// product that is the thing sold — a simple one, or an id that is itself a
+	// variation — is linked.
+	if ($product instanceof \WC_Product
+		&& ($product->get_status() === 'trash' || ! $product->is_type(array('simple', 'variation')))) {
 		$product = null;
 	}
 
