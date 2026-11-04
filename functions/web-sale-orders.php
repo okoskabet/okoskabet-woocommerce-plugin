@@ -304,8 +304,9 @@ function oko_create_web_sale_order(array $merchant, array $sale): \WC_Order
 
 	// The customer's freight stays with Foodshipper, which delivers (Marc,
 	// 4 November 2026). The line says who delivers, at nothing, and the order
-	// comes to what the shop sold. `shipping_price` in the answer is for
-	// information only.
+	// comes to what the shop sold. Økoskabet answers `shipping_price` "0.00"
+	// and a `total` of the goods alone, and the freight is still taken off
+	// below in case an answer ever carries it.
 	$shipping = new \WC_Order_Item_Shipping();
 	$shipping->set_method_id(OKO_WEB_SALE_PAYMENT_METHOD);
 	$shipping->set_method_title(__('Delivered by Foodshipper', O_TEXTDOMAIN));
@@ -445,10 +446,15 @@ function oko_report_web_sale_order(array $merchant, \WC_Order $order, string $re
  */
 function oko_web_sale_customer(\WC_Order $order, array $customer): void
 {
-	$name  = trim((string) ($customer['name'] ?? ''));
-	$parts = preg_split('/\s+/u', $name, 2) ?: array('');
-	$first = (string) ($parts[0] ?? '');
-	$last  = (string) ($parts[1] ?? '');
+	// The names as Økoskabet has them, and the full name split at its first
+	// space only where they are not given.
+	$first = trim((string) ($customer['first_name'] ?? ''));
+	$last  = trim((string) ($customer['last_name'] ?? ''));
+	if ($first === '' && $last === '') {
+		$parts = preg_split('/\s+/u', trim((string) ($customer['name'] ?? '')), 2) ?: array('');
+		$first = (string) ($parts[0] ?? '');
+		$last  = (string) ($parts[1] ?? '');
+	}
 
 	$order->set_billing_first_name($first);
 	$order->set_billing_last_name($last);

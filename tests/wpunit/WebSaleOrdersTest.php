@@ -100,8 +100,8 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		// Off the stock for the shop's own product, and only that.
 		$this->assertSame(8, wc_get_product($product->get_id())->get_stock_quantity());
 
-		$this->assertSame('Karen', $order->get_billing_first_name());
-		$this->assertSame('Blixen Hansen', $order->get_billing_last_name());
+		$this->assertSame('Karen Blixen', $order->get_billing_first_name());
+		$this->assertSame('Hansen', $order->get_billing_last_name());
 		$this->assertSame('kunde@example.org', $order->get_billing_email());
 		$this->assertSame('Eksempelvej 12', $order->get_shipping_address_1());
 		$this->assertSame('8330', $order->get_shipping_postcode());
@@ -146,7 +146,7 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 			array('product_external_id' => (string) $parent->get_id(), 'title' => 'Æbler, 1 kg', 'quantity' => 2, 'unit_price' => '30.00'),
 			array('product_external_id' => (string) $variation->get_id(), 'title' => 'Æbler, 2 kg', 'quantity' => 1, 'unit_price' => '60.00'),
 		)));
-		$this->sales[0]['total'] = '169.00';
+		$this->sales[0]['total'] = '120.00';
 
 		oko_fetch_web_sale_orders();
 
@@ -161,6 +161,20 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 
 		$this->assertSame(9, wc_get_product($variation->get_id())->get_stock_quantity());
 		$this->assertSame(10, wc_get_product($other->get_id())->get_stock_quantity());
+	}
+
+	/** An answer with the full name only is split at its first space. */
+	public function test_a_full_name_alone_is_split(): void
+	{
+		$sale = $this->a_sale('web-123');
+		unset($sale['customer']['first_name'], $sale['customer']['last_name']);
+		$this->sales = array($sale);
+
+		oko_fetch_web_sale_orders();
+
+		$order = oko_web_sale_order('web-123');
+		$this->assertSame('Karen', $order->get_billing_first_name());
+		$this->assertSame('Blixen Hansen', $order->get_billing_last_name());
 	}
 
 	public function test_the_plugin_never_books_it_itself(): void
@@ -295,14 +309,16 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 			'shipment_type' => 'home_delivery',
 			'shed_id'       => null,
 			'customer'      => array(
-				'name'    => 'Karen Blixen Hansen',
-				'email'   => 'kunde@example.org',
-				'phone'   => '12345678',
-				'address' => array('street' => 'Eksempelvej 12', 'postal_code' => '8330', 'city' => 'Beder', 'country' => 'DK'),
+				'name'       => 'Karen Blixen Hansen',
+				'first_name' => 'Karen Blixen',
+				'last_name'  => 'Hansen',
+				'email'      => 'kunde@example.org',
+				'phone'      => '12345678',
+				'address'    => array('street' => 'Eksempelvej 12', 'postal_code' => '8330', 'city' => 'Beder', 'country' => 'DK'),
 			),
 			'lines'          => $lines ?? array(array('product_external_id' => null, 'title' => 'Rugbrød', 'quantity' => 2, 'unit_price' => '125.00')),
-			'shipping_price' => '49.00',
-			'total'          => '299.00',
+			'shipping_price' => '0.00',
+			'total'          => '250.00',
 			'currency'       => 'DKK',
 			'mark'           => 'Kommissionssalg Web',
 		);
