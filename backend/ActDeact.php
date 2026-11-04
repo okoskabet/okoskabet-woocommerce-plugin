@@ -149,7 +149,12 @@ class ActDeact extends Base {
 	 * @return void
 	 */
 	private static function single_deactivate() {
-		// @TODO: Define deactivation functionality here
+		// The commission-sale fetch, which would otherwise go on asking
+		// Økoskabet every five minutes for a plugin that is not there to take
+		// the orders in. It is scheduled again on the next load once active.
+		if ( \function_exists( 'as_unschedule_all_actions' ) ) {
+			\as_unschedule_all_actions( 'okoskabet_fetch_web_sale_orders', array(), 'okoskabet' );
+		}
 		// Clear the permalinks
 		\flush_rewrite_rules();
 	}
