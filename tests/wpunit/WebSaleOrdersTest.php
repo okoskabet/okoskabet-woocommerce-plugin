@@ -1,0 +1,288 @@
+<?php
+
+use okoskabet_woocommerce_plugin\Integrations\Merchants;
+
+/**
+ * Commission sales from okoskabet.dk come into the shop as its own orders.
+ *
+ * The plugin fetches them with the shop's key, makes each one a paid order —
+ * the shop's own product where Økoskabet names one, a line with the title and
+ * price otherwise — and reports which order it became. The shipment is
+ * Økoskabet's already, so the plugin never books one of these; a cancellation
+ * deletes it under `web-<id>` like any other.
+ */
+class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
+{
+	/** @var array<int,array{method:string,url:string,body:string}> */
+	private array $requests = array();
+
+	/** @var array<int,array<string,mixed>> What Økoskabet lists. */
+	private array $sales = array();
+
+	/** What Økoskabet answers a report with. */
+	private int $report_answer = 200;
+
+	/** @var string[] Who WordPress sent mail to. */
+	private array $mailed = array();
+
+	public function setUp(): void
+	{
+		parent::setUp();
+		delete_option(Merchants::OPTION_KEY);
+		Merchants::purge_config_cache();
+		Merchants::save_config(array(
+			'default_merchant_id' => 'default',
+			'merchants' => array('default' => array('id' => 'default', 'label' => 'D', 'api_key' => 'test-key', 'staging' => true)),
+		));
+		update_option('woocommerce_manage_stock', 'yes');
+		delete_option(OKO_WEB_SALE_LOCK_OPTION);
+
+		add_filter('pre_http_request', array($this, 'okoskabet'), 1, 3);
+		add_filter('pre_wp_mail', function ($short_circuit, $atts) {
+			foreach ((array) $atts['to'] as $to) {
+				$this->mailed[] = strtolower((string) $to);
+			}
+
+			return true;
+		}, 10, 2);
+	}
+
+	public function tearDown(): void
+	{
+		remove_all_filters('pre_http_request');
+		remove_all_filters('pre_wp_mail');
+		delete_option(Merchants::OPTION_KEY);
+		delete_option(OKO_WEB_SALE_LOCK_OPTION);
+		Merchants::purge_config_cache();
+		parent::tearDown();
+	}
+
+	/** Økoskabet, as far as these tests talk to it. */
+	public function okoskabet($preempt, $args, $url)
+	{
+		$method = (string) ($args['method'] ?? 'GET');
+		$this->requests[] = array('method' => $method, 'url' => (string) $url, 'body' => (string) ($args['body'] ?? ''));
+
+		if ($method === 'GET' && strpos($url, '/api/v1/web_sale_orders') !== false) {
+			return $this->answer(200, array('orders' => $this->sales));
+		}
+		if ($method === 'POST' && preg_match('#/api/v1/web_sale_orders/[^/]+/created$#', $url)) {
+			return $this->answer($this->report_answer, array());
+		}
+		if ($method === 'DELETE') {
+			return $this->answer(204, null);
+		}
+
+		return $this->answer(201, array());
+	}
+
+	public function test_a_sale_becomes_a_paid_order_with_the_shops_product_and_a_line_of_its_own(): void
+	{
+		$product = $this->a_product_in_stock(10);
+		$this->sales = array($this->a_sale('web-123', array(
+			array('product_external_id' => (string) $product->get_id(), 'title' => 'Rugbrød', 'quantity' => 2, 'unit_price' => '45.00'),
+			array('product_external_id' => null, 'title' => 'Æblemost fra gården', 'quantity' => 1, 'unit_price' => '160.00'),
+		)));
+
+		oko_fetch_web_sale_orders();
+
+		$order = oko_web_sale_order('web-123');
+		$this->assertInstanceOf(\WC_Order::class, $order);
+		$this->assertSame('processing', $order->get_status());
+		$this->assertTrue($order->is_paid());
+		$this->assertNotNull($order->get_date_paid());
+		$this->assertSame('Foodshipper – Kommissionssalg Web', $order->get_payment_method_title());
+		$this->assertSame('299.00', number_format((float) $order->get_total(), 2, '.', ''));
+
+		$lines = array_values($order->get_items());
+		$this->assertCount(2, $lines);
+		$this->assertSame($product->get_id(), $lines[0]->get_product_id());
+		$this->assertSame(2, $lines[0]->get_quantity());
+		$this->assertSame(0, $lines[1]->get_product_id());
+		$this->assertSame('Æblemost fra gården', $lines[1]->get_name());
+		$this->assertEqualsWithDelta(160.0, (float) $lines[1]->get_total() + (float) $lines[1]->get_total_tax(), 0.01);
+
+		$shipping = array_values($order->get_items('shipping'));
+		$this->assertCount(1, $shipping);
+		$this->assertEqualsWithDelta(49.0, (float) $shipping[0]->get_total() + (float) $shipping[0]->get_total_tax(), 0.01);
+
+		// Off the stock for the shop's own product, and only that.
+		$this->assertSame(8, wc_get_product($product->get_id())->get_stock_quantity());
+
+		$this->assertSame('Karen', $order->get_billing_first_name());
+		$this->assertSame('Blixen Hansen', $order->get_billing_last_name());
+		$this->assertSame('kunde@example.org', $order->get_billing_email());
+		$this->assertSame('Eksempelvej 12', $order->get_shipping_address_1());
+		$this->assertSame('8330', $order->get_shipping_postcode());
+		$this->assertSame('2026-11-10', $order->get_meta('_billing_okoskabet_delivery_date', true));
+
+		$notes = implode("\n", wp_list_pluck(wc_get_order_notes(array('order_id' => $order->get_id())), 'content'));
+		$this->assertStringContainsString('web-123', $notes);
+		$this->assertStringContainsString('okoskabet.dk', $notes);
+
+		$reports = $this->requests_to('POST', '/api/v1/web_sale_orders/web-123/created');
+		$this->assertCount(1, $reports);
+		$this->assertSame(
+			array('order_id' => (string) $order->get_id(), 'order_number' => (string) $order->get_order_number()),
+			json_decode($reports[0]['body'], true)
+		);
+	}
+
+	public function test_the_plugin_never_books_it_itself(): void
+	{
+		$this->sales = array($this->a_sale('web-123'));
+
+		oko_fetch_web_sale_orders();
+
+		$order = oko_web_sale_order('web-123');
+		$this->assertSame(array(), $this->requests_to('POST', '/api/v1/shipments'));
+		$this->assertSame('web-123', oko_booked_reference($order));
+		$this->assertSame('web-123', oko_shipment_reference($order));
+		$this->assertNotEmpty($order->get_meta('billing_okoskabet_done', true));
+	}
+
+	/**
+	 * A run that made the order and never heard back from the report lists the
+	 * sale again. The same order is reported again, not made twice.
+	 */
+	public function test_a_sale_listed_again_is_not_made_twice(): void
+	{
+		$product = $this->a_product_in_stock(10);
+		$this->sales = array($this->a_sale('web-123', array(
+			array('product_external_id' => (string) $product->get_id(), 'title' => 'Rugbrød', 'quantity' => 2, 'unit_price' => '45.00'),
+		)));
+
+		$this->report_answer = 500;
+		oko_fetch_web_sale_orders();
+		$this->report_answer = 200;
+		oko_fetch_web_sale_orders();
+
+		$this->assertCount(1, oko_order_ids_with_meta(OKO_WEB_SALE_REFERENCE_META, 'web-123'));
+		$this->assertSame(8, wc_get_product($product->get_id())->get_stock_quantity());
+
+		$reports = $this->requests_to('POST', '/api/v1/web_sale_orders/web-123/created');
+		$this->assertCount(2, $reports);
+		$this->assertSame($reports[0]['body'], $reports[1]['body']);
+	}
+
+	/** Cancelled in the shop, cancelled at Økoskabet, under the sale's reference. */
+	public function test_cancelling_it_deletes_the_shipment_under_its_reference(): void
+	{
+		$this->sales = array($this->a_sale('web-123'));
+		oko_fetch_web_sale_orders();
+
+		oko_web_sale_order('web-123')->update_status('cancelled');
+
+		$deletes = $this->requests_to('DELETE', '/api/v1/shipments/');
+		$this->assertCount(1, $deletes);
+		$this->assertStringEndsWith('/api/v1/shipments/web-123', $deletes[0]['url']);
+	}
+
+	/**
+	 * Økoskabet has the sale as some other order. This one is then likely a
+	 * second order for the same goods: on hold for the shop, said once.
+	 */
+	public function test_a_sale_reported_as_another_order_is_held_for_the_shop(): void
+	{
+		$this->sales = array($this->a_sale('web-123'));
+		$this->report_answer = 409;
+
+		oko_fetch_web_sale_orders();
+		oko_fetch_web_sale_orders();
+
+		$this->assertCount(1, oko_order_ids_with_meta(OKO_WEB_SALE_REFERENCE_META, 'web-123'));
+		$order = oko_web_sale_order('web-123');
+		$this->assertSame('on-hold', $order->get_status());
+		$this->assertNotSame('', $order->get_meta(OKO_WEB_SALE_CONFLICT_META, true));
+
+		// Held, not cancelled: a cancellation would release the customer's money.
+		$this->assertSame(array(), $this->requests_to('DELETE', '/api/v1/shipments/'));
+
+		$held = array_filter(
+			wp_list_pluck(wc_get_order_notes(array('order_id' => $order->get_id())), 'content'),
+			static fn(string $note): bool => strpos($note, 'another order') !== false || strpos($note, 'anden ordre') !== false
+		);
+		$this->assertCount(1, $held);
+	}
+
+	/** One sale that cannot be taken in leaves the rest to be. */
+	public function test_one_bad_sale_does_not_stop_the_others(): void
+	{
+		$bad = $this->a_sale('web-1');
+		$bad['lines'] = array();
+		$this->sales = array($bad, $this->a_sale('not-a-web-sale'), $this->a_sale('web-2'));
+
+		oko_fetch_web_sale_orders();
+
+		$this->assertNull(oko_web_sale_order('web-1'));
+		$this->assertInstanceOf(\WC_Order::class, oko_web_sale_order('web-2'));
+		$this->assertCount(1, $this->requests_to('POST', '/created'));
+	}
+
+	/** The customer has their receipt from Økoskabet; the shop still hears of the order. */
+	public function test_the_shop_is_mailed_and_the_customer_is_not(): void
+	{
+		$this->sales = array($this->a_sale('web-123'));
+
+		oko_fetch_web_sale_orders();
+
+		$this->assertNotContains('kunde@example.org', $this->mailed);
+		$this->assertContains(strtolower((string) get_option('admin_email')), $this->mailed);
+	}
+
+	/** @param array<int,array<string,mixed>>|null $lines */
+	private function a_sale(string $reference, ?array $lines = null): array
+	{
+		return array(
+			'reference'     => $reference,
+			'placed_at'     => '2026-11-04T10:12:00Z',
+			'delivery_date' => '2026-11-10',
+			'shipment_type' => 'home_delivery',
+			'shed_id'       => null,
+			'customer'      => array(
+				'name'    => 'Karen Blixen Hansen',
+				'email'   => 'kunde@example.org',
+				'phone'   => '12345678',
+				'address' => array('street' => 'Eksempelvej 12', 'postal_code' => '8330', 'city' => 'Beder', 'country' => 'DK'),
+			),
+			'lines'          => $lines ?? array(array('product_external_id' => null, 'title' => 'Rugbrød', 'quantity' => 2, 'unit_price' => '125.00')),
+			'shipping_price' => '49.00',
+			'total'          => '299.00',
+			'currency'       => 'DKK',
+			'mark'           => 'Kommissionssalg Web',
+		);
+	}
+
+	private function a_product_in_stock(int $stock): \WC_Product
+	{
+		$product = new \WC_Product_Simple();
+		$product->set_name('Rugbrød');
+		$product->set_regular_price('45');
+		$product->set_manage_stock(true);
+		$product->set_stock_quantity($stock);
+		$product->save();
+
+		return $product;
+	}
+
+	/** @return array<int,array{method:string,url:string,body:string}> */
+	private function requests_to(string $method, string $path): array
+	{
+		return array_values(array_filter(
+			$this->requests,
+			static fn(array $request): bool => $request['method'] === $method && strpos($request['url'], $path) !== false
+		));
+	}
+
+	/** @param mixed $body */
+	private function answer(int $code, $body): array
+	{
+		return array(
+			'headers'  => array(),
+			'body'     => $body === null ? '' : (string) wp_json_encode($body),
+			'response' => array('code' => $code, 'message' => ''),
+			'cookies'  => array(),
+			'filename' => null,
+		);
+	}
+}

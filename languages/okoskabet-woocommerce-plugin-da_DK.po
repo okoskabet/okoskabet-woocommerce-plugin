@@ -1882,3 +1882,33 @@ msgstr "Økoskab"
 #: functions/functions.php
 msgid "Location source"
 msgstr "Leveringssted valgt via"
+
+# ----------------------------------------------------------------------
+# functions/web-sale-orders.php — kommissionssalg fra okoskabet.dk
+
+#. translators: %s: the sale's mark, "Kommissionssalg Web".
+#, php-format
+msgid "Foodshipper – %s"
+msgstr "Foodshipper – %s"
+
+msgid "Økoskabet – home delivery"
+msgstr "Økoskabet – hjemmelevering"
+
+msgid "Økoskabet – collection from a shed"
+msgstr "Økoskabet – afhentning i skab"
+
+msgid "Shed"
+msgstr "Økoskab"
+
+msgid "Product"
+msgstr "Vare"
+
+#. translators: 1: the reference, e.g. web-123, 2: delivery date, 3: shed or "Home delivery".
+#, php-format
+msgid "Commission sale from okoskabet.dk (%1$s). Paid to Foodshipper, and the customer has their receipt from Økoskabet. Delivery %2$s, %3$s. Cancelling the order here cancels it at Økoskabet too."
+msgstr "Kommissionssalg fra okoskabet.dk (%1$s). Betalt til Foodshipper, og kunden har fået kvittering fra Økoskabet. Levering %2$s, %3$s. Annullerer du ordren her, annulleres den også hos Økoskabet."
+
+#. translators: %s: the reference, e.g. web-123.
+#, php-format
+msgid "Økoskabet already has commission sale %s as another order, so this one may be a second order for the same goods. Check before you pack it. Do not cancel it unless the sale itself is to be cancelled: cancelling cancels it at Økoskabet too."
+msgstr "Økoskabet har allerede kommissionssalg %s som en anden ordre, så denne kan være en ordre nummer to på de samme varer. Tjek den, før du pakker. Annuller den kun, hvis selve salget skal annulleres: så annulleres det også hos Økoskabet."
