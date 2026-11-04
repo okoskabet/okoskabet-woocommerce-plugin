@@ -22,9 +22,6 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 	/** What Økoskabet answers a report with. */
 	private int $report_answer = 200;
 
-	/** @var string[] Who WordPress sent mail to. */
-	private array $mailed = array();
-
 	public function setUp(): void
 	{
 		parent::setUp();
@@ -38,19 +35,11 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		delete_option(OKO_WEB_SALE_LOCK_OPTION);
 
 		add_filter('pre_http_request', array($this, 'okoskabet'), 1, 3);
-		add_filter('pre_wp_mail', function ($short_circuit, $atts) {
-			foreach ((array) $atts['to'] as $to) {
-				$this->mailed[] = strtolower((string) $to);
-			}
-
-			return true;
-		}, 10, 2);
 	}
 
 	public function tearDown(): void
 	{
 		remove_all_filters('pre_http_request');
-		remove_all_filters('pre_wp_mail');
 		delete_option(Merchants::OPTION_KEY);
 		delete_option(OKO_WEB_SALE_LOCK_OPTION);
 		Merchants::purge_config_cache();
@@ -273,10 +262,13 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		oko_fetch_web_sale_orders();
 		$order = oko_web_sale_order('web-123');
 
-		$this->assertNotContains('kunde@example.org', $this->mailed);
-
-		// Asked of the mails themselves: whether WooCommerce sends at all in
-		// this suite is its business, which of them may go for this order ours.
+		// Asked of the mails themselves rather than of what was sent. WooCommerce
+		// builds its mailer once a request and says so with `woocommerce_email`,
+		// which is where the plugin hooks in. In this suite the mailer outlives
+		// the test that built it, while every hook added during a test is taken
+		// off after it — WooCommerce's own triggers as well as ours — so here no
+		// mail goes at all, and ours are hooked in again as on a fresh request.
+		do_action('woocommerce_email', WC()->mailer());
 		$emails = WC()->mailer()->get_emails();
 		foreach ($emails as $email) {
 			if ($email->is_customer_email()) {
