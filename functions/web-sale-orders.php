@@ -511,23 +511,21 @@ function oko_web_sale_line(\WC_Order $order, array $line): void
 	$taxes     = $product instanceof \WC_Product && ! $product->is_taxable() ? array() : oko_web_sale_taxes($gross, $tax_class);
 	$net       = oko_web_sale_net($gross, $taxes);
 
+	// Built here rather than by `add_product()`, which saves the line at once:
+	// with the order not saved yet, a sale that then failed left lines behind
+	// belonging to no order. Saved with the order, they are saved or not with it.
+	$item = new \WC_Order_Item_Product();
 	if ($product instanceof \WC_Product) {
-		$item_id = $order->add_product($product, $quantity, array('subtotal' => $net, 'total' => $net));
-		$item    = $order->get_item($item_id);
-		if (! $item instanceof \WC_Order_Item_Product) {
-			throw new \RuntimeException('A product line could not be added');
-		}
+		$item->set_product($product);
 	} else {
-		$item = new \WC_Order_Item_Product();
 		$item->set_name((string) ($line['title'] ?? '') !== '' ? (string) $line['title'] : __('Product', O_TEXTDOMAIN));
-		$item->set_quantity($quantity);
 		$item->set_tax_class('');
-		$item->set_subtotal($net);
-		$item->set_total($net);
-		$order->add_item($item);
 	}
-
+	$item->set_quantity($quantity);
+	$item->set_subtotal($net);
+	$item->set_total($net);
 	$item->set_taxes(array('subtotal' => $taxes, 'total' => $taxes));
+	$order->add_item($item);
 }
 
 /**

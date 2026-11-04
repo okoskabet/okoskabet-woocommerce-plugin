@@ -161,11 +161,14 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 
 		oko_fetch_web_sale_orders();
 
-		$lines = array_values(oko_web_sale_order('web-123')->get_items());
+		$lines = array();
+		foreach (oko_web_sale_order('web-123')->get_items() as $line) {
+			$lines[$line->get_name()] = $line;
+		}
 		$this->assertCount(2, $lines);
-		$this->assertSame(0, $lines[0]->get_product_id());
-		$this->assertSame('Æbler, 1 kg', $lines[0]->get_name());
-		$this->assertSame($variation->get_id(), $lines[1]->get_variation_id());
+		$this->assertSame(0, $lines['Æbler, 1 kg']->get_product_id());
+		$linked = array_values(array_diff_key($lines, array('Æbler, 1 kg' => true)));
+		$this->assertSame($variation->get_id(), $linked[0]->get_variation_id());
 
 		$this->assertSame(9, wc_get_product($variation->get_id())->get_stock_quantity());
 		$this->assertSame(10, wc_get_product($other->get_id())->get_stock_quantity());
@@ -268,9 +271,26 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		$this->sales = array($this->a_sale('web-123'));
 
 		oko_fetch_web_sale_orders();
+		$order = oko_web_sale_order('web-123');
 
 		$this->assertNotContains('kunde@example.org', $this->mailed);
-		$this->assertContains(strtolower((string) get_option('admin_email')), $this->mailed);
+
+		// Asked of the mails themselves: whether WooCommerce sends at all in
+		// this suite is its business, which of them may go for this order ours.
+		$emails = WC()->mailer()->get_emails();
+		foreach ($emails as $email) {
+			if ($email->is_customer_email()) {
+				$email->object = $order;
+				$this->assertFalse($email->is_enabled(), $email->id . ' would mail the customer.');
+			}
+		}
+		$emails['WC_Email_New_Order']->object = $order;
+		$this->assertTrue($emails['WC_Email_New_Order']->is_enabled(), 'The shop hears of the order.');
+
+		// And only for these: a customer of the shop's own is mailed as ever.
+		$own = wc_create_order();
+		$emails['WC_Email_Customer_Processing_Order']->object = $own;
+		$this->assertTrue($emails['WC_Email_Customer_Processing_Order']->is_enabled());
 	}
 
 	/** @param array<int,array<string,mixed>>|null $lines */
