@@ -301,27 +301,34 @@ function oko_create_web_sale_order(array $merchant, array $sale): \WC_Order
 	}
 
 	$home = ($sale['shipment_type'] ?? '') === 'home_delivery';
+
+	// The customer's freight stays with Foodshipper, which delivers (Marc,
+	// 4 November 2026). The line says who delivers, at nothing, and the order
+	// comes to what the shop sold. `shipping_price` in the answer is for
+	// information only.
 	$shipping = new \WC_Order_Item_Shipping();
 	$shipping->set_method_id(OKO_WEB_SALE_PAYMENT_METHOD);
-	$shipping->set_method_title($home ? __('Økoskabet – home delivery', O_TEXTDOMAIN) : __('Økoskabet – collection from a shed', O_TEXTDOMAIN));
-	$shipping_gross = oko_web_sale_amount($sale['shipping_price'] ?? '0');
-	$shipping_taxes = oko_web_sale_taxes($shipping_gross, '');
-	$shipping->set_total(oko_web_sale_net($shipping_gross, $shipping_taxes));
-	$shipping->set_taxes(array('total' => $shipping_taxes));
+	$shipping->set_method_title(__('Delivered by Foodshipper', O_TEXTDOMAIN));
+	$shipping->set_total(0);
 	$order->add_item($shipping);
 
 	$order->update_taxes();
 	$order->calculate_totals(false);
 
-	// What the customer paid is Økoskabet's number. Ours, reckoned back from
-	// prices with VAT in them line by line, can be an øre off.
-	if (isset($sale['total']) && (string) $sale['total'] !== '') {
-		$paid = oko_web_sale_amount($sale['total']);
-		if (abs($paid - (float) $order->get_total()) > 0.05) {
-			error_log('okoskabet_woocommerce_plugin: Commission sale ' . $reference . ': lines come to ' . $order->get_total() . ', paid ' . $paid);
-		}
-		$order->set_total($paid);
+	// The goods as Økoskabet priced them. Ours, reckoned back from prices
+	// with VAT in them line by line, can be an øre off.
+	$goods = 0.0;
+	foreach ($lines as $line) {
+		$goods += oko_web_sale_amount(is_array($line) ? ($line['unit_price'] ?? '0') : '0') * max(1, (int) (is_array($line) ? ($line['quantity'] ?? 1) : 1));
 	}
+	$goods = round($goods, 2);
+	if (isset($sale['total']) && (string) $sale['total'] !== '') {
+		$paid = oko_web_sale_amount($sale['total']) - oko_web_sale_amount($sale['shipping_price'] ?? '0');
+		if (abs($paid - $goods) > 0.05) {
+			error_log('okoskabet_woocommerce_plugin: Commission sale ' . $reference . ': lines come to ' . $goods . ', total less shipping is ' . $paid);
+		}
+	}
+	$order->set_total($goods);
 
 	$delivery_date = (string) ($sale['delivery_date'] ?? '');
 	$shed_id       = $home ? '' : (string) ($sale['shed_id'] ?? '');
@@ -340,7 +347,7 @@ function oko_create_web_sale_order(array $merchant, array $sale): \WC_Order
 
 	$order->add_order_note(sprintf(
 		/* translators: 1: the reference, e.g. web-123, 2: delivery date, 3: shed or "Home delivery". */
-		__('Commission sale from okoskabet.dk (%1$s). Paid to Foodshipper, and the customer has their receipt from Økoskabet. Delivery %2$s, %3$s. Cancelling the order here cancels it at Økoskabet too.', O_TEXTDOMAIN),
+		__('Commission sale from okoskabet.dk (%1$s). Paid to Foodshipper, and the customer has their receipt from Økoskabet. Shipping is paid to Foodshipper. Delivery %2$s, %3$s. Cancelling the order here cancels it at Økoskabet too.', O_TEXTDOMAIN),
 		$reference,
 		$delivery_date !== '' ? $delivery_date : __('without delivery date', O_TEXTDOMAIN),
 		(string) $order->get_meta(OKO_DELIVERY_SUMMARY_META, true)

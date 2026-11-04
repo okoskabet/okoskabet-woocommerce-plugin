@@ -1891,11 +1891,8 @@ msgstr "Leveringssted valgt via"
 msgid "Foodshipper – %s"
 msgstr "Foodshipper – %s"
 
-msgid "Økoskabet – home delivery"
-msgstr "Økoskabet – hjemmelevering"
-
-msgid "Økoskabet – collection from a shed"
-msgstr "Økoskabet – afhentning i skab"
+msgid "Delivered by Foodshipper"
+msgstr "Leveres af Foodshipper"
 
 msgid "Shed"
 msgstr "Økoskab"
@@ -1905,8 +1902,8 @@ msgstr "Vare"
 
 #. translators: 1: the reference, e.g. web-123, 2: delivery date, 3: shed or "Home delivery".
 #, php-format
-msgid "Commission sale from okoskabet.dk (%1$s). Paid to Foodshipper, and the customer has their receipt from Økoskabet. Delivery %2$s, %3$s. Cancelling the order here cancels it at Økoskabet too."
-msgstr "Kommissionssalg fra okoskabet.dk (%1$s). Betalt til Foodshipper, og kunden har fået kvittering fra Økoskabet. Levering %2$s, %3$s. Annullerer du ordren her, annulleres den også hos Økoskabet."
+msgid "Commission sale from okoskabet.dk (%1$s). Paid to Foodshipper, and the customer has their receipt from Økoskabet. Shipping is paid to Foodshipper. Delivery %2$s, %3$s. Cancelling the order here cancels it at Økoskabet too."
+msgstr "Kommissionssalg fra okoskabet.dk (%1$s). Betalt til Foodshipper, og kunden har fået kvittering fra Økoskabet. Fragten er betalt til Foodshipper. Levering %2$s, %3$s. Annullerer du ordren her, annulleres den også hos Økoskabet."
 
 #. translators: %s: the reference, e.g. web-123.
 #, php-format

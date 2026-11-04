@@ -92,7 +92,8 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		$this->assertTrue($order->is_paid());
 		$this->assertNotNull($order->get_date_paid());
 		$this->assertSame('Foodshipper – Kommissionssalg Web', $order->get_payment_method_title());
-		$this->assertSame('299.00', number_format((float) $order->get_total(), 2, '.', ''));
+		// The goods alone: the freight stays with Foodshipper.
+		$this->assertSame('250.00', number_format((float) $order->get_total(), 2, '.', ''));
 
 		$lines = array_values($order->get_items());
 		$this->assertCount(2, $lines);
@@ -104,7 +105,8 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 
 		$shipping = array_values($order->get_items('shipping'));
 		$this->assertCount(1, $shipping);
-		$this->assertEqualsWithDelta(49.0, (float) $shipping[0]->get_total() + (float) $shipping[0]->get_total_tax(), 0.01);
+		$this->assertContains($shipping[0]->get_method_title(), array('Delivered by Foodshipper', 'Leveres af Foodshipper'));
+		$this->assertEqualsWithDelta(0.0, (float) $shipping[0]->get_total() + (float) $shipping[0]->get_total_tax(), 0.001);
 
 		// Off the stock for the shop's own product, and only that.
 		$this->assertSame(8, wc_get_product($product->get_id())->get_stock_quantity());
@@ -119,6 +121,7 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		$notes = implode("\n", wp_list_pluck(wc_get_order_notes(array('order_id' => $order->get_id())), 'content'));
 		$this->assertStringContainsString('web-123', $notes);
 		$this->assertStringContainsString('okoskabet.dk', $notes);
+		$this->assertMatchesRegularExpression('/Shipping is paid to Foodshipper|Fragten er betalt til Foodshipper/', $notes);
 
 		$reports = $this->requests_to('POST', '/api/v1/web_sale_orders/web-123/created');
 		$this->assertCount(1, $reports);
