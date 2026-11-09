@@ -131,7 +131,11 @@ msgid "Staging API"
 msgstr ""
 
 #: backend/views/settings.php:105
-msgid "Check this to use staging API"
+msgid "Only for testing. Turn this on only if Økoskabet has given you an API key for staging (staging.okoskabet.dk). Production refuses a staging key and staging refuses a production key — and then every Økoskabet delivery method disappears from the checkout."
+msgstr ""
+
+#: backend/views/settings.php
+msgid "Staging is on: orders go to Økoskabet's test system and are never delivered. Turn it off before the shop goes live."
 msgstr ""
 
 #: backend/views/settings.php:113
