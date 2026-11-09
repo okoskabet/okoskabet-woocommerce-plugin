@@ -54,20 +54,26 @@ add_action('woocommerce_email', 'oko_web_sale_keeps_customer_emails_back');
 /**
  * Keep the fetch scheduled while there is an account to fetch for.
  *
- * Asked on every load, which is what Action Scheduler asks of a recurring
- * action: a shop that clears its scheduled actions, or restores a database
- * without them, would otherwise stop taking orders in without a word.
+ * Asked on every load in the admin and under cron, which is what Action
+ * Scheduler asks of a recurring action: a shop that clears its scheduled
+ * actions, or restores a database without them, would otherwise stop taking
+ * orders in without a word. Not on the shop's own pages, where it would be a
+ * query on every visit; the queue itself runs under cron or admin-ajax.
  */
 function oko_schedule_web_sale_orders(): void
 {
-	if (! function_exists('as_has_scheduled_action') || ! function_exists('as_schedule_recurring_action')) {
+	if (! is_admin() && ! wp_doing_cron()) {
+		return;
+	}
+
+	if (! function_exists('as_has_scheduled_action') || ! function_exists('as_unschedule_all_actions')) {
 		return;
 	}
 
 	$scheduled = as_has_scheduled_action(OKO_WEB_SALE_HOOK, array(), OKO_WEB_SALE_GROUP);
 
 	if (oko_web_sale_merchants() === array()) {
-		if ($scheduled && function_exists('as_unschedule_all_actions')) {
+		if ($scheduled) {
 			as_unschedule_all_actions(OKO_WEB_SALE_HOOK, array(), OKO_WEB_SALE_GROUP);
 		}
 		return;
@@ -95,22 +101,15 @@ function oko_web_sale_merchants(): array
 		? \okoskabet_woocommerce_plugin\Integrations\Merchants::get_all()
 		: array(o_get_merchant());
 
-	$seen = array();
 	$with_key = array();
 	foreach ($merchants as $merchant) {
 		$key = (string) ($merchant['api_key'] ?? '');
-		if ($key === '') {
-			continue;
+		if ($key !== '') {
+			$with_key[o_merchant_api_url($merchant) . ' ' . $key] ??= $merchant;
 		}
-		$account = o_merchant_api_url($merchant) . ' ' . $key;
-		if (isset($seen[$account])) {
-			continue;
-		}
-		$seen[$account] = true;
-		$with_key[]     = $merchant;
 	}
 
-	return $with_key;
+	return array_values($with_key);
 }
 
 /**
@@ -121,7 +120,8 @@ function oko_web_sale_merchants(): array
  */
 function oko_fetch_web_sale_orders(): void
 {
-	if (! oko_web_sale_take_lock()) {
+	$hold = time() . ':' . wp_generate_uuid4();
+	if (! oko_take_hold(OKO_WEB_SALE_LOCK_OPTION, $hold, OKO_WEB_SALE_LOCK_SECONDS)) {
 		return;
 	}
 
@@ -134,48 +134,25 @@ function oko_fetch_web_sale_orders(): void
 			}
 		}
 	} finally {
-		delete_option(OKO_WEB_SALE_LOCK_OPTION);
+		// This run's hold only: one that overran and was taken over leaves the
+		// new holder's alone.
+		oko_let_go_of_hold(OKO_WEB_SALE_LOCK_OPTION, $hold);
 	}
-}
-
-/**
- * Hold the fetch for this run.
- *
- * `add_option()` writes only when the row is not there, so of two runs that
- * start together one gets it. A hold older than a run could last is from a run
- * that died, and is taken over.
- */
-function oko_web_sale_take_lock(): bool
-{
-	if (add_option(OKO_WEB_SALE_LOCK_OPTION, (string) time(), '', 'no')) {
-		return true;
-	}
-
-	wp_cache_delete(OKO_WEB_SALE_LOCK_OPTION, 'options');
-	$since = (int) get_option(OKO_WEB_SALE_LOCK_OPTION, 0);
-	if ($since > time() - OKO_WEB_SALE_LOCK_SECONDS) {
-		return false;
-	}
-
-	delete_option(OKO_WEB_SALE_LOCK_OPTION);
-
-	return add_option(OKO_WEB_SALE_LOCK_OPTION, (string) time(), '', 'no');
 }
 
 /**
  * Fetch one account's commission sales, and take each one in.
  *
  * @param array<string,mixed> $merchant
- * @return string[] The references taken in and reported.
  */
-function oko_fetch_web_sale_orders_for(array $merchant): array
+function oko_fetch_web_sale_orders_for(array $merchant): void
 {
 	$merchant_id = (string) ($merchant['id'] ?? '?');
 	$response    = oko_api_request($merchant, 'GET', '/api/v1/web_sale_orders');
 
 	if (is_wp_error($response)) {
 		error_log('okoskabet_woocommerce_plugin: Could not fetch commission sales for merchant=' . $merchant_id . ': ' . $response->get_error_message());
-		return array();
+		return;
 	}
 
 	$code = (int) wp_remote_retrieve_response_code($response);
@@ -185,26 +162,22 @@ function oko_fetch_web_sale_orders_for(array $merchant): array
 		if ($code !== 404) {
 			error_log('okoskabet_woocommerce_plugin: Fetching commission sales for merchant=' . $merchant_id . ' answered ' . $code);
 		}
-		return array();
+		return;
 	}
 
 	$body   = json_decode((string) wp_remote_retrieve_body($response), true);
 	$orders = is_array($body) && is_array($body['orders'] ?? null) ? $body['orders'] : array();
 
-	$done = array();
 	foreach ($orders as $sale) {
-		$reference = is_array($sale) ? (string) ($sale['reference'] ?? '') : '';
+		$sale      = is_array($sale) ? $sale : array();
+		$reference = (string) ($sale['reference'] ?? '');
 		try {
-			if (oko_take_in_web_sale($merchant, is_array($sale) ? $sale : array())) {
-				$done[] = $reference;
-			}
+			oko_take_in_web_sale($merchant, $sale);
 		} catch (\Throwable $e) {
 			// The reference only: the rest of the sale is a customer.
 			error_log('okoskabet_woocommerce_plugin: Commission sale ' . ($reference !== '' ? $reference : '(no reference)') . ' for merchant=' . $merchant_id . ' was not taken in: ' . $e->getMessage());
 		}
 	}
-
-	return $done;
 }
 
 /**
@@ -216,9 +189,8 @@ function oko_fetch_web_sale_orders_for(array $merchant): array
  *
  * @param array<string,mixed> $merchant
  * @param array<string,mixed> $sale     One entry of the `orders` list.
- * @return bool Whether Økoskabet took the report.
  */
-function oko_take_in_web_sale(array $merchant, array $sale): bool
+function oko_take_in_web_sale(array $merchant, array $sale): void
 {
 	$reference = (string) ($sale['reference'] ?? '');
 
@@ -231,7 +203,7 @@ function oko_take_in_web_sale(array $merchant, array $sale): bool
 	$order = oko_web_sale_order($reference) ?? oko_create_web_sale_order($merchant, $sale);
 	oko_finish_web_sale_order($order, $reference);
 
-	return oko_report_web_sale_order($merchant, $order, $reference);
+	oko_report_web_sale_order($merchant, $order, $reference);
 }
 
 /**
@@ -296,9 +268,13 @@ function oko_create_web_sale_order(array $merchant, array $sale): \WC_Order
 
 	oko_web_sale_customer($order, is_array($sale['customer'] ?? null) ? $sale['customer'] : array());
 
+	// The goods as Økoskabet priced them. Ours, reckoned back from prices
+	// with VAT in them line by line, can be an øre off.
+	$goods = 0.0;
 	foreach ($lines as $line) {
-		oko_web_sale_line($order, is_array($line) ? $line : array());
+		$goods += oko_web_sale_line($order, is_array($line) ? $line : array());
 	}
+	$goods = round($goods, 2);
 
 	$home = ($sale['shipment_type'] ?? '') === 'home_delivery';
 
@@ -316,13 +292,6 @@ function oko_create_web_sale_order(array $merchant, array $sale): \WC_Order
 	$order->update_taxes();
 	$order->calculate_totals(false);
 
-	// The goods as Økoskabet priced them. Ours, reckoned back from prices
-	// with VAT in them line by line, can be an øre off.
-	$goods = 0.0;
-	foreach ($lines as $line) {
-		$goods += oko_web_sale_amount(is_array($line) ? ($line['unit_price'] ?? '0') : '0') * max(1, (int) (is_array($line) ? ($line['quantity'] ?? 1) : 1));
-	}
-	$goods = round($goods, 2);
 	if (isset($sale['total']) && (string) $sale['total'] !== '') {
 		$paid = oko_web_sale_amount($sale['total']) - oko_web_sale_amount($sale['shipping_price'] ?? '0');
 		if (abs($paid - $goods) > 0.05) {
@@ -383,7 +352,9 @@ function oko_finish_web_sale_order(\WC_Order $order, string $reference): void
 	wc_reduce_stock_levels($order->get_id());
 
 	$order = wc_get_order($order->get_id());
-	$order->update_status('processing');
+	if ($order instanceof \WC_Order) {
+		$order->update_status('processing');
+	}
 }
 
 /**
@@ -391,7 +362,7 @@ function oko_finish_web_sale_order(\WC_Order $order, string $reference): void
  *
  * @param array<string,mixed> $merchant
  */
-function oko_report_web_sale_order(array $merchant, \WC_Order $order, string $reference): bool
+function oko_report_web_sale_order(array $merchant, \WC_Order $order, string $reference): void
 {
 	$response = oko_api_request(
 		$merchant,
@@ -405,35 +376,41 @@ function oko_report_web_sale_order(array $merchant, \WC_Order $order, string $re
 
 	if (is_wp_error($response)) {
 		error_log('okoskabet_woocommerce_plugin: Could not report commission sale ' . $reference . ': ' . $response->get_error_message());
-		return false;
+		return;
 	}
 
 	$code = (int) wp_remote_retrieve_response_code($response);
 	if ($code === 200) {
-		return true;
+		return;
 	}
 
 	if ($code === 409) {
 		// Økoskabet has this sale as some other order: a copy of the shop on
 		// the same key (a staging site), or an order made and then deleted for
 		// good. This one is then a second order for the same goods, with the
-		// stock taken twice. On hold for the shop to look at, and said once.
-		error_log('okoskabet_woocommerce_plugin: Commission sale ' . $reference . ' is reported to Økoskabet as another order (409); order ' . $order->get_id() . ' put on hold.');
+		// stock taken twice. On hold for the shop to look at, and said once:
+		// it is listed again every run until it is sorted out at Økoskabet.
 		if ($order->get_meta(OKO_WEB_SALE_CONFLICT_META, true) === '') {
+			error_log('okoskabet_woocommerce_plugin: Commission sale ' . $reference . ' is reported to Økoskabet as another order (409); order ' . $order->get_id() . ' put on hold.');
 			$order->update_meta_data(OKO_WEB_SALE_CONFLICT_META, (string) time());
 			$order->save();
-			$order->update_status('on-hold', sprintf(
+			$note = sprintf(
 				/* translators: %s: the reference, e.g. web-123. */
 				__('Økoskabet already has commission sale %s as another order, so this one may be a second order for the same goods. Check before you pack it. Do not cancel it unless the sale itself is to be cancelled: cancelling cancels it at Økoskabet too.', O_TEXTDOMAIN),
 				$reference
-			));
+			);
+			// A status that does not change writes no note, so one already on
+			// hold is told with a note of its own.
+			if ($order->has_status('on-hold')) {
+				$order->add_order_note($note);
+			} else {
+				$order->update_status('on-hold', $note);
+			}
 		}
-		return false;
+		return;
 	}
 
 	error_log('okoskabet_woocommerce_plugin: Reporting commission sale ' . $reference . ' answered ' . $code);
-
-	return false;
 }
 
 /**
@@ -494,11 +471,22 @@ function oko_web_sale_customer(\WC_Order $order, array $customer): void
  * is nothing here to take it off.
  *
  * @param array<string,mixed> $line
+ * @return float What the line comes to, with VAT.
  */
-function oko_web_sale_line(\WC_Order $order, array $line): void
+function oko_web_sale_line(\WC_Order $order, array $line): float
 {
-	$quantity = max(1, (int) ($line['quantity'] ?? 1));
-	$gross    = oko_web_sale_amount($line['unit_price'] ?? '0') * $quantity;
+	// Whole units, as the shop's stock counts them. Anything else is not a
+	// line this order can carry, and the sale is left for the shop to see in
+	// the log rather than made with another quantity than was sold.
+	$quantity = $line['quantity'] ?? null;
+	if (! is_int($quantity) && ! (is_string($quantity) && ctype_digit($quantity))) {
+		throw new \UnexpectedValueException('Quantity is not a whole number');
+	}
+	$quantity = (int) $quantity;
+	if ($quantity < 1) {
+		throw new \UnexpectedValueException('Quantity below 1');
+	}
+	$gross = oko_web_sale_amount($line['unit_price'] ?? '0') * $quantity;
 
 	$product_id = (string) ($line['product_external_id'] ?? '');
 	$product    = preg_match('/^\d+$/', $product_id) ? wc_get_product((int) $product_id) : null;
@@ -513,15 +501,15 @@ function oko_web_sale_line(\WC_Order $order, array $line): void
 		$product = null;
 	}
 
-	$tax_class = $product instanceof \WC_Product && $product->is_taxable() ? (string) $product->get_tax_class() : '';
-	$taxes     = $product instanceof \WC_Product && ! $product->is_taxable() ? array() : oko_web_sale_taxes($gross, $tax_class);
-	$net       = oko_web_sale_net($gross, $taxes);
+	$linked = $product instanceof \WC_Product;
+	$taxes  = $linked && ! $product->is_taxable() ? array() : oko_web_sale_taxes($gross, $linked ? (string) $product->get_tax_class() : '');
+	$net    = $gross - array_sum($taxes);
 
 	// Built here rather than by `add_product()`, which saves the line at once:
 	// with the order not saved yet, a sale that then failed left lines behind
 	// belonging to no order. Saved with the order, they are saved or not with it.
 	$item = new \WC_Order_Item_Product();
-	if ($product instanceof \WC_Product) {
+	if ($linked) {
 		$item->set_product($product);
 	} else {
 		$item->set_name((string) ($line['title'] ?? '') !== '' ? (string) $line['title'] : __('Product', O_TEXTDOMAIN));
@@ -532,6 +520,8 @@ function oko_web_sale_line(\WC_Order $order, array $line): void
 	$item->set_total($net);
 	$item->set_taxes(array('subtotal' => $taxes, 'total' => $taxes));
 	$order->add_item($item);
+
+	return $gross;
 }
 
 /**
@@ -558,12 +548,6 @@ function oko_web_sale_taxes(float $gross, string $tax_class): array
 	}
 
 	return \WC_Tax::calc_tax($gross, \WC_Tax::get_base_tax_rates($tax_class), true);
-}
-
-/** @param array<int|string,float> $taxes */
-function oko_web_sale_net(float $gross, array $taxes): float
-{
-	return $gross - array_sum($taxes);
 }
 
 /**

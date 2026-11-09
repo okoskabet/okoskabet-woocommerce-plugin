@@ -1,7 +1,5 @@
 <?php
 
-use okoskabet_woocommerce_plugin\Integrations\Merchants;
-
 /**
  * Commission sales from okoskabet.dk come into the shop as its own orders.
  *
@@ -13,6 +11,8 @@ use okoskabet_woocommerce_plugin\Integrations\Merchants;
  */
 class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 {
+	use ConfiguresMerchant;
+
 	/** @var array<int,array{method:string,url:string,body:string}> */
 	private array $requests = array();
 
@@ -25,12 +25,7 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 	public function setUp(): void
 	{
 		parent::setUp();
-		delete_option(Merchants::OPTION_KEY);
-		Merchants::purge_config_cache();
-		Merchants::save_config(array(
-			'default_merchant_id' => 'default',
-			'merchants' => array('default' => array('id' => 'default', 'label' => 'D', 'api_key' => 'test-key', 'staging' => true)),
-		));
+		$this->a_merchant_with_an_account();
 		update_option('woocommerce_manage_stock', 'yes');
 		delete_option(OKO_WEB_SALE_LOCK_OPTION);
 
@@ -39,10 +34,8 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 
 	public function tearDown(): void
 	{
-		remove_all_filters('pre_http_request');
-		delete_option(Merchants::OPTION_KEY);
+		$this->forget_the_merchant();
 		delete_option(OKO_WEB_SALE_LOCK_OPTION);
-		Merchants::purge_config_cache();
 		parent::tearDown();
 	}
 
@@ -188,6 +181,12 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame('web-123', oko_booked_reference($order));
 		$this->assertSame('web-123', oko_shipment_reference($order));
 		$this->assertNotEmpty($order->get_meta('billing_okoskabet_done', true));
+
+		// Nor sends it again when the shop edits it: the shipment is Økoskabet's.
+		$order->set_customer_note('Ring på');
+		$order->save();
+		$order->update_status('completed');
+		$this->assertSame(array(), $this->requests_to('PUT', '/api/v1/shipments'));
 	}
 
 	/**
@@ -266,6 +265,39 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		$this->assertNull(oko_web_sale_order('web-1'));
 		$this->assertInstanceOf(\WC_Order::class, oko_web_sale_order('web-2'));
 		$this->assertCount(1, $this->requests_to('POST', '/created'));
+	}
+
+	/** A quantity that is not whole units is not guessed at: the sale waits. */
+	public function test_a_line_in_part_units_is_not_taken_in(): void
+	{
+		$product = $this->a_product_in_stock(10);
+		$this->sales = array($this->a_sale('web-123', array(
+			array('product_external_id' => (string) $product->get_id(), 'title' => 'Rugbrød', 'quantity' => 0.5, 'unit_price' => '45.00'),
+		)));
+
+		oko_fetch_web_sale_orders();
+
+		$this->assertNull(oko_web_sale_order('web-123'));
+		$this->assertSame(10, wc_get_product($product->get_id())->get_stock_quantity());
+		$this->assertSame(array(), $this->requests_to('POST', '/created'));
+	}
+
+	/** A run holding the fetch keeps a second out; one that died is taken over. */
+	public function test_one_run_at_a_time(): void
+	{
+		$this->sales = array($this->a_sale('web-123'));
+
+		$this->assertTrue(oko_take_hold(OKO_WEB_SALE_LOCK_OPTION, time() . ':other', OKO_WEB_SALE_LOCK_SECONDS));
+		oko_fetch_web_sale_orders();
+		$this->assertNull(oko_web_sale_order('web-123'));
+
+		$stale = (time() - OKO_WEB_SALE_LOCK_SECONDS - 1) . ':dead';
+		$GLOBALS['wpdb']->update($GLOBALS['wpdb']->options, array('option_value' => $stale), array('option_name' => OKO_WEB_SALE_LOCK_OPTION));
+		oko_fetch_web_sale_orders();
+		$this->assertInstanceOf(\WC_Order::class, oko_web_sale_order('web-123'));
+
+		// Let go of after the run: the next one is not kept out.
+		$this->assertTrue(oko_take_hold(OKO_WEB_SALE_LOCK_OPTION, time() . ':next', OKO_WEB_SALE_LOCK_SECONDS));
 	}
 
 	/** The customer has their receipt from Økoskabet; the shop still hears of the order. */

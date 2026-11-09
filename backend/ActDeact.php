@@ -153,7 +153,7 @@ class ActDeact extends Base {
 		// Økoskabet every five minutes for a plugin that is not there to take
 		// the orders in. It is scheduled again on the next load once active.
 		if ( \function_exists( 'as_unschedule_all_actions' ) ) {
-			\as_unschedule_all_actions( 'okoskabet_fetch_web_sale_orders', array(), 'okoskabet' );
+			\as_unschedule_all_actions( \OKO_WEB_SALE_HOOK, array(), \OKO_WEB_SALE_GROUP );
 		}
 		// Clear the permalinks
 		\flush_rewrite_rules();
