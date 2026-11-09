@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Commission sales from okoskabet.dk come into the shop as its own orders.
+ * Commission sales through Økoskabet come into the shop as its own orders.
  *
  * The plugin fetches them with the shop's key, makes each one a paid order —
  * the shop's own product where Økoskabet names one, a line with the title and
@@ -102,7 +102,6 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 
 		$notes = implode("\n", wp_list_pluck(wc_get_order_notes(array('order_id' => $order->get_id())), 'content'));
 		$this->assertStringContainsString('web-123', $notes);
-		$this->assertStringContainsString('okoskabet.dk', $notes);
 		$this->assertMatchesRegularExpression('/Shipping is paid to Foodshipper|Fragten er betalt til Foodshipper/', $notes);
 
 		$reports = $this->requests_to('POST', '/api/v1/web_sale_orders/web-123/created');
@@ -213,6 +212,34 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame($reports[0]['body'], $reports[1]['body']);
 	}
 
+	/**
+	 * A sale in the Track&Trace app comes under `app-<id>` and its own mark,
+	 * and is taken in, reported and cancelled under that reference like one
+	 * on okoskabet.dk.
+	 */
+	public function test_a_sale_in_the_app_is_taken_in_under_its_own_reference(): void
+	{
+		$sale         = $this->a_sale('app-77');
+		$sale['mark'] = 'Kommissionssalg App';
+		$this->sales  = array($sale, $this->a_sale('web-78'));
+
+		oko_fetch_web_sale_orders();
+
+		$order = oko_web_sale_order('app-77');
+		$this->assertInstanceOf(\WC_Order::class, $order);
+		$this->assertSame('processing', $order->get_status());
+		$this->assertSame('Foodshipper – Kommissionssalg App', $order->get_payment_method_title());
+		$this->assertSame('app-77', oko_booked_reference($order));
+		$this->assertSame(array(), $this->requests_to('POST', '/api/v1/shipments'));
+		$this->assertCount(1, $this->requests_to('POST', '/api/v1/web_sale_orders/app-77/created'));
+		$this->assertInstanceOf(\WC_Order::class, oko_web_sale_order('web-78'));
+
+		$order->update_status('cancelled');
+		$deletes = $this->requests_to('DELETE', '/api/v1/shipments/');
+		$this->assertCount(1, $deletes);
+		$this->assertStringEndsWith('/api/v1/shipments/app-77', $deletes[0]['url']);
+	}
+
 	/** Cancelled in the shop, cancelled at Økoskabet, under the sale's reference. */
 	public function test_cancelling_it_deletes_the_shipment_under_its_reference(): void
 	{
@@ -258,7 +285,7 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 	{
 		$bad = $this->a_sale('web-1');
 		$bad['lines'] = array();
-		$this->sales = array($bad, $this->a_sale('not-a-web-sale'), $this->a_sale('web-2'));
+		$this->sales = array($bad, $this->a_sale('web-2/../x'), $this->a_sale('web-2'));
 
 		oko_fetch_web_sale_orders();
 

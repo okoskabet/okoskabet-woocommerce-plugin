@@ -1,10 +1,11 @@
 <?php
 
 /**
- * Commission sales from okoskabet.dk, taken into the shop as its own orders.
+ * Commission sales from Økoskabet, taken into the shop as its own orders.
  *
- * A customer buys a shop's goods on okoskabet.dk and pays Foodshipper. Each
- * shop's part is booked with Økoskabet as a shipment under `web-<id>`, and
+ * A customer buys a shop's goods on okoskabet.dk or in the Track&Trace app
+ * and pays Foodshipper. Each shop's part is booked with Økoskabet as a
+ * shipment under its own reference (`web-<id>`, `app-<id>`), and
  * until now the shop heard of it by mail and had to take the goods off its own
  * stock by hand. Marc, 4 November 2026: the order is to be in the shop's own
  * webshop, where it is packed and where the stock is.
@@ -17,7 +18,7 @@
  *
  * The shipment is Økoskabet's already, so the plugin's own booking never runs
  * on one of these: the order is marked booked under its reference before it is
- * paid. A cancellation goes the usual way and deletes `web-<id>`, which is how
+ * paid. A cancellation goes the usual way and deletes that reference, which is how
  * Økoskabet hears to release the money and put the goods back on the shelf.
  *
  * @package okoskabet_woocommerce_plugin
@@ -194,9 +195,10 @@ function oko_take_in_web_sale(array $merchant, array $sale): void
 {
 	$reference = (string) ($sale['reference'] ?? '');
 
-	// Only `web-`: a cancellation deletes the shipment under this reference,
-	// and anything else could be one of the shop's own deliveries.
-	if (! preg_match('/^web-[A-Za-z0-9_-]+$/', $reference)) {
+	// Økoskabet's own id for the shop's part, whatever it starts with: the
+	// list holds only this shop's commission sales. Checked for shape only,
+	// as it goes into a URL and is the shipment a cancellation deletes.
+	if (! preg_match('/^[A-Za-z0-9_-]+$/', $reference)) {
 		throw new \UnexpectedValueException('Not a commission sale reference');
 	}
 
@@ -222,7 +224,7 @@ function oko_web_sale_order(string $reference): ?\WC_Order
 }
 
 /**
- * Whether the order came from a commission sale on okoskabet.dk.
+ * Whether the order came from a commission sale through Økoskabet.
  *
  * @param mixed $order
  */
@@ -317,7 +319,7 @@ function oko_create_web_sale_order(array $merchant, array $sale): \WC_Order
 
 	$order->add_order_note(sprintf(
 		/* translators: 1: the reference, e.g. web-123, 2: delivery date, 3: shed or "Home delivery". */
-		__('Commission sale from okoskabet.dk (%1$s). Paid to Foodshipper, and the customer has their receipt from Økoskabet. Shipping is paid to Foodshipper. Delivery %2$s, %3$s. Cancelling the order here cancels it at Økoskabet too.', O_TEXTDOMAIN),
+		__('Commission sale through Økoskabet (%1$s). Paid to Foodshipper, and the customer has their receipt from Økoskabet. Shipping is paid to Foodshipper. Delivery %2$s, %3$s. Cancelling the order here cancels it at Økoskabet too.', O_TEXTDOMAIN),
 		$reference,
 		$delivery_date !== '' ? $delivery_date : __('without delivery date', O_TEXTDOMAIN),
 		(string) $order->get_meta(OKO_DELIVERY_SUMMARY_META, true)
