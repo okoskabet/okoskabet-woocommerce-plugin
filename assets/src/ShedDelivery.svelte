@@ -24,6 +24,11 @@
 	let selectedDeliveryDate: string | undefined = initialDeliveryDate;
 	let showOptions = displayMode === 'inline' || initialShowOptions;
 
+	// First of the reactive blocks, so the lookup exists before the one below
+	// waits on it. Placed after it, a shed chosen before a recalculation sent
+	// selectDeliveryDate() to await nothing, and the date went unchecked.
+	$: apiResponse = callApi('shed-delivery', address, postalCode);
+
 	$: {
 		if (selectedShedId) {
 			onSelectShed(selectedShedId);
@@ -37,8 +42,6 @@
 		}
 	}
 
-	$: apiResponse = callApi('shed-delivery', address, postalCode);
-
 	// A shed chosen before the recalculation may not be offered any more — a
 	// new postcode brings a different list. Fall back to the first shed, as the
 	// list always did, so the date is then re-checked against that shed. With
@@ -49,7 +52,7 @@
 	async function keepChosenShedIfStillOffered(response: typeof apiResponse) {
 		let sheds: { id: string }[];
 		try {
-			({ sheds } = await response);
+			sheds = (await response).sheds ?? [];
 		} catch {
 			return;
 		}
@@ -71,7 +74,7 @@
 
 	async function selectDeliveryDate() {
 		if (selectedShedId) {
-			const { sheds } = await apiResponse;
+			const sheds = (await apiResponse).sheds ?? [];
 			const selectedShed = sheds.find(
 				(shed) => shed.id === selectedShedId
 			);
@@ -89,6 +92,9 @@
 			selectedDeliveryDate = undefined;
 		}
 	}
+
+	const couldNotFetch =
+		'Økoskabene kunne ikke hentes lige nu. Prøv igen om lidt, eller vælg en anden leveringsmetode.';
 
 	function handleOpenModal(e: Event) {
 		e.preventDefault();
@@ -111,88 +117,112 @@
 	<div class="skeleton-container">
 		<span class="skeleton-loader"></span>
 	</div>
-{:then { origin, sheds }}
+{:then response}
+	{@const origin = response.origin}
+	{@const sheds = response.sheds ?? []}
 	{@const selectedShed =
 		sheds.find((shed) => shed.id === selectedShedId) || sheds[0]}
-	<div class={displayMode} class:hidden={!showOptions}>
+	<!-- A merchant without sheds yet, or none near this address, gets an
+	     empty list. Reading the first shed's dates then threw, and the picker
+	     stayed a grey box for good. Saying so leaves the customer free to
+	     choose another delivery method. An answer without a list at all is
+	     the shop's error (a key Økoskabet refused, say), not an empty area. -->
+	{#if !Array.isArray(response.sheds)}
 		<div class="description">
 			{description}
 		</div>
-
-		{#if selectedShed.delivery_dates.length === 0}
-			<span>Ingen tilgængelige datoer.</span>
-		{:else}
-			<div class="oko-select-headline" style="font-size: 14px;">
-				Økoskab
+		<p class="oko-no-sheds">{couldNotFetch}</p>
+	{:else if !selectedShed}
+		<div class="description">
+			{description}
+		</div>
+		<p class="oko-no-sheds">Der er ingen Økoskabe i nærheden af adressen.</p>
+	{:else}
+		<div class={displayMode} class:hidden={!showOptions}>
+			<div class="description">
+				{description}
 			</div>
-			<select
-				bind:value={selectedShedId}
-				name="okoLocations"
-				id="locationsDropdown"
-				style="width: 100%; margin-top: 0; margin-bottom: 20px;"
-			>
-				{#each sheds as shed}
-					<option value={shed.id}>
-						{shed.name}
-					</option>
-				{/each}
-			</select>
 
-			<div class="oko-select-headline" style="font-size: 14px;">
-				Leveringsdato
-			</div>
-			<select
-				bind:value={selectedDeliveryDate}
-				name="okoDeliveryDates"
-				style="width: 100%; margin-bottom: 20px;"
-			>
-				{#each selectedShed.delivery_dates as deliveryDate}
-					<option value={deliveryDate}>
-						{formatDate(deliveryDate, locale)}
-					</option>
-				{/each}
-			</select>
-
-			<Map {sheds} {origin} bind:selectedShedId />
-
-			{#if displayMode === 'modal'}
-				<div class="okoButtonModal okoButtonModalDone">
-					<div class="okoButtonModalContent"></div>
-					<a href={'#'} class="button" on:click={handleCloseModal}
-						>Done</a
-					>
+			{#if selectedShed.delivery_dates.length === 0}
+				<span>Ingen tilgængelige datoer.</span>
+			{:else}
+				<div class="oko-select-headline" style="font-size: 14px;">
+					Økoskab
 				</div>
+				<select
+					bind:value={selectedShedId}
+					name="okoLocations"
+					id="locationsDropdown"
+					style="width: 100%; margin-top: 0; margin-bottom: 20px;"
+				>
+					{#each sheds as shed}
+						<option value={shed.id}>
+							{shed.name}
+						</option>
+					{/each}
+				</select>
+
+				<div class="oko-select-headline" style="font-size: 14px;">
+					Leveringsdato
+				</div>
+				<select
+					bind:value={selectedDeliveryDate}
+					name="okoDeliveryDates"
+					style="width: 100%; margin-bottom: 20px;"
+				>
+					{#each selectedShed.delivery_dates as deliveryDate}
+						<option value={deliveryDate}>
+							{formatDate(deliveryDate, locale)}
+						</option>
+					{/each}
+				</select>
+
+				<Map {sheds} {origin} bind:selectedShedId />
+
+				{#if displayMode === 'modal'}
+					<div class="okoButtonModal okoButtonModalDone">
+						<div class="okoButtonModalContent"></div>
+						<a href={'#'} class="button" on:click={handleCloseModal}
+							>Done</a
+						>
+					</div>
+				{/if}
 			{/if}
+		</div>
+
+		{#if displayMode === 'modal'}
+			<div class="description">
+				{description}
+			</div>
+			<div id="oko-shed-content">
+				<div id="oko-shed-content-location">
+					<span class="oko-shed-content-label">Økoskab: </span>
+					<span class="oko-shed-content-value">{selectedShed?.name}</span>
+				</div>
+				<div id="oko-shed-content-date">
+					<span class="oko-shed-content-label">Levering: </span>
+					<span class="oko-shed-content-value">
+						{selectedDeliveryDate &&
+							formatDate(selectedDeliveryDate, locale)}
+					</span>
+				</div>
+			</div>
+
+			<a
+				href={'#'}
+				on:click={handleOpenModal}
+				class="button"
+				style="margin-bottom: 20px;"
+			>
+				Vælg Økoskab
+			</a>
 		{/if}
-	</div>
-
-	{#if displayMode === 'modal'}
-		<div class="description">
-			{description}
-		</div>
-		<div id="oko-shed-content">
-			<div id="oko-shed-content-location">
-				<span class="oko-shed-content-label">Økoskab: </span>
-				<span class="oko-shed-content-value">{selectedShed?.name}</span>
-			</div>
-			<div id="oko-shed-content-date">
-				<span class="oko-shed-content-label">Levering: </span>
-				<span class="oko-shed-content-value">
-					{selectedDeliveryDate &&
-						formatDate(selectedDeliveryDate, locale)}
-				</span>
-			</div>
-		</div>
-
-		<a
-			href={'#'}
-			on:click={handleOpenModal}
-			class="button"
-			style="margin-bottom: 20px;"
-		>
-			Vælg Økoskab
-		</a>
 	{/if}
+{:catch}
+	<div class="description">
+		{description}
+	</div>
+	<p class="oko-no-sheds">{couldNotFetch}</p>
 {/await}
 
 <style>
@@ -229,6 +259,10 @@
 
 	.oko-shed-content-value {
 		font-weight: normal;
+	}
+
+	.oko-no-sheds {
+		margin-bottom: 20px;
 	}
 
 	.description {

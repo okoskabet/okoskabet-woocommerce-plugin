@@ -91,20 +91,26 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 			)
 		);
 	}
-	?>
-	<style>
-		.cmb2-id--staging-api {
-			display: none;
-		}
-	</style>
-	<?php
+
 	if ( ! $oko_multi_merchant_active ) {
+		// Hidden with CSS from 2024 ("Hide staging"), so no shop switched it
+		// on by mistake. It also meant a shop holding a staging key could not
+		// switch it on at all: the key went to production, every call came
+		// back 401 and the checkout lost its delivery methods, with nothing on
+		// this page to say why. Shown now, with what it does spelled out, and
+		// a warning while it is on, so it is not left on by accident either.
+		$oko_settings   = (array) get_option( O_TEXTDOMAIN . '-settings', array() );
+		$oko_staging_on = ! empty( $oko_settings['_staging_api'] );
+
 		$cmb->add_field(
 			array(
-				'name' => __('Staging API', O_TEXTDOMAIN),
-				'desc' => __('Check this to use staging API', O_TEXTDOMAIN),
-				'id'   => '_staging_api',
-				'type' => 'checkbox',
+				'name'        => __('Staging API', O_TEXTDOMAIN),
+				'desc'        => __('Only for testing. Turn this on only if Økoskabet has given you an API key for staging (staging.okoskabet.dk). Production refuses a staging key and staging refuses a production key — and then every Økoskabet delivery method disappears from the checkout.', O_TEXTDOMAIN),
+				'id'          => '_staging_api',
+				'type'        => 'checkbox',
+				'after_field' => $oko_staging_on
+					? '<p class="oko-staging-on" style="color:#b32d2e;font-weight:600;">' . esc_html__('Staging is on: orders go to Økoskabet\'s test system and are never delivered. Turn it off before the shop goes live.', O_TEXTDOMAIN) . '</p>'
+					: '',
 			)
 		);
 

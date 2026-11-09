@@ -47,8 +47,11 @@ msgstr "Antal dage frem hvor leveringsdatoer vises som standard. Dato-undtagelse
 msgid "Staging API"
 msgstr "Staging API"
 
-msgid "Check this to use staging API"
-msgstr "Slå til for at bruge staging API"
+msgid "Only for testing. Turn this on only if Økoskabet has given you an API key for staging (staging.okoskabet.dk). Production refuses a staging key and staging refuses a production key — and then every Økoskabet delivery method disappears from the checkout."
+msgstr "Kun til test. Slå det kun til, hvis Økoskabet har givet dig en API-nøgle til staging (staging.okoskabet.dk). Produktion afviser en staging-nøgle, og staging afviser en almindelig nøgle — og så forsvinder alle Økoskabets leveringsmetoder fra kassen."
+
+msgid "Staging is on: orders go to Økoskabet's test system and are never delivered. Turn it off before the shop goes live."
+msgstr "Staging er slået til: ordrer går til Økoskabets testsystem og bliver aldrig leveret. Slå det fra, før butikken går i luften."
 
 msgid "Økoskabet Description (Optional)"
 msgstr "Økoskabet Beskrivelse (Ikke påkrævet)"
