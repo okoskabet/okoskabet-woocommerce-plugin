@@ -451,12 +451,14 @@ function oko_web_sale_customer(\WC_Order $order, array $customer): void
 		$order->set_shipping_phone($phone);
 	}
 
-	$address = is_array($customer['address'] ?? null) ? $customer['address'] : array();
-	$country = strtoupper((string) ($address['country'] ?? ''));
-	$country = preg_match('/^[A-Z]{2}$/', $country) ? $country : 'DK';
+	// Delivery goes to `address`, which is empty for a shed. The customer's
+	// own address is `billing_address`, with `address` where it is missing.
+	$shipping = is_array($customer['address'] ?? null) ? $customer['address'] : array();
+	$billing  = is_array($customer['billing_address'] ?? null) ? $customer['billing_address'] : $shipping;
 
-	foreach (array('billing', 'shipping') as $kind) {
-		$order->{"set_{$kind}_country"}($country);
+	foreach (array('billing' => $billing, 'shipping' => $shipping) as $kind => $address) {
+		$country = strtoupper((string) ($address['country'] ?? ''));
+		$order->{"set_{$kind}_country"}(preg_match('/^[A-Z]{2}$/', $country) ? $country : 'DK');
 		if ($address !== array()) {
 			$order->{"set_{$kind}_address_1"}((string) ($address['street'] ?? ''));
 			$order->{"set_{$kind}_postcode"}((string) ($address['postal_code'] ?? ''));

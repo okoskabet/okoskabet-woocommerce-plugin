@@ -169,6 +169,42 @@ class WebSaleOrdersTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame('Blixen Hansen', $order->get_billing_last_name());
 	}
 
+	/**
+	 * A sale to a shed has no delivery address; the customer's own address
+	 * comes as `billing_address` and is the order's billing address only.
+	 */
+	public function test_a_sale_to_a_shed_is_billed_to_the_customers_own_address(): void
+	{
+		$sale                                = $this->a_sale('web-123');
+		$sale['shipment_type']               = 'shed';
+		$sale['shed_id']                     = 7;
+		$sale['customer']['address']         = null;
+		$sale['customer']['billing_address'] = array('street' => 'Bopælsvej 3', 'postal_code' => '8000', 'city' => 'Aarhus C', 'country' => 'DK');
+		$this->sales                         = array($sale);
+
+		oko_fetch_web_sale_orders();
+
+		$order = oko_web_sale_order('web-123');
+		$this->assertSame('Bopælsvej 3', $order->get_billing_address_1());
+		$this->assertSame('8000', $order->get_billing_postcode());
+		$this->assertSame('Aarhus C', $order->get_billing_city());
+		$this->assertSame('DK', $order->get_billing_country());
+		$this->assertSame('', $order->get_shipping_address_1());
+		$this->assertSame('', $order->get_shipping_city());
+	}
+
+	/** Without `billing_address` the delivery address is the billing address too. */
+	public function test_without_a_billing_address_the_delivery_address_is_billed(): void
+	{
+		$this->sales = array($this->a_sale('web-123'));
+
+		oko_fetch_web_sale_orders();
+
+		$order = oko_web_sale_order('web-123');
+		$this->assertSame('Eksempelvej 12', $order->get_billing_address_1());
+		$this->assertSame('Beder', $order->get_billing_city());
+	}
+
 	public function test_the_plugin_never_books_it_itself(): void
 	{
 		$this->sales = array($this->a_sale('web-123'));
