@@ -2498,10 +2498,30 @@ function oko_forget_addition($parent, $addition): void
  */
 function oko_lock_additions_to(int $parent_id, int $for = 0): string
 {
-	global $wpdb;
-
-	$name = OKO_ADDITION_LOCK_PREFIX . $parent_id;
 	$hold = time() . ':' . wp_generate_uuid4() . ':' . $for;
+	if (! oko_take_hold(OKO_ADDITION_LOCK_PREFIX . $parent_id, $hold, OKO_ADDITION_LOCK_SECONDS)) {
+		return '';
+	}
+	$here             = &oko_additions_held_here();
+	$here[$parent_id] = $hold;
+
+	return $hold;
+}
+
+/**
+ * Take a hold: a row in the options table under `$name`, holding `$hold`.
+ *
+ * Inserted only where there is none, so the insert itself is the test (see
+ * oko_lock_additions_to() for why not add_option()). A hold older than
+ * `$seconds` is taken over by naming the stale value it replaces, so of two
+ * takers one wins.
+ *
+ * @param string $hold Starts with the time it is taken, and is otherwise the
+ *                     taker's own, so oko_let_go_of_hold() lets go of it only.
+ */
+function oko_take_hold(string $name, string $hold, int $seconds): bool
+{
+	global $wpdb;
 
 	$taken = $wpdb->query($wpdb->prepare(
 		"INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')",
@@ -2509,9 +2529,7 @@ function oko_lock_additions_to(int $parent_id, int $for = 0): string
 		$hold
 	));
 	if ((int) $taken === 1) {
-		$here             = &oko_additions_held_here();
-		$here[$parent_id] = $hold;
-		return $hold;
+		return true;
 	}
 
 	$since = (string) $wpdb->get_var($wpdb->prepare(
@@ -2519,8 +2537,8 @@ function oko_lock_additions_to(int $parent_id, int $for = 0): string
 		$name
 	));
 	// The value starts with the time it was taken, which is all (int) reads.
-	if ($since === '' || (int) $since > time() - OKO_ADDITION_LOCK_SECONDS) {
-		return '';
+	if ($since === '' || (int) $since > time() - $seconds) {
+		return false;
 	}
 
 	$taken = $wpdb->query($wpdb->prepare(
@@ -2530,13 +2548,18 @@ function oko_lock_additions_to(int $parent_id, int $for = 0): string
 		$since
 	));
 
-	if ((int) $taken !== 1) {
-		return '';
-	}
-	$here             = &oko_additions_held_here();
-	$here[$parent_id] = $hold;
+	return (int) $taken === 1;
+}
 
-	return $hold;
+/** Let go of a hold — this one, and never one taken over from it. */
+function oko_let_go_of_hold(string $name, string $hold): void
+{
+	global $wpdb;
+
+	$wpdb->delete($wpdb->options, array(
+		'option_name'  => $name,
+		'option_value' => $hold,
+	));
 }
 
 /**
@@ -2563,12 +2586,7 @@ function &oko_additions_held_here(): array
  */
 function oko_unlock_additions_to(int $parent_id, string $hold): void
 {
-	global $wpdb;
-
-	$wpdb->delete($wpdb->options, array(
-		'option_name'  => OKO_ADDITION_LOCK_PREFIX . $parent_id,
-		'option_value' => $hold,
-	));
+	oko_let_go_of_hold(OKO_ADDITION_LOCK_PREFIX . $parent_id, $hold);
 
 	$here = &oko_additions_held_here();
 	if (($here[$parent_id] ?? '') === $hold) {

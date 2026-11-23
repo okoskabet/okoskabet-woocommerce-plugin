@@ -133,6 +133,7 @@ add_action( 'plugins_loaded', static function () {
 $okoskabet_woocommerce_plugin_libraries = require O_PLUGIN_ROOT . 'vendor/autoload.php'; //phpcs:ignore
 
 require_once O_PLUGIN_ROOT . 'functions/functions.php';
+require_once O_PLUGIN_ROOT . 'functions/web-sale-orders.php';
 
 // Add your new plugin on the wiki: https://github.com/WPBP/WordPress-Plugin-Boilerplate-Powered/wiki/Plugin-made-with-this-Boilerplate
 

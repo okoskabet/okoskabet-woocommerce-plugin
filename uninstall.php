@@ -66,8 +66,8 @@ function o_uninstall_multisite()
  *
  * Removed: the answers remembered from Økoskabet (configuration, shipping
  * methods, shipments, delivery locations, feature prices, the address-lookup
- * rate limit), holds on an order's additions, and the last word on line
- * totals. Each is rebuilt by asking again.
+ * rate limit), holds on an order's additions and on the commission-sale
+ * fetch, and the last word on line totals. Each is rebuilt by asking again.
  *
  * @return void
  */
@@ -97,6 +97,7 @@ function o_uninstall()
 	));
 
 	delete_option('okoskabet_line_totals_last_said');
+	delete_option('_oko_web_sale_lock');
 }
 
 o_uninstall_multisite();
