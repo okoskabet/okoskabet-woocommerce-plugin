@@ -11,7 +11,8 @@ sender pluginet butikkens varer til Økoskabet med navn, pris med moms
 (tilbudsprisen, når et tilbud kører), lager, billede, link, kategorier og de
 synlige egenskaber: alle varer én gang i døgnet, og den enkelte vare, når den
 eller dens lager ændres. Det sker i baggrunden efter gemningen eller købet, så
-hverken kassen eller produktsiden i admin venter på Økoskabet. En variabel vare
+hverken kassen eller produktsiden i admin venter på Økoskabet. Kan Økoskabet
+ikke nås, sendes ændringerne igen lidt senere. En variabel vare
 sendes som sine variationer. En vare, der slettes, lægges i papirkurven, ikke
 længere er udgivet, er skjult eller har adgangskode, meldes som ikke til salg.
 
