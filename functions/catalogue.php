@@ -729,6 +729,10 @@ function oko_catalogue_variation_ids(int $parent_id): array
 		'post_status' => 'any',
 		'numberposts' => -1,
 		'fields'      => 'ids',
+		// The shop's own order of them. get_posts() would otherwise go by
+		// date, newest first, and variations saved in the same second come
+		// in any order.
+		'orderby'     => array('menu_order' => 'ASC', 'ID' => 'ASC'),
 	)));
 }
 
