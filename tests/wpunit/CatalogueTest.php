@@ -249,6 +249,44 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		);
 	}
 
+	/**
+	 * With three attributes or more WooCommerce leaves the choices out of a
+	 * variation's name, and the variations would come to Økoskabet under one
+	 * name. The choices are added.
+	 */
+	public function test_a_variation_is_named_by_its_choices_however_many_there_are(): void
+	{
+		$attributes = array();
+		foreach (array('Størrelse' => array('1 kg', '2 kg'), 'Farve' => array('Orange', 'Lilla'), 'Dyrkning' => array('Øko')) as $label => $options) {
+			$attribute = new \WC_Product_Attribute();
+			$attribute->set_name($label);
+			$attribute->set_options($options);
+			$attribute->set_visible(true);
+			$attribute->set_variation(true);
+			$attributes[] = $attribute;
+		}
+
+		$parent = new \WC_Product_Variable();
+		$parent->set_name('Gulerødder');
+		$parent->set_status('publish');
+		$parent->set_attributes($attributes);
+		$parent->save();
+
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id($parent->get_id());
+		$variation->set_attributes(array(
+			sanitize_title('Størrelse') => '1 kg',
+			sanitize_title('Farve')     => 'Lilla',
+			sanitize_title('Dyrkning')  => 'Øko',
+		));
+		$variation->set_regular_price('30');
+		$variation->set_status('publish');
+		$variation->save();
+
+		$this->assertSame('Gulerødder', wc_get_product($variation->get_id())->get_name());
+		$this->assertSame('Gulerødder - 1 kg, Lilla, Øko', $this->sent_for($variation->get_id())['name']);
+	}
+
 	public function test_a_variation_that_loses_its_price_is_sent_as_gone(): void
 	{
 		list(, $one_kg) = $this->a_variable_product();

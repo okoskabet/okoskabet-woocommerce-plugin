@@ -412,7 +412,7 @@ function oko_catalogue_entry(\WC_Product $product): array
 
 	return array(
 		'id'             => (int) $product->get_id(),
-		'name'           => oko_plain_text((string) $product->get_name()),
+		'name'           => oko_catalogue_name($product),
 		'price'          => $price,
 		'stock_quantity' => oko_catalogue_stock_quantity($product),
 		'stock_status'   => (string) $product->get_stock_status(),
@@ -421,6 +421,28 @@ function oko_catalogue_entry(\WC_Product $product): array
 		'categories'     => oko_catalogue_categories($product),
 		'properties'     => oko_product_properties($product),
 	);
+}
+
+/**
+ * The name a customer tells this product apart by.
+ *
+ * WooCommerce writes a variation's choices into its name only when it has
+ * fewer than three attributes; with more, every variation is called what the
+ * product is, and the club would list them all under one name at different
+ * prices. The choices are added then, as the cart shows them.
+ */
+function oko_catalogue_name(\WC_Product $product): string
+{
+	$name = (string) $product->get_name();
+
+	if ($product instanceof \WC_Product_Variation) {
+		$choices = (string) wc_get_formatted_variation($product, true, false, false);
+		if ($choices !== '' && strpos($name, $choices) === false) {
+			$name .= ' - ' . $choices;
+		}
+	}
+
+	return oko_plain_text($name);
 }
 
 /**
