@@ -1911,7 +1911,7 @@ msgid "Økoskabet already has commission sale %s as another order, so this one m
 msgstr "Økoskabet har allerede kommissionssalg %s som en anden ordre, så denne kan være en ordre nummer to på de samme varer. Tjek den, før du pakker. Annuller den kun, hvis selve salget skal annulleres: så annulleres det også hos Økoskabet."
 
 # ----------------------------------------------------------------------
-# functions/catalogue.php — varekataloget til Økoskabet
+# backend/views/settings.php — varekataloget til Økoskabet
 
 msgid "Send product catalogue to Økoskabet"
 msgstr "Send varekatalog til Økoskabet"

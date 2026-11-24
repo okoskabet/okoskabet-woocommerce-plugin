@@ -401,6 +401,29 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		}
 	}
 
+	/** A simple product turned external is no longer sold here: it is said to be gone. */
+	public function test_a_product_turned_into_a_type_not_sent_is_sent_as_gone(): void
+	{
+		$product = $this->a_product('Ost', '10');
+		$id      = $product->get_id();
+		wp_set_object_terms($id, 'external', 'product_type');
+		\WC_Cache_Helper::invalidate_cache_group('product_' . $id);
+		clean_post_cache($id);
+		$this->assertTrue(wc_get_product($id)->is_type('external'));
+
+		$this->assertSame(array('id' => $id, 'deleted' => true), $this->sent_for($id));
+	}
+
+	/** The live lookup leaves out a variation without a price, as the catalogue does. */
+	public function test_the_live_lookup_leaves_out_a_variation_without_a_price(): void
+	{
+		list(, $one_kg, , $no_price) = $this->a_variable_product();
+
+		$answer = $this->lookup(array($one_kg->get_id(), $no_price->get_id()), array('stock'))->get_data();
+
+		$this->assertSame(array($one_kg->get_id()), array_column($answer, 'id'));
+	}
+
 	// --- Where to ask live ------------------------------------------------
 
 	/**

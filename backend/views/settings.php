@@ -257,7 +257,6 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
-
 	if ( ! $oko_multi_merchant_active ) {
 		$cmb->add_field(
 			array(

@@ -151,6 +151,8 @@ function oko_start_catalogue(): void
  *
  * Each page is an action of its own, so a catalogue of thousands is never one
  * request that runs out of time halfway, and a page that fails is only that page.
+ *
+ * @param int|string $page As Action Scheduler hands it back from its arguments.
  */
 function oko_send_catalogue_page($page = 1): void
 {
@@ -284,7 +286,10 @@ function oko_catalogue_entries_for(int $id): array
 	}
 
 	if (! $product->is_type(array('simple', 'variation'))) {
-		return array();
+		// Grouped, external and the like are not sent — but one that was
+		// simple until a moment ago is still for sale at Økoskabet, and only
+		// `deleted` takes it off.
+		return array(array('product' => $product, 'entry' => oko_catalogue_gone($id)));
 	}
 
 	$entry = oko_catalogue_entry($product);
@@ -649,9 +654,16 @@ function oko_catalogue_stock_answer(array $ids): array
 			continue;
 		}
 
+		// Left out as the catalogue leaves it out: a variation without a
+		// price cannot be bought.
+		$price = oko_catalogue_price($product);
+		if ($price === '' && $product->is_type('variation')) {
+			continue;
+		}
+
 		$answer[] = array(
 			'id'             => (int) $id,
-			'price'          => oko_catalogue_price($product),
+			'price'          => $price,
 			'stock_quantity' => oko_catalogue_stock_quantity($product),
 			'stock_status'   => (string) $product->get_stock_status(),
 		);
