@@ -199,7 +199,8 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$parent->save();
 
 		oko_send_catalogue_ids(array($parent->get_id()));
-		$sent = $this->sent_products();
+		$all  = $this->sent_products();
+		$sent = array_values(array_filter($all, static fn(array $entry): bool => empty($entry['deleted'])));
 
 		$this->assertSame(array($one_kg->get_id(), $two_kg->get_id()), array_column($sent, 'id'));
 		$this->assertSame(wc_get_product($one_kg->get_id())->get_name(), $sent[0]['name']);
@@ -209,7 +210,23 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame(10, $sent[0]['stock_quantity']);
 		$this->assertSame(array('Rodfrugter'), $sent[0]['categories']);
 		$this->assertSame(array('1 kg'), $sent[0]['properties'][0]['values'] ?? null);
-		$this->assertNotContains($no_price->get_id(), array_column($sent, 'id'));
+		// The parent is not sold itself — it may have been, as a simple
+		// product, before it became variable — and a variation without a
+		// price cannot be bought: both are said to be gone.
+		$this->assertContains(array('id' => $parent->get_id(), 'deleted' => true), $all);
+		$this->assertContains(array('id' => $no_price->get_id(), 'deleted' => true), $all);
+	}
+
+	/** A variation whose price is taken away stops being for sale at Økoskabet. */
+	public function test_a_variation_that_loses_its_price_is_sent_as_gone(): void
+	{
+		list(, $one_kg) = $this->a_variable_product();
+		$this->assertSame('30.00', $this->sent_for($one_kg->get_id())['price']);
+
+		$one_kg->set_regular_price('');
+		$one_kg->save();
+
+		$this->assertSame(array('id' => $one_kg->get_id(), 'deleted' => true), $this->sent_for($one_kg->get_id()));
 	}
 
 	public function test_deleting_a_variable_product_sends_its_variations_as_gone(): void
@@ -414,14 +431,15 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$this->assertSame(array('id' => $id, 'deleted' => true), $this->sent_for($id));
 	}
 
-	/** The live lookup leaves out a variation without a price, as the catalogue does. */
-	public function test_the_live_lookup_leaves_out_a_variation_without_a_price(): void
+	/** The live lookup says a variation without a price is gone, as the catalogue does. */
+	public function test_the_live_lookup_says_a_variation_without_a_price_is_gone(): void
 	{
 		list(, $one_kg, , $no_price) = $this->a_variable_product();
 
 		$answer = $this->lookup(array($one_kg->get_id(), $no_price->get_id()), array('stock'))->get_data();
 
-		$this->assertSame(array($one_kg->get_id()), array_column($answer, 'id'));
+		$this->assertSame(array($one_kg->get_id(), $no_price->get_id()), array_column($answer, 'id'));
+		$this->assertSame(array('id' => $no_price->get_id(), 'deleted' => true), $answer[1]);
 	}
 
 	// --- Where to ask live ------------------------------------------------

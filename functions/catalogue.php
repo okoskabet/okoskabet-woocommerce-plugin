@@ -269,18 +269,15 @@ function oko_catalogue_entries_for(int $id): array
 	if ($product->is_type('variable')) {
 		// The variable product is not sold itself; its variations are, each
 		// under its own id. All of them, published or not, so one switched
-		// off is said to be gone.
-		$entries = array();
+		// off is said to be gone. And the product's own id is said to be gone
+		// too: it may have been sold as a simple product until it became
+		// variable, and Økoskabet ignores `deleted` for an id it never had.
+		$entries = array(array('product' => $product, 'entry' => oko_catalogue_gone($id)));
 		foreach (oko_catalogue_variation_ids($id) as $child_id) {
-			$child = wc_get_product((int) $child_id);
-			if ($child instanceof \WC_Product) {
-				$entry = oko_catalogue_entry($child);
-				if ($entry !== null) {
-					$entries[] = array('product' => $child, 'entry' => $entry);
-				}
-			} else {
-				$entries[] = array('product' => null, 'entry' => oko_catalogue_gone((int) $child_id));
-			}
+			$child     = wc_get_product((int) $child_id);
+			$entries[] = $child instanceof \WC_Product
+				? array('product' => $child, 'entry' => oko_catalogue_entry($child))
+				: array('product' => null, 'entry' => oko_catalogue_gone((int) $child_id));
 		}
 		return $entries;
 	}
@@ -292,26 +289,19 @@ function oko_catalogue_entries_for(int $id): array
 		return array(array('product' => $product, 'entry' => oko_catalogue_gone($id)));
 	}
 
-	$entry = oko_catalogue_entry($product);
-
-	return $entry === null ? array() : array(array('product' => $product, 'entry' => $entry));
+	return array(array('product' => $product, 'entry' => oko_catalogue_entry($product)));
 }
 
 /**
- * One product as Økoskabet is to have it, or null for one that is left out
- * altogether (a variation without a price).
+ * One product as Økoskabet is to have it, or as gone.
  *
- * @return array<string,mixed>|null
+ * @return array<string,mixed>
  */
-function oko_catalogue_entry(\WC_Product $product): ?array
+function oko_catalogue_entry(\WC_Product $product): array
 {
-	if (! oko_catalogue_for_sale($product)) {
+	$price = oko_catalogue_selling_price($product);
+	if ($price === null) {
 		return oko_catalogue_gone((int) $product->get_id());
-	}
-
-	$price = oko_catalogue_price($product);
-	if ($price === '' && $product->is_type('variation')) {
-		return null;
 	}
 
 	return array(
@@ -325,6 +315,26 @@ function oko_catalogue_entry(\WC_Product $product): ?array
 		'categories'     => oko_catalogue_categories($product),
 		'properties'     => oko_product_properties($product),
 	);
+}
+
+/**
+ * The price a product is sold at, or null where it is not for sale.
+ *
+ * One rule for the catalogue and the live lookup alike. A variation without a
+ * price cannot be put in the basket, so it is not for sale either — and is
+ * said to be gone rather than left out: one that had a price yesterday would
+ * otherwise stay for sale at Økoskabet at that price, since only `deleted`
+ * takes a product off.
+ */
+function oko_catalogue_selling_price(\WC_Product $product): ?string
+{
+	if (! oko_catalogue_for_sale($product)) {
+		return null;
+	}
+
+	$price = oko_catalogue_price($product);
+
+	return $price === '' && $product->is_type('variation') ? null : $price;
 }
 
 /** @return array{id:int,deleted:true} */
@@ -586,7 +596,7 @@ function oko_catalogue_note_status_change($new, $old, $post): void
 	if ($new === $old || ($new !== 'publish' && $old !== 'publish')) {
 		return;
 	}
-	if (! $post instanceof \WP_Post) {
+	if (! $post instanceof \WP_Post || ! in_array($post->post_type, array('product', 'product_variation'), true)) {
 		return;
 	}
 
@@ -649,15 +659,9 @@ function oko_catalogue_stock_answer(array $ids): array
 			continue;
 		}
 
-		if (! oko_catalogue_for_sale($product)) {
+		$price = oko_catalogue_selling_price($product);
+		if ($price === null) {
 			$answer[] = oko_catalogue_gone((int) $id);
-			continue;
-		}
-
-		// Left out as the catalogue leaves it out: a variation without a
-		// price cannot be bought.
-		$price = oko_catalogue_price($product);
-		if ($price === '' && $product->is_type('variation')) {
 			continue;
 		}
 
