@@ -98,7 +98,12 @@ function oko_schedule_catalogue(): void
 	}
 
 	if (! oko_catalogue_enabled() || oko_web_sale_merchants() === array()) {
-		oko_unschedule_catalogue();
+		// Asked on every admin page, so one question, not three: without the
+		// daily run nothing schedules a page, and a page or a list of changes
+		// left behind does nothing while the setting is off.
+		if (as_has_scheduled_action(OKO_CATALOGUE_HOOK)) {
+			oko_unschedule_catalogue();
+		}
 		return;
 	}
 
@@ -223,12 +228,12 @@ function oko_send_catalogue_ids(array $ids): void
 		return;
 	}
 
-	$by_account = array();
-	foreach (array_keys($merchants) as $index) {
-		$by_account[$index] = array();
-	}
+	$ids = array_values(array_unique($ids));
+	// One query for the posts and their meta, not one per product.
+	_prime_post_caches($ids, true, true);
 
-	foreach (array_unique($ids) as $id) {
+	$by_account = array();
+	foreach ($ids as $id) {
 		foreach (oko_catalogue_entries_for($id) as $entry) {
 			if (! empty($entry['entry']['deleted'])) {
 				// Gone is said to every account: what the product was filed
@@ -272,8 +277,10 @@ function oko_catalogue_entries_for(int $id): array
 		// off is said to be gone. And the product's own id is said to be gone
 		// too: it may have been sold as a simple product until it became
 		// variable, and Økoskabet ignores `deleted` for an id it never had.
-		$entries = array(array('product' => $product, 'entry' => oko_catalogue_gone($id)));
-		foreach (oko_catalogue_variation_ids($id) as $child_id) {
+		$entries  = array(array('product' => $product, 'entry' => oko_catalogue_gone($id)));
+		$children = oko_catalogue_variation_ids($id);
+		_prime_post_caches($children, false, true);
+		foreach ($children as $child_id) {
 			$child     = wc_get_product((int) $child_id);
 			$entries[] = $child instanceof \WC_Product
 				? array('product' => $child, 'entry' => oko_catalogue_entry($child))
@@ -419,8 +426,9 @@ function oko_catalogue_categories(\WC_Product $product): array
 	$id      = $product->is_type('variation') ? (int) $product->get_parent_id() : (int) $product->get_id();
 	$default = (int) get_option('default_product_cat', 0);
 
-	$terms = wp_get_post_terms($id, 'product_cat');
-	if (is_wp_error($terms)) {
+	// From the term cache: every variation of a product asks for the same.
+	$terms = get_the_terms($id, 'product_cat');
+	if (! is_array($terms)) {
 		return array();
 	}
 
@@ -464,9 +472,9 @@ function oko_catalogue_account_index(?\WC_Product $product, array $merchants): ?
 
 	// The account by its key, as the list is: two records on one key are one
 	// account at Økoskabet.
-	$key = o_merchant_api_url($owner) . ' ' . (string) ($owner['api_key'] ?? '');
+	$key = oko_merchant_account_key($owner);
 	foreach ($merchants as $index => $merchant) {
-		if (o_merchant_api_url($merchant) . ' ' . (string) ($merchant['api_key'] ?? '') === $key) {
+		if (oko_merchant_account_key($merchant) === $key) {
 			return (int) $index;
 		}
 	}
