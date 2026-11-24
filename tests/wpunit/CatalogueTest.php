@@ -18,6 +18,9 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 	/** @var array<int,array{method:string,url:string,body:string}> */
 	private array $requests = array();
 
+	/** What Økoskabet answers: a status code, or null for no answer at all. */
+	private ?int $answer = 200;
+
 	public function setUp(): void
 	{
 		parent::setUp();
@@ -50,7 +53,11 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 			'body'   => (string) ($args['body'] ?? ''),
 		);
 
-		return array('response' => array('code' => 200), 'body' => '{"stored":1}', 'headers' => array(), 'cookies' => array());
+		if ($this->answer === null) {
+			return new \WP_Error('http_request_failed', 'cURL error 28: Operation timed out');
+		}
+
+		return array('response' => array('code' => $this->answer), 'body' => '{"stored":1}', 'headers' => array(), 'cookies' => array());
 	}
 
 	// --- The setting -------------------------------------------------------
@@ -69,7 +76,7 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$this->assertFalse(has_action('shutdown', 'oko_catalogue_flush'));
 
 		oko_start_catalogue();
-		oko_send_catalogue_page(1);
+		oko_send_catalogue_page(0);
 		oko_send_catalogue_products(array($product->get_id()));
 
 		$this->assertFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK));
@@ -318,20 +325,160 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$this->nothing_noted();
 
 		oko_start_catalogue();
-		$this->assertNotFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(1)));
+		$this->assertSame(array(array(0)), $this->pending_pages());
 		// One chain at a time.
 		oko_start_catalogue();
-		$this->assertCount(1, as_get_scheduled_actions(array('hook' => OKO_CATALOGUE_PAGE_HOOK, 'status' => \ActionScheduler_Store::STATUS_PENDING)));
+		$this->assertCount(1, $this->pending_pages());
 
-		oko_send_catalogue_page(1);
+		$this->as_scheduled_page();
 		$this->assertCount(1, $this->catalogue_calls());
 		$this->assertCount(100, $this->sent_products());
-		$this->assertNotFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(2)));
+		$sent = $this->sent_ids();
+		$this->assertSame(array(array(end($sent))), $this->pending_pages());
 
 		$this->requests = array();
-		oko_send_catalogue_page(2);
+		$this->as_scheduled_page();
 		$this->assertCount(50, $this->sent_products());
-		$this->assertFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(3)));
+		$this->assertSame(array(), $this->pending_pages());
+	}
+
+	/**
+	 * A product taken off sale while the chain runs moves no other: the next
+	 * page starts after the last product sent, not at an offset.
+	 */
+	public function test_a_product_taken_off_halfway_through_skips_no_other(): void
+	{
+		$products = array();
+		for ($i = 0; $i < 150; $i++) {
+			$products[] = $this->a_product('Vare ' . $i, '10');
+		}
+		$this->nothing_noted();
+		oko_start_catalogue();
+		$this->as_scheduled_page();
+
+		wp_update_post(array('ID' => $products[10]->get_id(), 'post_status' => 'draft'));
+		$this->nothing_noted();
+		$this->requests = array();
+		$this->as_scheduled_page();
+
+		$this->assertSame(
+			array_map(static fn(\WC_Product $p): int => $p->get_id(), array_slice($products, 100)),
+			$this->sent_ids()
+		);
+	}
+
+	/**
+	 * A page is a hundred entries, not a hundred products: a variable product
+	 * with a hundred variations is a page of its own, or the action holding it
+	 * runs out of time in the same place every day and the chain never ends.
+	 */
+	public function test_a_page_counts_the_variations_it_sends(): void
+	{
+		$before = $this->a_product('Før', '10');
+		$parent = new \WC_Product_Variable();
+		$parent->set_name('Mange størrelser');
+		$parent->set_status('publish');
+		$parent->save();
+		for ($i = 0; $i < 105; $i++) {
+			$variation = new \WC_Product_Variation();
+			$variation->set_parent_id($parent->get_id());
+			$variation->set_regular_price('10');
+			$variation->set_status('publish');
+			$variation->save();
+		}
+		$after = $this->a_product('Efter', '10');
+		$this->nothing_noted();
+
+		oko_start_catalogue();
+		$this->as_scheduled_page();
+
+		// The simple product and the variable one with its 105 variations and
+		// its own id as gone: 107 entries, in two calls.
+		$this->assertCount(107, $this->sent_products());
+		$this->assertSame(array(100, 7), array_map(static fn(array $call): int => count(json_decode($call['body'], true)['products']), $this->catalogue_calls()));
+		$this->assertContains($before->get_id(), $this->sent_ids());
+		$this->assertNotContains($after->get_id(), $this->sent_ids());
+		$this->assertSame(array(array($parent->get_id())), $this->pending_pages());
+
+		$this->requests = array();
+		$this->as_scheduled_page();
+		$this->assertSame(array($after->get_id()), $this->sent_ids());
+		$this->assertSame(array(), $this->pending_pages());
+	}
+
+	/** Grouped and external products are not sold through Økoskabet, and the day's run passes them by. */
+	public function test_the_daily_run_passes_grouped_and_external_products_by(): void
+	{
+		$external = new \WC_Product_External();
+		$external->set_name('Hos en anden');
+		$external->set_regular_price('10');
+		$external->set_status('publish');
+		$external->save();
+		$simple = $this->a_product('Ost', '10');
+		$this->nothing_noted();
+
+		oko_start_catalogue();
+		$this->as_scheduled_page();
+
+		$this->assertSame(array($simple->get_id()), $this->sent_ids());
+	}
+
+	// --- Økoskabet not there -----------------------------------------------
+
+	/**
+	 * A list of changes Økoskabet did not take is tried again, later each
+	 * time: it may say a product is gone, and the daily run never says so
+	 * again. Given up after five tries.
+	 */
+	public function test_changes_okoskabet_could_not_take_are_tried_again_later(): void
+	{
+		$product = $this->a_product('Ost', '10');
+		$this->nothing_noted();
+		$this->answer = 503;
+
+		$before = time();
+		oko_send_catalogue_products(array($product->get_id()));
+
+		$retries = $this->pending_retries();
+		$this->assertSame(array(array(array($product->get_id()), 1)), array_column($retries, 'args'));
+		$this->assertGreaterThanOrEqual($before + OKO_CATALOGUE_RETRY_SECONDS, $retries[0]['at']);
+
+		as_unschedule_all_actions(OKO_CATALOGUE_PRODUCTS_HOOK);
+		$this->answer = null; // No answer at all.
+		oko_send_catalogue_products(array($product->get_id()), 3);
+		$retries = $this->pending_retries();
+		$this->assertSame(array(array(array($product->get_id()), 4)), array_column($retries, 'args'));
+		$this->assertGreaterThanOrEqual($before + OKO_CATALOGUE_RETRY_SECONDS * 8, $retries[0]['at']);
+
+		as_unschedule_all_actions(OKO_CATALOGUE_PRODUCTS_HOOK);
+		oko_send_catalogue_products(array($product->get_id()), 4);
+		$this->assertSame(array(), $this->pending_retries());
+	}
+
+	/** A refusal is not tried again: it would be refused again. */
+	public function test_changes_okoskabet_refused_are_not_tried_again(): void
+	{
+		$product = $this->a_product('Ost', '10');
+		$this->nothing_noted();
+
+		foreach (array(200, 401, 404, 422) as $code) {
+			$this->answer = $code;
+			oko_send_catalogue_products(array($product->get_id()));
+			$this->assertSame(array(), $this->pending_retries(), 'answered ' . $code);
+		}
+	}
+
+	/** A page is left to the next day's run, which sends it again anyway. */
+	public function test_a_page_okoskabet_could_not_take_is_not_tried_again(): void
+	{
+		$this->a_product('Ost', '10');
+		$this->nothing_noted();
+		$this->answer = 503;
+
+		oko_send_catalogue_page(0);
+
+		$this->assertSame(array(), $this->pending_retries());
+		$this->assertSame(array(), $this->pending_pages());
 	}
 
 	public function test_no_call_carries_more_than_a_hundred(): void
@@ -352,10 +499,10 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$this->a_product('Vare', '10');
 		oko_take_hold(OKO_CATALOGUE_LOCK_OPTION, time() . ':other', OKO_CATALOGUE_LOCK_SECONDS);
 
-		oko_send_catalogue_page(1);
+		oko_send_catalogue_page(0);
 
 		$this->assertSame(array(), $this->catalogue_calls());
-		$this->assertNotFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(1)));
+		$this->assertSame(array(array(0)), $this->pending_pages());
 	}
 
 	// --- The live lookup ---------------------------------------------------
@@ -457,7 +604,7 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$gone    = $this->a_product('Smør', '10');
 		$this->nothing_noted();
 
-		oko_send_catalogue_page(1);                         // The whole catalogue.
+		oko_send_catalogue_page(0);                         // The whole catalogue.
 		oko_send_catalogue_products(array($product->get_id())); // A change.
 		$gone_id = $gone->get_id();
 		$gone->delete(true);
@@ -593,6 +740,52 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		}
 
 		return $products;
+	}
+
+	/** Run the one pending page of the chain, as Action Scheduler would. */
+	private function as_scheduled_page(): void
+	{
+		$pages = $this->pending_pages();
+		$this->assertCount(1, $pages);
+		as_unschedule_all_actions(OKO_CATALOGUE_PAGE_HOOK);
+		oko_send_catalogue_page(...$pages[0]);
+	}
+
+	/** @return array<int,array<int,int>> The arguments of each pending page. */
+	private function pending_pages(): array
+	{
+		$actions = as_get_scheduled_actions(array(
+			'hook'     => OKO_CATALOGUE_PAGE_HOOK,
+			'status'   => \ActionScheduler_Store::STATUS_PENDING,
+			'per_page' => -1,
+		));
+
+		return array_values(array_map(static fn($action): array => $action->get_args(), $actions));
+	}
+
+	/** @return array<int,array{args:array,at:int}> The tries again at changes, pending. */
+	private function pending_retries(): array
+	{
+		$actions = as_get_scheduled_actions(array(
+			'hook'     => OKO_CATALOGUE_PRODUCTS_HOOK,
+			'status'   => \ActionScheduler_Store::STATUS_PENDING,
+			'per_page' => -1,
+		));
+
+		$retries = array();
+		foreach ($actions as $action) {
+			if (count($action->get_args()) > 1) {
+				$retries[] = array('args' => $action->get_args(), 'at' => (int) $action->get_schedule()->get_date()->getTimestamp());
+			}
+		}
+
+		return $retries;
+	}
+
+	/** @return int[] The ids sent, in order, gone or not. */
+	private function sent_ids(): array
+	{
+		return array_map(static fn(array $product): int => (int) $product['id'], $this->sent_products());
 	}
 
 	/** @return array<int,array<int,int>> The ids of each pending send of changed products. */

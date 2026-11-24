@@ -29,10 +29,10 @@ const OKO_CATALOGUE_SETTING = '_catalogue_enabled';
 /** The daily run, which starts a chain of pages. */
 const OKO_CATALOGUE_HOOK = 'okoskabet_send_catalogue';
 
-/** One page of the whole catalogue. Argument: the page number. */
+/** One page of the whole catalogue. Argument: the last product id the chain has done. */
 const OKO_CATALOGUE_PAGE_HOOK = 'okoskabet_send_catalogue_page';
 
-/** Products that changed. Argument: their ids. */
+/** Products that changed. Arguments: their ids, and how many times they have been tried. */
 const OKO_CATALOGUE_PRODUCTS_HOOK = 'okoskabet_send_catalogue_products';
 
 /** Seconds between whole catalogues. */
@@ -40,6 +40,12 @@ const OKO_CATALOGUE_INTERVAL = DAY_IN_SECONDS;
 
 /** Products per page of the catalogue, and per call to Økoskabet (whose limit is 500). */
 const OKO_CATALOGUE_BATCH = 100;
+
+/** Tries at a list of changes Økoskabet did not take, before it is given up. */
+const OKO_CATALOGUE_ATTEMPTS = 5;
+
+/** Seconds before the first try again; each one after waits twice as long. */
+const OKO_CATALOGUE_RETRY_SECONDS = 300;
 
 /** Held while a page is sent, so two chains cannot run over each other. */
 const OKO_CATALOGUE_LOCK_OPTION = '_oko_catalogue_lock';
@@ -147,52 +153,70 @@ function oko_start_catalogue(): void
 		return;
 	}
 
-	as_enqueue_async_action(OKO_CATALOGUE_PAGE_HOOK, array(1), OKO_WEB_SALE_GROUP);
+	as_enqueue_async_action(OKO_CATALOGUE_PAGE_HOOK, array(0), OKO_WEB_SALE_GROUP);
 }
 
 /**
- * One page of the whole catalogue: a hundred products, sent, and the next page
- * scheduled while there is one.
+ * One page of the whole catalogue: the products after the last one done, until
+ * a hundred are sent, and the next page scheduled while there is one.
  *
  * Each page is an action of its own, so a catalogue of thousands is never one
  * request that runs out of time halfway, and a page that fails is only that page.
  *
- * @param int|string $page As Action Scheduler hands it back from its arguments.
+ * Counted in what is sent, not in products: a variable product is all its
+ * variations, and a page of a hundred of those is thousands of entries — one
+ * action that runs out of time in the same place every day, and the chain
+ * never gets past it. Picked up after the last id done, not at an offset: a
+ * product taken off sale halfway would otherwise move every later one a place
+ * forward, and one would be skipped that day.
+ *
+ * @param int|string $after As Action Scheduler hands it back from its arguments.
  */
-function oko_send_catalogue_page($page = 1): void
+function oko_send_catalogue_page($after = 0): void
 {
 	if (! oko_catalogue_enabled()) {
 		return;
 	}
 
-	$page = max(1, (int) $page);
+	$after = max(0, (int) $after);
 
 	$hold = time() . ':' . wp_generate_uuid4();
 	if (! oko_take_hold(OKO_CATALOGUE_LOCK_OPTION, $hold, OKO_CATALOGUE_LOCK_SECONDS)) {
 		// Another page is being sent. This one waits its turn.
-		as_schedule_single_action(time() + 60, OKO_CATALOGUE_PAGE_HOOK, array($page), OKO_WEB_SALE_GROUP);
+		as_schedule_single_action(time() + 60, OKO_CATALOGUE_PAGE_HOOK, array($after), OKO_WEB_SALE_GROUP);
 		return;
 	}
 
 	try {
-		$ids = wc_get_products(array(
-			'status'  => 'publish',
-			'type'    => array('simple', 'variable'),
-			'limit'   => OKO_CATALOGUE_BATCH,
-			'page'    => $page,
-			'orderby' => 'ID',
-			'order'   => 'ASC',
-			'return'  => 'ids',
-		));
-		$ids = array_map('intval', (array) $ids);
+		$ids = oko_catalogue_page_ids($after);
+		// For the product types below, and the posts wc_get_product() reads.
+		_prime_post_caches($ids, true, true);
+		$variations = oko_catalogue_variation_counts($ids);
 
-		if ($ids !== array()) {
-			oko_send_catalogue_ids($ids);
+		$page    = array();
+		$entries = 0;
+		$last    = $after;
+		foreach ($ids as $id) {
+			$last = $id;
+			// Grouped, external and the like are not sold through Økoskabet,
+			// and a day's run need not say so of each one every day; a change
+			// to one is still sent, as gone.
+			if (in_array(\WC_Product_Factory::get_product_type($id), array('simple', 'variable'), true)) {
+				$page[]   = $id;
+				$entries += 1 + ($variations[$id] ?? 0);
+			}
+			if ($entries >= OKO_CATALOGUE_BATCH) {
+				break;
+			}
 		}
 
-		// A full page means there may be more. An empty next page ends it.
-		if (count($ids) === OKO_CATALOGUE_BATCH) {
-			as_enqueue_async_action(OKO_CATALOGUE_PAGE_HOOK, array($page + 1), OKO_WEB_SALE_GROUP);
+		if ($page !== array()) {
+			oko_send_catalogue_ids($page);
+		}
+
+		// Stopped short of what was read, or read a full page: there may be more.
+		if ($ids !== array() && ($last !== end($ids) || count($ids) === OKO_CATALOGUE_BATCH)) {
+			as_enqueue_async_action(OKO_CATALOGUE_PAGE_HOOK, array($last), OKO_WEB_SALE_GROUP);
 		}
 	} finally {
 		oko_let_go_of_hold(OKO_CATALOGUE_LOCK_OPTION, $hold);
@@ -200,19 +224,79 @@ function oko_send_catalogue_page($page = 1): void
 }
 
 /**
+ * The next hundred published products after `$after`, by id.
+ *
+ * @return int[]
+ */
+function oko_catalogue_page_ids(int $after): array
+{
+	global $wpdb;
+
+	return array_map('intval', (array) $wpdb->get_col($wpdb->prepare(
+		"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'product' AND post_status = 'publish' AND ID > %d ORDER BY ID ASC LIMIT %d",
+		$after,
+		OKO_CATALOGUE_BATCH
+	)));
+}
+
+/**
+ * How many variations each of these products has, whatever their status:
+ * what a variable product comes to on a page.
+ *
+ * @param int[] $parent_ids
+ * @return array<int,int>
+ */
+function oko_catalogue_variation_counts(array $parent_ids): array
+{
+	global $wpdb;
+
+	if ($parent_ids === array()) {
+		return array();
+	}
+
+	$in   = implode(',', array_map('intval', $parent_ids));
+	$rows = (array) $wpdb->get_results(
+		"SELECT post_parent, COUNT(*) AS variations FROM {$wpdb->posts} WHERE post_type = 'product_variation' AND post_parent IN ($in) GROUP BY post_parent"
+	);
+
+	$counts = array();
+	foreach ($rows as $row) {
+		$counts[(int) $row->post_parent] = (int) $row->variations;
+	}
+
+	return $counts;
+}
+
+/**
  * The products noted as changed, sent. Scheduled by oko_catalogue_flush().
  *
- * @param mixed $ids
+ * Tried again, later and later, while Økoskabet cannot be reached. Unlike a
+ * page, a list of changes may say that a product is gone, and the daily run
+ * never says so again: a deleted product is not in it, and Økoskabet would sell
+ * it on.
+ *
+ * @param mixed      $ids
+ * @param int|string $attempt How many times these have been tried before.
  */
-function oko_send_catalogue_products($ids = array()): void
+function oko_send_catalogue_products($ids = array(), $attempt = 0): void
 {
 	if (! oko_catalogue_enabled()) {
 		return;
 	}
 
 	$ids = array_values(array_filter(array_map('intval', (array) $ids), static fn(int $id): bool => $id > 0));
-	if ($ids !== array()) {
-		oko_send_catalogue_ids($ids);
+	if ($ids === array() || oko_send_catalogue_ids($ids)) {
+		return;
+	}
+
+	$attempt = max(0, (int) $attempt) + 1;
+	if ($attempt < OKO_CATALOGUE_ATTEMPTS) {
+		as_schedule_single_action(
+			time() + OKO_CATALOGUE_RETRY_SECONDS * 2 ** ($attempt - 1),
+			OKO_CATALOGUE_PRODUCTS_HOOK,
+			array($ids, $attempt),
+			OKO_WEB_SALE_GROUP
+		);
 	}
 }
 
@@ -220,12 +304,14 @@ function oko_send_catalogue_products($ids = array()): void
  * Products by id, as Økoskabet is to have them, to each account they belong to.
  *
  * @param int[] $ids
+ * @return bool False where a call is worth trying again: Økoskabet could not be
+ *              reached, or was not able to take it just then.
  */
-function oko_send_catalogue_ids(array $ids): void
+function oko_send_catalogue_ids(array $ids): bool
 {
 	$merchants = oko_web_sale_merchants();
 	if ($merchants === array()) {
-		return;
+		return true;
 	}
 
 	$ids = array_values(array_unique($ids));
@@ -251,11 +337,14 @@ function oko_send_catalogue_ids(array $ids): void
 		}
 	}
 
+	$taken = true;
 	foreach ($by_account as $index => $entries) {
 		foreach (array_chunk($entries, OKO_CATALOGUE_BATCH) as $chunk) {
-			oko_post_catalogue($merchants[$index], $chunk);
+			$taken = oko_post_catalogue($merchants[$index], $chunk) && $taken;
 		}
 	}
+
+	return $taken;
 }
 
 /**
@@ -485,16 +574,19 @@ function oko_catalogue_account_index(?\WC_Product $product, array $merchants): ?
 /**
  * One call to Økoskabet with up to a hundred products.
  *
- * A failure is logged and left: the next whole catalogue sends it again, and
- * Økoskabet counts stock older than 48 hours as unconfirmed meanwhile.
+ * A failure is logged. Whether it is tried again is the caller's: a page is
+ * sent again by the next whole catalogue, and Økoskabet counts stock older
+ * than 48 hours as unconfirmed meanwhile.
  *
  * @param array<string,mixed>            $merchant
  * @param array<int,array<string,mixed>> $entries
+ * @return bool False where trying again later may go better: no answer, too
+ *              many calls, or Økoskabet failing. A refusal is not that.
  */
-function oko_post_catalogue(array $merchant, array $entries): void
+function oko_post_catalogue(array $merchant, array $entries): bool
 {
 	if ($entries === array()) {
-		return;
+		return true;
 	}
 
 	$merchant_id = (string) ($merchant['id'] ?? '?');
@@ -514,7 +606,7 @@ function oko_post_catalogue(array $merchant, array $entries): void
 
 	if (is_wp_error($response)) {
 		error_log('okoskabet_woocommerce_plugin: Could not send the catalogue for merchant=' . $merchant_id . ': ' . $response->get_error_message());
-		return;
+		return false;
 	}
 
 	$code = (int) wp_remote_retrieve_response_code($response);
@@ -523,6 +615,8 @@ function oko_post_catalogue(array $merchant, array $entries): void
 	if ($code !== 200 && $code !== 404) {
 		error_log('okoskabet_woocommerce_plugin: Sending the catalogue for merchant=' . $merchant_id . ' answered ' . $code);
 	}
+
+	return $code !== 429 && $code < 500;
 }
 
 /**
