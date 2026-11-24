@@ -104,13 +104,23 @@ function oko_web_sale_merchants(): array
 
 	$with_key = array();
 	foreach ($merchants as $merchant) {
-		$key = (string) ($merchant['api_key'] ?? '');
-		if ($key !== '') {
-			$with_key[o_merchant_api_url($merchant) . ' ' . $key] ??= $merchant;
+		if ((string) ($merchant['api_key'] ?? '') !== '') {
+			$with_key[oko_merchant_account_key($merchant)] ??= $merchant;
 		}
 	}
 
 	return array_values($with_key);
+}
+
+/**
+ * What makes two merchant records one account at Økoskabet: where they call,
+ * and with which key.
+ *
+ * @param array<string,mixed> $merchant
+ */
+function oko_merchant_account_key(array $merchant): string
+{
+	return o_merchant_api_url($merchant) . ' ' . (string) ($merchant['api_key'] ?? '');
 }
 
 /**

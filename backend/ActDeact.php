@@ -155,6 +155,11 @@ class ActDeact extends Base {
 		if ( \function_exists( 'as_unschedule_all_actions' ) ) {
 			\as_unschedule_all_actions( \OKO_WEB_SALE_HOOK, array(), \OKO_WEB_SALE_GROUP );
 		}
+		// And the catalogue, sent on to Økoskabet: scheduled again on the next
+		// load once active, if the shop still has it ticked.
+		if ( \function_exists( 'oko_unschedule_catalogue' ) ) {
+			\oko_unschedule_catalogue();
+		}
 		// Clear the permalinks
 		\flush_rewrite_rules();
 	}

@@ -2,6 +2,24 @@
 
 All notable changes to the Økoskabet WooCommerce Plugin will be documented in this file.
 
+## Ikke udgivet
+
+= Varekataloget til Økoskabet =
+
+En ny indstilling, **Send varekatalog til Økoskabet**, er slået fra. Slået til
+sender pluginet butikkens varer til Økoskabet med navn, pris med moms
+(tilbudsprisen, når et tilbud kører), lager, billede, link, kategorier og de
+synlige egenskaber: alle varer én gang i døgnet, og den enkelte vare, når den
+eller dens lager ændres. Det sker i baggrunden efter gemningen eller købet, så
+hverken kassen eller produktsiden i admin venter på Økoskabet. Kan Økoskabet
+ikke nås, sendes ændringerne igen lidt senere. En variabel vare
+sendes som sine variationer. En vare, der slettes, lægges i papirkurven, ikke
+længere er udgivet, er skjult eller har adgangskode, meldes som ikke til salg.
+
+Med indstillingen slået til kan Økoskabet også spørge efter en vares aktuelle
+pris og lager (kræver stadig, at »Webhook Status« er slået til). Uden
+indstillingen udleveres hverken pris eller lager.
+
 ## 1.6.0 - 2026-10-28
 
 Tillægsordrer, adresseforslag og etagefelt i kassen, og pakkeriets rettelser
