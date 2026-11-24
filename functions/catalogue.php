@@ -322,28 +322,34 @@ function oko_send_catalogue_ids(array $ids): bool
 	// One query for the posts and their meta, not one per product.
 	_prime_post_caches($ids, true, true);
 
+	// By id within each account, so each is in it once. A variable product
+	// and its variations are noted together whenever it is saved, and the
+	// variations then come twice — once by their own id, once by the
+	// parent's — and Økoskabet refuses a call that names one product twice.
 	$by_account = array();
 	foreach ($ids as $id) {
 		foreach (oko_catalogue_entries_for($id) as $entry) {
+			$entry_id = (int) $entry['entry']['id'];
+
 			if (! empty($entry['entry']['deleted'])) {
 				// Gone is said to every account: what the product was filed
 				// under, and so whose it was, may be gone with it.
 				foreach (array_keys($merchants) as $index) {
-					$by_account[$index][] = $entry['entry'];
+					$by_account[$index][$entry_id] = $entry['entry'];
 				}
 				continue;
 			}
 
 			$index = oko_catalogue_account_index($entry['product'], $merchants);
 			if ($index !== null) {
-				$by_account[$index][] = $entry['entry'];
+				$by_account[$index][$entry_id] = $entry['entry'];
 			}
 		}
 	}
 
 	$taken = true;
 	foreach ($by_account as $index => $entries) {
-		foreach (array_chunk($entries, OKO_CATALOGUE_BATCH) as $chunk) {
+		foreach (array_chunk(array_values($entries), OKO_CATALOGUE_BATCH) as $chunk) {
 			$taken = oko_post_catalogue($merchants[$index], $chunk) && $taken;
 		}
 	}

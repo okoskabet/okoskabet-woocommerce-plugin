@@ -228,6 +228,27 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 	}
 
 	/** A variation whose price is taken away stops being for sale at Økoskabet. */
+	/**
+	 * Saving a variable product notes it and its variations together, and
+	 * the variations come by both roads. Each is sent once: Økoskabet refuses
+	 * a call that names a product twice (seen 24/11 against a local backend).
+	 */
+	public function test_a_variable_product_saved_with_its_variations_sends_each_once(): void
+	{
+		[$parent, $one, $two, $priceless] = $this->a_variable_product();
+
+		$this->requests = array();
+		oko_send_catalogue_ids(array($one->get_id(), $parent->get_id(), $two->get_id()));
+
+		$ids = $this->sent_ids();
+		$this->assertCount(1, $this->catalogue_calls());
+		$this->assertSame(array_values(array_unique($ids)), $ids);
+		$this->assertEqualsCanonicalizing(
+			array($one->get_id(), $parent->get_id(), $two->get_id(), $priceless->get_id()),
+			$ids
+		);
+	}
+
 	public function test_a_variation_that_loses_its_price_is_sent_as_gone(): void
 	{
 		list(, $one_kg) = $this->a_variable_product();
