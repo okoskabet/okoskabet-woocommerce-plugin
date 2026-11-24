@@ -1909,3 +1909,12 @@ msgstr "Kommissionssalg gennem Økoskabet (%1$s). Betalt til Foodshipper, og kun
 #, php-format
 msgid "Økoskabet already has commission sale %s as another order, so this one may be a second order for the same goods. Check before you pack it. Do not cancel it unless the sale itself is to be cancelled: cancelling cancels it at Økoskabet too."
 msgstr "Økoskabet har allerede kommissionssalg %s som en anden ordre, så denne kan være en ordre nummer to på de samme varer. Tjek den, før du pakker. Annuller den kun, hvis selve salget skal annulleres: så annulleres det også hos Økoskabet."
+
+# ----------------------------------------------------------------------
+# functions/catalogue.php — varekataloget til Økoskabet
+
+msgid "Send product catalogue to Økoskabet"
+msgstr "Send varekatalog til Økoskabet"
+
+msgid "Sends your products to Økoskabet with name, price, stock, picture, categories and link: all of them once a day, and each one when it changes or its stock does. Økoskabet can then also ask for a product's current price and stock (only while \"Webhook Status\" is on as well). Hidden, password-protected and unpublished products are reported as not for sale. Off: nothing is sent, and Økoskabet is told neither price nor stock."
+msgstr "Sender dine varer til Økoskabet med navn, pris, lager, billede, kategorier og link: alle sammen én gang i døgnet, og den enkelte vare, når den eller dens lager ændres. Økoskabet kan så også spørge efter en vares aktuelle pris og lager (kun når »Webhook Status« også er slået til). Skjulte, adgangskodebeskyttede og ikke-udgivne varer meldes som ikke til salg. Slået fra: intet sendes, og Økoskabet får hverken pris eller lager at vide."
