@@ -879,6 +879,23 @@ class OkoRest extends Base
 		}
 		$ids = array_slice(array_values($ids), 0, self::PRODUCTS_MAX_IDS);
 
+		// Price and stock now, for Økoskabet's club, asked for by name in
+		// the signed body. Only from a shop that sends its catalogue: one that
+		// has not ticked that has not agreed to hand out its prices and stock.
+		// Without `fields` the answer below is the one it has always been.
+		$fields = is_array($signed['fields'] ?? null) ? $signed['fields'] : array();
+		if (in_array('stock', $fields, true)) {
+			// It got through, whatever the answer: that is what the line on
+			// the settings page says.
+			\oko_note_inbound_call('products');
+
+			if (!\oko_catalogue_enabled()) {
+				return new \WP_Error('catalogue_disabled', 'The shop does not send its catalogue to Økoskabet', array('status' => 403));
+			}
+
+			return new \WP_REST_Response(\oko_catalogue_stock_answer($ids), 200);
+		}
+
 		$products = array();
 		foreach ($ids as $id) {
 			$product = \function_exists('wc_get_product') ? \wc_get_product($id) : null;
