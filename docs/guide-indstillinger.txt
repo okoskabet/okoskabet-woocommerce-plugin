@@ -115,3 +115,4 @@ okoskabet_packaging_fee:rules[][methods][]
 okoskabet_packaging_fee:rules[][tiers]
 okoskabet_free_packaging
 okoskabet_product_merchant
+_catalogue_enabled

@@ -245,6 +245,18 @@ if ( class_exists( '\\okoskabet_woocommerce_plugin\\Integrations\\Merchants' ) )
 		)
 	);
 
+	// Off until the shop turns it on. No default at all, rather than 'on':
+	// an unticked checkbox saves nothing, and a default would draw it ticked
+	// again while nothing is sent. See oko_catalogue_enabled().
+	$cmb->add_field(
+		array(
+			'name'    => __('Send product catalogue to Økoskabet', O_TEXTDOMAIN),
+			'desc'    => __('Sends your products to Økoskabet with name, price, stock, picture, categories and link: all of them once a day, and each one when it changes or its stock does. Økoskabet can then also ask for a product\'s current price and stock (only while "Webhook Status" is on as well). Hidden, password-protected and unpublished products are reported as not for sale. Off: nothing is sent, and Økoskabet is told neither price nor stock.', O_TEXTDOMAIN),
+			'id'      => '_catalogue_enabled',
+			'type'    => 'checkbox',
+		)
+	);
+
 
 	if ( ! $oko_multi_merchant_active ) {
 		$cmb->add_field(
