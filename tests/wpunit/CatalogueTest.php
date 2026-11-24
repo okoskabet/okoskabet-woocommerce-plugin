@@ -1,0 +1,553 @@
+<?php
+
+use okoskabet_woocommerce_plugin\Rest\OkoRest;
+
+/**
+ * The shop's catalogue, sent to Økoskabet, and price and stock asked live.
+ *
+ * Off until the shop ticks "Send product catalogue to Økoskabet". On, the
+ * whole catalogue goes once a day in pages of a hundred, and a product goes
+ * again when it or its stock changes — noted during the request and sent from
+ * Action Scheduler afterwards, never inside the save or the checkout. Nothing
+ * here leaves the building: Økoskabet is `pre_http_request`.
+ */
+class CatalogueTest extends \Codeception\TestCase\WPTestCase
+{
+	use ConfiguresMerchant;
+
+	/** @var array<int,array{method:string,url:string,body:string}> */
+	private array $requests = array();
+
+	public function setUp(): void
+	{
+		parent::setUp();
+		$this->a_merchant_with_an_account();
+		$this->settings(array('_catalogue_enabled' => 'on', '_webhook_enabled' => 'on'));
+		delete_option(OKO_CATALOGUE_LOCK_OPTION);
+		$this->nothing_noted();
+		oko_unschedule_catalogue();
+
+		add_filter('pre_http_request', array($this, 'okoskabet'), 1, 3);
+	}
+
+	public function tearDown(): void
+	{
+		$this->nothing_noted();
+		oko_unschedule_catalogue();
+		remove_all_filters('wp_doing_cron');
+		$this->forget_the_merchant();
+		delete_option(O_TEXTDOMAIN . '-settings');
+		delete_option(OKO_CATALOGUE_LOCK_OPTION);
+		parent::tearDown();
+	}
+
+	/** Økoskabet, as far as these tests talk to it. */
+	public function okoskabet($preempt, $args, $url)
+	{
+		$this->requests[] = array(
+			'method' => (string) ($args['method'] ?? 'GET'),
+			'url'    => (string) $url,
+			'body'   => (string) ($args['body'] ?? ''),
+		);
+
+		return array('response' => array('code' => 200), 'body' => '{"stored":1}', 'headers' => array(), 'cookies' => array());
+	}
+
+	// --- The setting -------------------------------------------------------
+
+	public function test_off_nothing_is_noted_scheduled_or_sent(): void
+	{
+		$this->settings(array('_webhook_enabled' => 'on'));
+		add_filter('wp_doing_cron', '__return_true');
+		$product = $this->a_product('Gulerødder', '25');
+
+		oko_schedule_catalogue();
+		$this->assertFalse(as_has_scheduled_action(OKO_CATALOGUE_HOOK));
+
+		wc_update_product_stock($product, 3);
+		$this->assertSame(array(), oko_catalogue_noted());
+		$this->assertFalse(has_action('shutdown', 'oko_catalogue_flush'));
+
+		oko_start_catalogue();
+		oko_send_catalogue_page(1);
+		oko_send_catalogue_products(array($product->get_id()));
+
+		$this->assertFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK));
+		$this->assertSame(array(), $this->catalogue_calls());
+	}
+
+	public function test_on_the_daily_run_is_scheduled_and_off_again_it_is_gone(): void
+	{
+		add_filter('wp_doing_cron', '__return_true');
+
+		oko_schedule_catalogue();
+		$this->assertNotFalse(as_has_scheduled_action(OKO_CATALOGUE_HOOK, array(), OKO_WEB_SALE_GROUP));
+
+		as_enqueue_async_action(OKO_CATALOGUE_PRODUCTS_HOOK, array(array(1, 2)), OKO_WEB_SALE_GROUP);
+		$this->settings(array());
+		oko_schedule_catalogue();
+
+		$this->assertFalse(as_has_scheduled_action(OKO_CATALOGUE_HOOK));
+		$this->assertFalse(as_has_scheduled_action(OKO_CATALOGUE_PRODUCTS_HOOK));
+	}
+
+	/** The commission-sale fetch shares the group, and is not taken down with it. */
+	public function test_turning_it_off_leaves_the_commission_sale_fetch_alone(): void
+	{
+		as_schedule_recurring_action(time() + 60, 300, OKO_WEB_SALE_HOOK, array(), OKO_WEB_SALE_GROUP);
+		as_enqueue_async_action(OKO_CATALOGUE_PRODUCTS_HOOK, array(array(1)), OKO_WEB_SALE_GROUP);
+
+		oko_unschedule_catalogue();
+
+		$this->assertNotFalse(as_has_scheduled_action(OKO_WEB_SALE_HOOK));
+		as_unschedule_all_actions(OKO_WEB_SALE_HOOK);
+	}
+
+	// --- One product -------------------------------------------------------
+
+	public function test_a_simple_product_as_okoskabet_has_it(): void
+	{
+		$this->prices_with_vat(true);
+		$category = wp_insert_term('Frugt & grønt', 'product_cat');
+		$product  = $this->a_product('Gulerødder, 1 kg', '25');
+		$product->set_manage_stock(true);
+		$product->set_stock_quantity(40);
+		$product->set_category_ids(array((int) $category['term_id'], (int) get_option('default_product_cat')));
+		$product->save();
+
+		$entry = $this->sent_for($product->get_id());
+
+		$this->assertSame($product->get_id(), $entry['id']);
+		$this->assertSame('Gulerødder, 1 kg', $entry['name']);
+		$this->assertSame('25.00', $entry['price']);
+		$this->assertSame(40, $entry['stock_quantity']);
+		$this->assertSame('instock', $entry['stock_status']);
+		$this->assertSame(get_permalink($product->get_id()), $entry['link']);
+		$this->assertSame('', $entry['image']);
+		// The shop's default category is left out, and the name is as the
+		// customer reads it.
+		$this->assertSame(array('Frugt & grønt'), $entry['categories']);
+		$this->assertSame(oko_product_properties($product), $entry['properties']);
+		$this->assertArrayNotHasKey('size', $entry);
+	}
+
+	public function test_a_sale_is_sent_as_the_sale_price(): void
+	{
+		$this->prices_with_vat(true);
+		$product = $this->a_product('Ost', '60');
+		$product->set_sale_price('45');
+		$product->save();
+
+		$this->assertSame('45.00', $this->sent_for($product->get_id())['price']);
+	}
+
+	public function test_a_shop_whose_prices_are_without_vat_sends_them_with_it(): void
+	{
+		$this->prices_with_vat(false);
+		$product = $this->a_product('Ost', '40');
+
+		$this->assertSame('50.00', $this->sent_for($product->get_id())['price']);
+	}
+
+	public function test_stock_the_shop_does_not_count_is_null_with_its_status(): void
+	{
+		$product = $this->a_product('Brød', '30');
+		$product->set_manage_stock(false);
+		$product->set_stock_status('onbackorder');
+		$product->save();
+
+		$entry = $this->sent_for($product->get_id());
+		$this->assertArrayHasKey('stock_quantity', $entry);
+		$this->assertNull($entry['stock_quantity']);
+		$this->assertSame('onbackorder', $entry['stock_status']);
+	}
+
+	public function test_a_simple_product_without_a_price_is_sent_with_none(): void
+	{
+		$product = $this->a_product('Ukendt', '');
+
+		$this->assertSame('', $this->sent_for($product->get_id())['price']);
+	}
+
+	public function test_hidden_password_protected_and_draft_products_are_not_for_sale(): void
+	{
+		$hidden = $this->a_product('Skjult', '10');
+		$hidden->set_catalog_visibility('hidden');
+		$hidden->save();
+
+		$locked = $this->a_product('Med kode', '10');
+		$locked->set_post_password('hemmelig');
+		$locked->save();
+
+		$draft = $this->a_product('Kladde', '10');
+		$draft->set_status('draft');
+		$draft->save();
+
+		foreach (array($hidden, $locked, $draft) as $product) {
+			$this->assertSame(array('id' => $product->get_id(), 'deleted' => true), $this->sent_for($product->get_id()));
+		}
+	}
+
+	// --- Variable products -------------------------------------------------
+
+	public function test_a_variable_product_is_its_variations_each_under_its_own_id(): void
+	{
+		$this->prices_with_vat(true);
+		$category = wp_insert_term('Rodfrugter', 'product_cat');
+		list($parent, $one_kg, $two_kg, $no_price) = $this->a_variable_product();
+		$parent->set_category_ids(array((int) $category['term_id']));
+		$parent->save();
+
+		oko_send_catalogue_ids(array($parent->get_id()));
+		$sent = $this->sent_products();
+
+		$this->assertSame(array($one_kg->get_id(), $two_kg->get_id()), array_column($sent, 'id'));
+		$this->assertSame(wc_get_product($one_kg->get_id())->get_name(), $sent[0]['name']);
+		$this->assertStringContainsString('1 kg', $sent[0]['name']);
+		$this->assertSame('30.00', $sent[0]['price']);
+		$this->assertSame('55.00', $sent[1]['price']);
+		$this->assertSame(10, $sent[0]['stock_quantity']);
+		$this->assertSame(array('Rodfrugter'), $sent[0]['categories']);
+		$this->assertSame(array('1 kg'), $sent[0]['properties'][0]['values'] ?? null);
+		$this->assertNotContains($no_price->get_id(), array_column($sent, 'id'));
+	}
+
+	public function test_deleting_a_variable_product_sends_its_variations_as_gone(): void
+	{
+		list($parent, $one_kg, $two_kg, $no_price) = $this->a_variable_product();
+		$ids = array($parent->get_id(), $one_kg->get_id(), $two_kg->get_id(), $no_price->get_id());
+		$this->nothing_noted();
+
+		$parent->delete(true);
+		$this->assertFalse(wc_get_product($ids[1]));
+
+		oko_catalogue_flush();
+		oko_send_catalogue_products($this->pending_product_ids()[0]);
+
+		$gone = array();
+		foreach ($this->sent_products() as $entry) {
+			$this->assertSame(array('id', 'deleted'), array_keys($entry));
+			$gone[] = $entry['id'];
+		}
+		foreach ($ids as $id) {
+			$this->assertContains($id, $gone);
+		}
+	}
+
+	public function test_trashing_a_variable_product_sends_its_variations_as_gone(): void
+	{
+		list($parent, $one_kg, $two_kg) = $this->a_variable_product();
+		$this->nothing_noted();
+
+		wp_trash_post($parent->get_id());
+		oko_catalogue_flush();
+		oko_send_catalogue_products($this->pending_product_ids()[0]);
+
+		$sent = $this->sent_products();
+		$this->assertContains(array('id' => $one_kg->get_id(), 'deleted' => true), $sent);
+		$this->assertContains(array('id' => $two_kg->get_id(), 'deleted' => true), $sent);
+	}
+
+	// --- Changes, noted and sent afterwards --------------------------------
+
+	public function test_many_stock_changes_in_one_request_are_one_action_with_each_id_once(): void
+	{
+		$a = $this->a_product('A', '10');
+		$b = $this->a_product('B', '10');
+		foreach (array($a, $b) as $product) {
+			$product->set_manage_stock(true);
+			$product->set_stock_quantity(100);
+			$product->save();
+		}
+		$this->nothing_noted();
+
+		for ($i = 0; $i < 20; $i++) {
+			wc_update_product_stock($a, 50 - $i);
+			wc_update_product_stock($b, 50 - $i);
+			wc_update_product_stock_status($a->get_id(), 'instock');
+		}
+		$a->set_name('A, ny');
+		$a->save();
+
+		// Nothing is sent while the request runs.
+		$this->assertSame(array(), $this->catalogue_calls());
+		$this->assertNotFalse(has_action('shutdown', 'oko_catalogue_flush'));
+
+		oko_catalogue_flush();
+
+		$this->assertSame(array(array($a->get_id(), $b->get_id())), $this->pending_product_ids());
+		$this->assertSame(array(), oko_catalogue_noted());
+	}
+
+	public function test_a_product_unpublished_is_noted_and_sent_as_gone(): void
+	{
+		$product = $this->a_product('Ost', '10');
+		$this->nothing_noted();
+
+		wp_update_post(array('ID' => $product->get_id(), 'post_status' => 'draft'));
+		oko_catalogue_flush();
+		oko_send_catalogue_products($this->pending_product_ids()[0]);
+
+		$this->assertSame(array(array('id' => $product->get_id(), 'deleted' => true)), $this->sent_products());
+	}
+
+	// --- A hundred at a time -----------------------------------------------
+
+	public function test_the_whole_catalogue_goes_in_pages_of_a_hundred(): void
+	{
+		for ($i = 0; $i < 150; $i++) {
+			$this->a_product('Vare ' . $i, '10');
+		}
+		$this->nothing_noted();
+
+		oko_start_catalogue();
+		$this->assertNotFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(1)));
+		// One chain at a time.
+		oko_start_catalogue();
+		$this->assertCount(1, as_get_scheduled_actions(array('hook' => OKO_CATALOGUE_PAGE_HOOK, 'status' => \ActionScheduler_Store::STATUS_PENDING)));
+
+		oko_send_catalogue_page(1);
+		$this->assertCount(1, $this->catalogue_calls());
+		$this->assertCount(100, $this->sent_products());
+		$this->assertNotFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(2)));
+
+		$this->requests = array();
+		oko_send_catalogue_page(2);
+		$this->assertCount(50, $this->sent_products());
+		$this->assertFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(3)));
+	}
+
+	public function test_no_call_carries_more_than_a_hundred(): void
+	{
+		$ids = array();
+		for ($i = 0; $i < 230; $i++) {
+			$ids[] = 900000 + $i; // Not here: each is sent as gone.
+		}
+
+		oko_send_catalogue_ids($ids);
+
+		$sizes = array_map(static fn(array $call): int => count(json_decode($call['body'], true)['products']), $this->catalogue_calls());
+		$this->assertSame(array(100, 100, 30), $sizes);
+	}
+
+	public function test_a_page_waits_while_another_is_being_sent(): void
+	{
+		$this->a_product('Vare', '10');
+		oko_take_hold(OKO_CATALOGUE_LOCK_OPTION, time() . ':other', OKO_CATALOGUE_LOCK_SECONDS);
+
+		oko_send_catalogue_page(1);
+
+		$this->assertSame(array(), $this->catalogue_calls());
+		$this->assertNotFalse(as_has_scheduled_action(OKO_CATALOGUE_PAGE_HOOK, array(1)));
+	}
+
+	// --- The live lookup ---------------------------------------------------
+
+	public function test_the_live_lookup_answers_price_and_stock_only(): void
+	{
+		$this->prices_with_vat(true);
+		$product = $this->a_product('Gulerødder', '25');
+		$product->set_manage_stock(true);
+		$product->set_stock_quantity(40);
+		$product->save();
+		$hidden = $this->a_product('Skjult', '10');
+		$hidden->set_catalog_visibility('hidden');
+		$hidden->save();
+
+		$response = $this->lookup(array($product->get_id(), $hidden->get_id(), 999999), array('stock'));
+
+		$this->assertInstanceOf(\WP_REST_Response::class, $response);
+		$this->assertSame(
+			array(
+				array('id' => $product->get_id(), 'price' => '25.00', 'stock_quantity' => 40, 'stock_status' => 'instock'),
+				array('id' => $hidden->get_id(), 'deleted' => true),
+			),
+			$response->get_data()
+		);
+	}
+
+	public function test_the_live_lookup_tells_nothing_while_the_catalogue_is_off(): void
+	{
+		$this->settings(array('_webhook_enabled' => 'on'));
+		$product = $this->a_product('Gulerødder', '25');
+
+		$response = $this->lookup(array($product->get_id()), array('stock'));
+
+		$this->assertInstanceOf(\WP_Error::class, $response);
+		$this->assertSame('catalogue_disabled', $response->get_error_code());
+		$this->assertSame(403, $response->get_error_data()['status']);
+	}
+
+	/** An Økoskabet that does not send `fields` gets the answer it always had, setting on or off. */
+	public function test_without_fields_the_lookup_answers_as_it_always_has(): void
+	{
+		$product = $this->a_product('Gulerødder', '25');
+		$product->set_tag_ids(array((int) wp_insert_term('Køl', 'product_tag')['term_id']));
+		$product->save();
+		$product = wc_get_product($product->get_id());
+
+		$expected = (string) wp_json_encode(array(array(
+			'id'         => $product->get_id(),
+			'name'       => 'Gulerødder',
+			'image'      => oko_product_image_url($product),
+			'tags'       => oko_product_tags($product),
+			'properties' => oko_product_properties($product),
+		)));
+
+		foreach (array(array('_catalogue_enabled' => 'on', '_webhook_enabled' => 'on'), array('_webhook_enabled' => 'on')) as $settings) {
+			$this->settings($settings);
+			$this->assertSame($expected, wp_json_encode($this->lookup(array($product->get_id()))->get_data()));
+			$this->assertSame($expected, wp_json_encode($this->lookup(array($product->get_id()), array('name'))->get_data()));
+		}
+	}
+
+	// --- Helpers -----------------------------------------------------------
+
+	/** @param array<string,string> $settings */
+	private function settings(array $settings): void
+	{
+		update_option(O_TEXTDOMAIN . '-settings', $settings);
+	}
+
+	private function nothing_noted(): void
+	{
+		$noted = &oko_catalogue_noted();
+		$noted = array();
+		remove_action('shutdown', 'oko_catalogue_flush');
+	}
+
+	private function prices_with_vat(bool $included): void
+	{
+		update_option('woocommerce_calc_taxes', 'yes');
+		update_option('woocommerce_default_country', 'DK');
+		update_option('woocommerce_prices_include_tax', $included ? 'yes' : 'no');
+		\WC_Tax::_insert_tax_rate(array(
+			'tax_rate_country'  => 'DK',
+			'tax_rate'          => '25.0000',
+			'tax_rate_name'     => 'Moms',
+			'tax_rate_priority' => 1,
+			'tax_rate_compound' => 0,
+			'tax_rate_shipping' => 1,
+			'tax_rate_order'    => 1,
+			'tax_rate_class'    => '',
+		));
+		\WC_Cache_Helper::invalidate_cache_group('taxes');
+	}
+
+	private function a_product(string $name, string $price): \WC_Product_Simple
+	{
+		$product = new \WC_Product_Simple();
+		$product->set_name($name);
+		$product->set_regular_price($price);
+		$product->set_status('publish');
+		$product->save();
+
+		return $product;
+	}
+
+	/**
+	 * A variable product with sizes 1 kg and 2 kg, and a third variation
+	 * without a price.
+	 *
+	 * @return array{0:\WC_Product_Variable,1:\WC_Product_Variation,2:\WC_Product_Variation,3:\WC_Product_Variation}
+	 */
+	private function a_variable_product(): array
+	{
+		$attribute = new \WC_Product_Attribute();
+		$attribute->set_name('Størrelse');
+		$attribute->set_options(array('1 kg', '2 kg', '5 kg'));
+		$attribute->set_visible(true);
+		$attribute->set_variation(true);
+
+		$parent = new \WC_Product_Variable();
+		$parent->set_name('Gulerødder');
+		$parent->set_status('publish');
+		$parent->set_attributes(array($attribute));
+		$parent->save();
+
+		$variations = array();
+		foreach (array('1 kg' => '30', '2 kg' => '55', '5 kg' => '') as $size => $price) {
+			$variation = new \WC_Product_Variation();
+			$variation->set_parent_id($parent->get_id());
+			$variation->set_attributes(array(sanitize_title('Størrelse') => $size));
+			$variation->set_regular_price($price);
+			$variation->set_manage_stock(true);
+			$variation->set_stock_quantity(10);
+			$variation->set_status('publish');
+			$variation->save();
+			$variations[] = $variation;
+		}
+
+		return array(wc_get_product($parent->get_id()), $variations[0], $variations[1], $variations[2]);
+	}
+
+	/** @return array<string,mixed> What was sent for one product, sent on its own. */
+	private function sent_for(int $id): array
+	{
+		$this->requests = array();
+		oko_send_catalogue_ids(array($id));
+		$sent = $this->sent_products();
+		$this->assertCount(1, $sent);
+
+		return $sent[0];
+	}
+
+	/** @return array<int,array{method:string,url:string,body:string}> */
+	private function catalogue_calls(): array
+	{
+		return array_values(array_filter($this->requests, static fn(array $r): bool => $r['method'] === 'POST' && substr($r['url'], -strlen('/api/v1/products')) === '/api/v1/products'));
+	}
+
+	/** @return array<int,array<string,mixed>> Every product in every call, in order. */
+	private function sent_products(): array
+	{
+		$products = array();
+		foreach ($this->catalogue_calls() as $call) {
+			$products = array_merge($products, json_decode($call['body'], true)['products']);
+		}
+
+		return $products;
+	}
+
+	/** @return array<int,array<int,int>> The ids of each pending send of changed products. */
+	private function pending_product_ids(): array
+	{
+		$actions = as_get_scheduled_actions(array(
+			'hook'     => OKO_CATALOGUE_PRODUCTS_HOOK,
+			'status'   => \ActionScheduler_Store::STATUS_PENDING,
+			'per_page' => -1,
+			'orderby'  => 'action_id',
+			'order'    => 'ASC',
+		));
+
+		return array_values(array_map(static fn($action): array => $action->get_args()[0], $actions));
+	}
+
+	/**
+	 * The lookup as Økoskabet calls it, signed with the merchant's secret.
+	 *
+	 * @param int[]         $ids
+	 * @param string[]|null $fields
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function lookup(array $ids, ?array $fields = null)
+	{
+		$config = get_option(\okoskabet_woocommerce_plugin\Integrations\Merchants::OPTION_KEY);
+		$config['merchants']['default']['webhook_secret'] = 'hemmelighed';
+		\okoskabet_woocommerce_plugin\Integrations\Merchants::save_config($config);
+
+		$body = array('ids' => $ids, 'timestamp' => time());
+		if ($fields !== null) {
+			$body['fields'] = $fields;
+		}
+		$raw = (string) wp_json_encode($body);
+
+		$request = new \WP_REST_Request('POST', '/wp/v2/okoskabet/products/default');
+		$request->set_url_params(array('merchant_id' => 'default'));
+		$request->set_header('content-type', 'application/json');
+		$request->set_header('x-hmac-sha256', hash_hmac('sha256', $raw, 'hemmelighed'));
+		$request->set_body($raw);
+
+		return (new OkoRest())->handle_products($request);
+	}
+}
