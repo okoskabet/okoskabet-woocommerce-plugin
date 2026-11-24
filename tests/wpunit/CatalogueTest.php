@@ -401,6 +401,51 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		}
 	}
 
+	// --- Where to ask live ------------------------------------------------
+
+	/**
+	 * Every catalogue POST says where Økoskabet asks this shop live — the
+	 * whole catalogue, a change and a deletion alike — and says it exactly as
+	 * an order for the same account does. Økoskabet otherwise learns the
+	 * address only from an order, and a shop that sends only its catalogue
+	 * would never be asked.
+	 */
+	public function test_every_catalogue_post_says_where_to_ask_and_as_an_order_does(): void
+	{
+		$product = $this->a_product('Ost', '10');
+		$gone    = $this->a_product('Smør', '10');
+		$this->nothing_noted();
+
+		oko_send_catalogue_page(1);                         // The whole catalogue.
+		oko_send_catalogue_products(array($product->get_id())); // A change.
+		$gone_id = $gone->get_id();
+		$gone->delete(true);
+		oko_send_catalogue_products(array($gone_id));           // A deletion (the object's id is 0 by now).
+
+		$order = wc_create_order();
+		$order->add_product($product, 1);
+		$shipping = new \WC_Order_Item_Shipping();
+		$shipping->set_method_id('hey_okoskabet_shipping_shed');
+		$shipping->set_method_title('Skab');
+		$order->add_item($shipping);
+		$order->update_meta_data('_billing_okoskabet_delivery_date', '2026-12-01');
+		$order->update_meta_data('_billing_okoskabet_shed_id', '42');
+		$order->save();
+		$payload = oko_shipment_payload($order, o_get_merchant());
+		$this->assertIsArray($payload);
+		$expected = $payload['webshop_products_url'];
+		$this->assertStringEndsWith('/wp/v2/okoskabet/products/' . rawurlencode((string) o_get_merchant()['id']), $expected);
+
+		$calls = $this->catalogue_calls();
+		$this->assertCount(3, $calls);
+		foreach ($calls as $call) {
+			$body = json_decode($call['body'], true);
+			$this->assertSame(array('webshop_products_url', 'products'), array_keys($body));
+			$this->assertSame($expected, $body['webshop_products_url']);
+		}
+		$this->assertSame(array(array('id' => $gone_id, 'deleted' => true)), json_decode($calls[2]['body'], true)['products']);
+	}
+
 	// --- Helpers -----------------------------------------------------------
 
 	/** @param array<string,string> $settings */

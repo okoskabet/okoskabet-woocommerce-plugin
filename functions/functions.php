@@ -4648,6 +4648,20 @@ function oko_collection_place(\WC_Order $order): ?string
 }
 
 /**
+ * Where Økoskabet asks this shop what its product ids are, for one account.
+ *
+ * Sent on every order and on every catalogue POST, so Økoskabet learns the
+ * address from either; a shop that only sends its catalogue is otherwise
+ * never asked live. One function, so the two can never disagree.
+ *
+ * @param array<string,mixed> $merchant
+ */
+function oko_webshop_products_url(array $merchant): string
+{
+	return rest_url('wp/v2/okoskabet/products/' . rawurlencode((string) ($merchant['id'] ?? 'default')));
+}
+
+/**
  * Everything Økoskabet is told about an order, in one place.
  *
  * Built once and used twice — when the order is first sent, and again when it
@@ -4770,7 +4784,7 @@ function oko_shipment_payload(\WC_Order $order, array $merchant): ?array
 		// Økoskabet guessing the last part of the path, which is the
 		// string surgery we are trying to avoid. Sent on every order, so
 		// it repairs itself if the shop moves domain.
-		'webshop_products_url' => rest_url('wp/v2/okoskabet/products/' . rawurlencode((string) ($merchant['id'] ?? 'default'))),
+		'webshop_products_url' => oko_webshop_products_url($merchant),
 	];
 
 	// Left out rather than sent empty when the order has no date: the

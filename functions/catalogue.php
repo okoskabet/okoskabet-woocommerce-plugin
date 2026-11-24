@@ -479,7 +479,13 @@ function oko_post_catalogue(array $merchant, array $entries): void
 		$merchant,
 		'POST',
 		'/api/v1/products',
-		(string) wp_json_encode(array('products' => array_values($entries))),
+		(string) wp_json_encode(
+			array(
+				// Where to ask live; the order carries the same, see there.
+				'webshop_products_url' => oko_webshop_products_url($merchant),
+				'products'             => array_values($entries),
+			)
+		),
 		30
 	);
 
