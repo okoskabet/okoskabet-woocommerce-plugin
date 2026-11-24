@@ -210,13 +210,16 @@ function oko_send_catalogue_page($after = 0): void
 			}
 		}
 
-		if ($page !== array()) {
-			oko_send_catalogue_ids($page);
-		}
-
-		// Stopped short of what was read, or read a full page: there may be more.
+		// Stopped short of what was read, or read a full page: there may be
+		// more. Scheduled before this page is sent, so a page that dies — a
+		// product that will not be read, a product of thousands of variations
+		// that runs out of time — is only that page, and the chain goes on.
 		if ($ids !== array() && ($last !== end($ids) || count($ids) === OKO_CATALOGUE_BATCH)) {
 			as_enqueue_async_action(OKO_CATALOGUE_PAGE_HOOK, array($last), OKO_WEB_SALE_GROUP);
+		}
+
+		if ($page !== array()) {
+			oko_send_catalogue_ids($page);
 		}
 	} finally {
 		oko_let_go_of_hold(OKO_CATALOGUE_LOCK_OPTION, $hold);
@@ -240,8 +243,9 @@ function oko_catalogue_page_ids(int $after): array
 }
 
 /**
- * How many variations each of these products has, whatever their status:
- * what a variable product comes to on a page.
+ * How many variations each of these products has, counted as
+ * oko_catalogue_variation_ids() lists them: what a variable product comes to
+ * on a page.
  *
  * @param int[] $parent_ids
  * @return array<int,int>
@@ -256,7 +260,7 @@ function oko_catalogue_variation_counts(array $parent_ids): array
 
 	$in   = implode(',', array_map('intval', $parent_ids));
 	$rows = (array) $wpdb->get_results(
-		"SELECT post_parent, COUNT(*) AS variations FROM {$wpdb->posts} WHERE post_type = 'product_variation' AND post_parent IN ($in) GROUP BY post_parent"
+		"SELECT post_parent, COUNT(*) AS variations FROM {$wpdb->posts} WHERE post_type = 'product_variation' AND post_status NOT IN ('trash', 'auto-draft') AND post_parent IN ($in) GROUP BY post_parent"
 	);
 
 	$counts = array();

@@ -53,6 +53,9 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 			'body'   => (string) ($args['body'] ?? ''),
 		);
 
+		if ($this->answer === -1) {
+			throw new \RuntimeException('A page that dies');
+		}
 		if ($this->answer === null) {
 			return new \WP_Error('http_request_failed', 'cURL error 28: Operation timed out');
 		}
@@ -403,6 +406,39 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$this->requests = array();
 		$this->as_scheduled_page();
 		$this->assertSame(array($after->get_id()), $this->sent_ids());
+		$this->assertSame(array(), $this->pending_pages());
+	}
+
+	/** A page that dies is only that page: the next one was scheduled before it was sent. */
+	public function test_a_page_that_dies_leaves_the_chain_going(): void
+	{
+		$products = array();
+		for ($i = 0; $i < 150; $i++) {
+			$products[] = $this->a_product('Vare ' . $i, '10');
+		}
+		$this->nothing_noted();
+		$this->answer = -1;
+
+		try {
+			oko_send_catalogue_page(0);
+			$this->fail('The page was meant to die.');
+		} catch (\RuntimeException $e) {
+			$this->assertSame('A page that dies', $e->getMessage());
+		}
+
+		$this->assertSame(array(array($products[99]->get_id())), $this->pending_pages());
+		$this->assertFalse(get_option(OKO_CATALOGUE_LOCK_OPTION));
+	}
+
+	/** A page after the last product ends the chain, and schedules nothing. */
+	public function test_the_page_after_the_last_product_ends_the_chain(): void
+	{
+		$product = $this->a_product('Ost', '10');
+		$this->nothing_noted();
+
+		oko_send_catalogue_page($product->get_id());
+
+		$this->assertSame(array(), $this->catalogue_calls());
 		$this->assertSame(array(), $this->pending_pages());
 	}
 
