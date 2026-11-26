@@ -172,6 +172,9 @@ class OkoRest extends Base
 		// POST rather than GET because the signature covers the raw body,
 		// and a GET has no body to cover. That also puts the timestamp
 		// inside what is signed, so a replay cannot be given a fresh one.
+		//
+		// The same address takes stock from Økoskabet (`set_stock` in place
+		// of `ids`), so `ids` is checked in the handler, not required here.
 		\register_rest_route(
 			'wp/v2',
 			'okoskabet/products/(?P<merchant_id>[a-z0-9_\-]+)',
@@ -180,7 +183,6 @@ class OkoRest extends Base
 				'permission_callback' => '__return_true',
 				'callback'            => array($this, 'handle_products'),
 				'args'                => array(
-					'ids'       => array('required' => true),
 					'timestamp' => array('required' => true),
 				),
 			)
@@ -870,6 +872,17 @@ class OkoRest extends Base
 			return new \WP_Error('timestamp_out_of_range', 'Timestamp outside the accepted window', array('status' => 401));
 		}
 
+		// Stock from Økoskabet, for a shop whose stock is kept there. Asked
+		// for by name, never together with a lookup, and only from a shop
+		// that sends its catalogue.
+		if (array_key_exists('set_stock', $signed)) {
+			return self::set_stock($signed);
+		}
+
+		if (!array_key_exists('ids', $signed)) {
+			return new \WP_Error('rest_missing_callback_param', 'Missing parameter(s): ids', array('status' => 400, 'params' => array('ids')));
+		}
+
 		$ids = array();
 		foreach ((array) ($signed['ids'] ?? array()) as $id) {
 			$id = (int) $id;
@@ -926,6 +939,49 @@ class OkoRest extends Base
 		\oko_note_inbound_call('products');
 
 		return new \WP_REST_Response($products, 200);
+	}
+
+	/**
+	 * Take the stock Økoskabet sets, from a signed body already checked.
+	 *
+	 * The whole call is refused if any of it is malformed, with 422 rather
+	 * than 400: Økoskabet reads a 400 as an older plugin that does not know
+	 * `set_stock`, and would stop sending.
+	 *
+	 * @param array<string,mixed> $signed
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private static function set_stock(array $signed)
+	{
+		\oko_note_inbound_call('products');
+
+		if (!\oko_catalogue_enabled()) {
+			return new \WP_Error('catalogue_disabled', 'The shop does not send its catalogue to Økoskabet', array('status' => 403));
+		}
+
+		if (array_key_exists('ids', $signed)) {
+			return new \WP_Error('ids_and_set_stock', 'A call either asks (ids) or sets stock (set_stock), never both', array('status' => 422));
+		}
+
+		$entries = $signed['set_stock'];
+		if (!is_array($entries) || !array_is_list($entries)) {
+			return new \WP_Error('invalid_set_stock', 'set_stock must be a list', array('status' => 422));
+		}
+		if (count($entries) > self::PRODUCTS_MAX_IDS) {
+			return new \WP_Error('too_many_products', 'At most ' . self::PRODUCTS_MAX_IDS . ' products per call', array('status' => 422));
+		}
+
+		$checked = array();
+		foreach ($entries as $entry) {
+			$id       = is_array($entry) ? ($entry['id'] ?? null) : null;
+			$quantity = is_array($entry) ? ($entry['stock_quantity'] ?? null) : null;
+			if (!(is_int($id) || (is_string($id) && $id !== '')) || !is_int($quantity) || $quantity < 0) {
+				return new \WP_Error('invalid_set_stock', 'Each product needs an id and a whole stock_quantity of 0 or more', array('status' => 422));
+			}
+			$checked[] = array('id' => $id, 'stock_quantity' => $quantity);
+		}
+
+		return new \WP_REST_Response(\oko_catalogue_set_stock($checked, (int) $signed['timestamp']), 200);
 	}
 
 	public function handle_webhook(\WP_REST_Request $request)
