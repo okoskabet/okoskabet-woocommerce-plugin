@@ -732,6 +732,203 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 	// --- Helpers -----------------------------------------------------------
 
 	/** @param array<string,string> $settings */
+	// --- Stock from Økoskabet --------------------------------------------
+
+	public function test_okoskabet_sets_the_whole_number_and_woocommerce_the_status(): void
+	{
+		$product = $this->a_product('Gulerødder', '25');
+		$this->assertFalse($product->get_manage_stock());
+
+		$response = $this->set_stock(array(array('id' => $product->get_id(), 'stock_quantity' => 3)));
+
+		$this->assertSame(200, $response->get_status());
+		$this->assertSame(array('set' => array($product->get_id()), 'missing' => array(), 'stale' => array()), $response->get_data());
+		$product = wc_get_product($product->get_id());
+		$this->assertTrue($product->get_manage_stock());
+		$this->assertSame(3, $product->get_stock_quantity());
+		$this->assertSame('instock', $product->get_stock_status());
+
+		$this->set_stock(array(array('id' => $product->get_id(), 'stock_quantity' => 0)), time() + 1);
+		$product = wc_get_product($product->get_id());
+		$this->assertSame(0, $product->get_stock_quantity());
+		$this->assertSame('outofstock', $product->get_stock_status());
+	}
+
+	public function test_a_number_counted_before_the_last_one_is_stale_and_the_same_one_again_is_fine(): void
+	{
+		$product = $this->a_product('Gulerødder', '25');
+		$now     = time();
+
+		$this->set_stock(array(array('id' => $product->get_id(), 'stock_quantity' => 7)), $now);
+		$late  = $this->set_stock(array(array('id' => $product->get_id(), 'stock_quantity' => 2)), $now - 10);
+		$again = $this->set_stock(array(array('id' => $product->get_id(), 'stock_quantity' => 7)), $now);
+
+		$this->assertSame(array('set' => array(), 'missing' => array(), 'stale' => array($product->get_id())), $late->get_data());
+		$this->assertSame(array($product->get_id()), $again->get_data()['set']);
+		$this->assertSame(7, wc_get_product($product->get_id())->get_stock_quantity());
+	}
+
+	public function test_what_the_catalogue_does_not_send_is_missing_and_ids_come_back_as_asked(): void
+	{
+		[$parent] = $this->a_variable_product();
+		$product  = $this->a_product('Gulerødder', '25');
+		$binned   = $this->a_product('Kasseret', '5');
+		wp_trash_post($binned->get_id());
+
+		$response = $this->set_stock(array(
+			array('id' => 'ABC-7', 'stock_quantity' => 0),
+			array('id' => 999999, 'stock_quantity' => 1),
+			array('id' => $parent->get_id(), 'stock_quantity' => 1),
+			array('id' => $binned->get_id(), 'stock_quantity' => 1),
+			array('id' => (string) $product->get_id(), 'stock_quantity' => 4),
+		));
+
+		$this->assertSame(
+			array(
+				'set'     => array((string) $product->get_id()),
+				'missing' => array('ABC-7', 999999, $parent->get_id(), $binned->get_id()),
+				'stale'   => array(),
+			),
+			$response->get_data()
+		);
+		$this->assertSame(4, wc_get_product($product->get_id())->get_stock_quantity());
+		$this->assertFalse(wc_get_product($parent->get_id())->get_manage_stock());
+	}
+
+	public function test_a_variation_gets_its_own_stock_even_where_its_parent_kept_it(): void
+	{
+		[$parent, $small, $large] = $this->a_variable_product();
+		$parent->set_manage_stock(true);
+		$parent->set_stock_quantity(50);
+		$parent->save();
+		$large->set_manage_stock(false);
+		$large->save();
+		$this->assertSame('parent', wc_get_product($large->get_id())->get_manage_stock());
+
+		$this->set_stock(array(
+			array('id' => $small->get_id(), 'stock_quantity' => 2),
+			array('id' => $large->get_id(), 'stock_quantity' => 5),
+		));
+
+		$this->assertSame(2, wc_get_product($small->get_id())->get_stock_quantity());
+		$large = wc_get_product($large->get_id());
+		$this->assertTrue($large->get_manage_stock());
+		$this->assertSame(5, $large->get_stock_quantity());
+		$this->assertSame(50, wc_get_product($parent->get_id())->get_stock_quantity());
+	}
+
+	public function test_stock_set_by_okoskabet_is_sent_back_as_any_change_is(): void
+	{
+		$product = $this->a_product('Gulerødder', '25');
+		$this->nothing_noted();
+
+		$this->set_stock(array(array('id' => $product->get_id(), 'stock_quantity' => 3)));
+
+		$this->assertContains($product->get_id(), array_map('intval', array_keys(oko_catalogue_noted())));
+	}
+
+	public function test_a_shop_that_does_not_send_its_catalogue_takes_no_stock(): void
+	{
+		$this->settings(array('_webhook_enabled' => 'on'));
+		$product = $this->a_product('Gulerødder', '25');
+
+		$response = $this->set_stock(array(array('id' => $product->get_id(), 'stock_quantity' => 3)));
+
+		$this->assertInstanceOf(\WP_Error::class, $response);
+		$this->assertSame('catalogue_disabled', $response->get_error_code());
+		$this->assertSame(403, $response->get_error_data()['status']);
+		$this->assertFalse(wc_get_product($product->get_id())->get_manage_stock());
+	}
+
+	public function test_a_wrong_signature_or_an_old_timestamp_sets_nothing(): void
+	{
+		$product = $this->a_product('Gulerødder', '25');
+		$entries = array(array('id' => $product->get_id(), 'stock_quantity' => 3));
+
+		$forged = $this->signed(array('set_stock' => $entries, 'timestamp' => time()), 'en anden hemmelighed');
+		$old    = $this->set_stock($entries, time() - 301);
+
+		foreach (array($forged, $old) as $response) {
+			$this->assertInstanceOf(\WP_Error::class, $response);
+			$this->assertSame(401, $response->get_error_data()['status']);
+		}
+		$this->assertFalse(wc_get_product($product->get_id())->get_manage_stock());
+	}
+
+	/** Never with a 400: Økoskabet reads that as a plugin that does not know `set_stock`. */
+	public function test_a_malformed_call_is_refused_whole_and_sets_nothing(): void
+	{
+		$product = $this->a_product('Gulerødder', '25');
+		$good    = array('id' => $product->get_id(), 'stock_quantity' => 3);
+		$hundred_and_one = array_fill(0, 101, $good);
+
+		$calls = array(
+			'too_many_products' => array('set_stock' => $hundred_and_one),
+			'ids_and_set_stock' => array('set_stock' => array($good), 'ids' => array($product->get_id())),
+			'invalid_set_stock' => array('set_stock' => array($good, array('id' => $product->get_id(), 'stock_quantity' => -1))),
+		);
+		$calls[] = array('set_stock' => array($good, array('id' => $product->get_id(), 'stock_quantity' => 1.5)));
+		$calls[] = array('set_stock' => array($good, array('stock_quantity' => 1)));
+		$calls[] = array('set_stock' => array('id' => $product->get_id(), 'stock_quantity' => 1));
+
+		foreach ($calls as $code => $body) {
+			$response = $this->signed($body + array('timestamp' => time()));
+			$this->assertInstanceOf(\WP_Error::class, $response);
+			$this->assertSame(422, $response->get_error_data()['status']);
+			if (is_string($code)) {
+				$this->assertSame($code, $response->get_error_code());
+			}
+		}
+		$this->assertFalse(wc_get_product($product->get_id())->get_manage_stock());
+	}
+
+	public function test_a_hundred_at_once_are_taken(): void
+	{
+		$product = $this->a_product('Gulerødder', '25');
+
+		$response = $this->set_stock(array_fill(0, 100, array('id' => $product->get_id(), 'stock_quantity' => 9)));
+
+		$this->assertCount(100, $response->get_data()['set']);
+		$this->assertSame(9, wc_get_product($product->get_id())->get_stock_quantity());
+	}
+
+	/**
+	 * Through WordPress's own router, which used to insist on `ids`.
+	 *
+	 * WPLoader boots WordPress past the point where the plugin registers its
+	 * routes, so they are registered here, on a server of the test's own.
+	 */
+	public function test_the_route_takes_set_stock_without_ids_and_still_wants_ids_for_a_lookup(): void
+	{
+		global $wp_rest_server;
+		$wp_rest_server = null;
+		$routes = array(new OkoRest(), 'add_custom_routes');
+		add_action('rest_api_init', $routes);
+
+		$product = $this->a_product('Gulerødder', '25');
+		$this->signed(array('ids' => array(), 'timestamp' => time())); // Gives the merchant its secret.
+
+		$dispatch = static function (array $body): \WP_REST_Response {
+			$raw     = (string) wp_json_encode($body);
+			$request = new \WP_REST_Request('POST', '/wp/v2/okoskabet/products/default');
+			$request->set_header('content-type', 'application/json');
+			$request->set_header('x-hmac-sha256', hash_hmac('sha256', $raw, 'hemmelighed'));
+			$request->set_body($raw);
+
+			return rest_do_request($request);
+		};
+
+		$set = $dispatch(array('set_stock' => array(array('id' => $product->get_id(), 'stock_quantity' => 6)), 'timestamp' => time()));
+		$this->assertSame(200, $set->get_status());
+		$this->assertSame(array($product->get_id()), $set->get_data()['set']);
+
+		$neither = $dispatch(array('timestamp' => time()));
+		$this->assertSame(400, $neither->get_status());
+
+		remove_action('rest_api_init', $routes);
+		$wp_rest_server = null;
+	}
+
 	private function settings(array $settings): void
 	{
 		update_option(O_TEXTDOMAIN . '-settings', $settings);
@@ -920,6 +1117,39 @@ class CatalogueTest extends \Codeception\TestCase\WPTestCase
 		$request->set_url_params(array('merchant_id' => 'default'));
 		$request->set_header('content-type', 'application/json');
 		$request->set_header('x-hmac-sha256', hash_hmac('sha256', $raw, 'hemmelighed'));
+		$request->set_body($raw);
+
+		return (new OkoRest())->handle_products($request);
+	}
+
+	/**
+	 * Stock from Økoskabet, signed as it sends it.
+	 *
+	 * @param array<int,array<string,mixed>> $entries
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function set_stock(array $entries, ?int $timestamp = null)
+	{
+		return $this->signed(array('set_stock' => $entries, 'timestamp' => $timestamp ?? time()));
+	}
+
+	/**
+	 * Any body to the products route, signed with a secret — by default the merchant's.
+	 *
+	 * @param array<string,mixed> $body
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function signed(array $body, string $secret = 'hemmelighed')
+	{
+		$config = get_option(\okoskabet_woocommerce_plugin\Integrations\Merchants::OPTION_KEY);
+		$config['merchants']['default']['webhook_secret'] = 'hemmelighed';
+		\okoskabet_woocommerce_plugin\Integrations\Merchants::save_config($config);
+
+		$raw     = (string) wp_json_encode($body);
+		$request = new \WP_REST_Request('POST', '/wp/v2/okoskabet/products/default');
+		$request->set_url_params(array('merchant_id' => 'default'));
+		$request->set_header('content-type', 'application/json');
+		$request->set_header('x-hmac-sha256', hash_hmac('sha256', $raw, $secret));
 		$request->set_body($raw);
 
 		return (new OkoRest())->handle_products($request);

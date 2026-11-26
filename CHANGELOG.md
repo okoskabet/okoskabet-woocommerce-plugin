@@ -20,6 +20,16 @@ Med indstillingen slået til kan Økoskabet også spørge efter en vares aktuell
 pris og lager (kræver stadig, at »Webhook Status« er slået til). Uden
 indstillingen udleveres hverken pris eller lager.
 
+= Lager styret fra Økoskabet =
+
+Har butikken sit lager hos Økoskabet, sender Økoskabet nu lagertallet til
+butikken. Pluginet sætter det samlede antal på varen, slår lagerstyring til for
+den og lader WooCommerce afgøre, om varen er på lager. For en variabel vare
+gælder tallet den enkelte variation. Et tal, der er talt før det seneste, varen
+har fået, springes over. Det kræver, at »Send varekatalog til Økoskabet« og
+»Webhook Status« er slået til, og at Økoskabet er sat op til at styre butikkens
+lager.
+
 ## 1.6.0 - 2026-10-28
 
 Tillægsordrer, adresseforslag og etagefelt i kassen, og pakkeriets rettelser

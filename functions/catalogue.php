@@ -56,6 +56,9 @@ const OKO_CATALOGUE_LOCK_SECONDS = 600;
 /** Most category names per product; Økoskabet cuts off beyond it. */
 const OKO_CATALOGUE_MAX_CATEGORIES = 20;
 
+/** On a product: when the stock Økoskabet last set on it was counted, in unix seconds. */
+const OKO_CATALOGUE_STOCK_SET_AT_META = '_oko_stock_set_at';
+
 add_action('action_scheduler_init', 'oko_schedule_catalogue');
 add_action(OKO_CATALOGUE_HOOK, 'oko_start_catalogue');
 add_action(OKO_CATALOGUE_PAGE_HOOK, 'oko_send_catalogue_page');
@@ -812,4 +815,75 @@ function oko_catalogue_stock_answer(array $ids): array
 	}
 
 	return $answer;
+}
+
+/**
+ * Stock as Økoskabet counts it, for a shop whose stock is kept at Økoskabet.
+ *
+ * Marc, 25–26 November 2026: stock goes both ways, and what differs is which
+ * side is master. Where Økoskabet is, it tells the shop the whole number for
+ * sale — never a change — and the shop takes it: stock is managed from then on,
+ * and WooCommerce works out in stock or out of stock itself.
+ *
+ * Every product remembers when the number it was given was counted. A call
+ * that was counted earlier than that is late, overtaken by a newer one, and
+ * changes nothing; the same number twice is fine.
+ *
+ * An id is a product as the catalogue sends it: a simple product, or a
+ * variation under its own id. Anything else the shop has under that id — a
+ * variable product, which holds no stock of its own here, grouped, external,
+ * or in the bin — is as good as not there.
+ *
+ * @param array<int,array{id:int|string,stock_quantity:int}> $entries Checked already: at most a hundred, quantities whole and not negative.
+ * @param int $timestamp When Økoskabet counted, in unix seconds.
+ * @return array{set:array<int,int|string>,missing:array<int,int|string>,stale:array<int,int|string>} Each id as it was asked.
+ */
+function oko_catalogue_set_stock(array $entries, int $timestamp): array
+{
+	$answer = array('set' => array(), 'missing' => array(), 'stale' => array());
+	foreach ($entries as $entry) {
+		$product = oko_catalogue_stock_product($entry['id']);
+		if ($product === null) {
+			$answer['missing'][] = $entry['id'];
+			continue;
+		}
+
+		if ((int) $product->get_meta(OKO_CATALOGUE_STOCK_SET_AT_META) > $timestamp) {
+			$answer['stale'][] = $entry['id'];
+			continue;
+		}
+
+		// Its own stock, also for a variation whose parent kept it until now:
+		// the number is this variation's, and would otherwise land on the parent.
+		$product->set_manage_stock(true);
+		$product->update_meta_data(OKO_CATALOGUE_STOCK_SET_AT_META, $timestamp);
+		// Saves the product too, and tells everyone listening that the stock
+		// changed — the catalogue among them.
+		wc_update_product_stock($product, $entry['stock_quantity'], 'set');
+		$answer['set'][] = $entry['id'];
+	}
+
+	return $answer;
+}
+
+/**
+ * The product the catalogue sends under an id, or null.
+ *
+ * @param int|string $id A number, or a string of one; anything else is no product of ours.
+ */
+function oko_catalogue_stock_product($id): ?\WC_Product
+{
+	if (is_string($id) && ctype_digit($id)) {
+		$id = (int) $id;
+	}
+	if (! is_int($id) || $id <= 0) {
+		return null;
+	}
+
+	$product = wc_get_product($id);
+	if (! $product instanceof \WC_Product || ! $product->is_type(array('simple', 'variation')) || $product->get_status() === 'trash') {
+		return null;
+	}
+
+	return $product;
 }
